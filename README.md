@@ -163,10 +163,10 @@ flutter create .
 flutter pub get
 
 # Run in debug mode (pointing to Render or local API):
-flutter run --dart-define=API_URL=https://<your-api-service>.onrender.com/api
+flutter run --dart-define=API_URL=https://noor-cloud.onrender.com/api
 
 # Build release APK:
-flutter build apk --release --dart-define=API_URL=https://<your-api-service>.onrender.com/api
+flutter build apk --release --dart-define=API_URL=https://noor-cloud.onrender.com/api
 ```
 
 ### Host the APK on Your Website
