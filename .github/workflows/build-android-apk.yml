@@ -34,8 +34,8 @@ jobs:
           flutter create . --platforms=android --project-name noor_drive_app --org com.noordrive.app
           sed -i 's/<application/<uses-permission android:name="android.permission.INTERNET" \/>\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" \/>\n    <uses-permission android:name="android.permission.USE_BIOMETRIC" \/>\n    <application/' android/app/src/main/AndroidManifest.xml
           sed -i 's/android:label="noor_drive_app"/android:label="NOOR DRIVE"/' android/app/src/main/AndroidManifest.xml
-          sed -i 's/import io.flutter.embedding.android.FlutterActivity/import io.flutter.embedding.android.FlutterFragmentActivity/' android/app/src/main/kotlin/com/noordrive/app/MainActivity.kt
-          sed -i 's/: FlutterActivity()/: FlutterFragmentActivity()/' android/app/src/main/kotlin/com/noordrive/app/MainActivity.kt
+          find android/app/src -name "MainActivity.kt" -exec sed -i 's/import io.flutter.embedding.android.FlutterActivity/import io.flutter.embedding.android.FlutterFragmentActivity/' {} +
+          find android/app/src -name "MainActivity.kt" -exec sed -i 's/: FlutterActivity()/: FlutterFragmentActivity()/' {} +
 
       - name: Install dependencies, generate launcher icon & build APK
         working-directory: apps/mobile

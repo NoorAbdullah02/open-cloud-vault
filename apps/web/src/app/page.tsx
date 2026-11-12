@@ -66,6 +66,17 @@ function formatBytes(bytesStr: string | number) {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
 
+function formatDateTime(iso?: string) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 function getFileVisual(mime: string) {
   if (mime.startsWith('image/')) {
     return {
@@ -1723,6 +1734,9 @@ function DriveDashboardContent() {
                                 <p className="text-[11px] text-slate-400 mt-0.5">
                                   {formatBytes(file.sizeBytes)} • {visual.badge}
                                 </p>
+                                <p className="text-[10px] text-slate-400/90 mt-0.5 truncate">
+                                  {formatDateTime(file.createdAt)}
+                                </p>
                               </div>
 
                               <div
@@ -1815,6 +1829,7 @@ function DriveDashboardContent() {
                           <tr>
                             <th className="py-3.5 px-4 font-semibold">Name</th>
                             <th className="py-3.5 px-4 font-semibold">Size</th>
+                            <th className="py-3.5 px-4 font-semibold">Uploaded</th>
                             <th className="py-3.5 px-4 font-semibold">Backend</th>
                             <th className="py-3.5 px-4 font-semibold text-right">Actions</th>
                           </tr>
@@ -1843,6 +1858,9 @@ function DriveDashboardContent() {
                                   <span className="truncate max-w-xs">{file.name}</span>
                                 </td>
                                 <td className="py-3 px-4 text-slate-500">{formatBytes(file.sizeBytes)}</td>
+                                <td className="py-3 px-4 text-slate-500 text-xs whitespace-nowrap">
+                                  {formatDateTime(file.createdAt)}
+                                </td>
                                 <td className="py-3 px-4">
                                   <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                                     NOOR DRIVE

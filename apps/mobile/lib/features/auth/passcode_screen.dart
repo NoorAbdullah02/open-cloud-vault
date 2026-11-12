@@ -25,7 +25,9 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
   @override
   void initState() {
     super.initState();
-    _initBiometrics();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initBiometrics();
+    });
   }
 
   Future<void> _initBiometrics() async {

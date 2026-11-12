@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
@@ -166,6 +167,13 @@ class _DriveScreenState extends State<DriveScreen> {
       i++;
     }
     return '${val.toStringAsFixed(2)} ${units[i]}';
+  }
+
+  String _formatDateTime(dynamic isoVal) {
+    if (isoVal == null) return '';
+    final dt = DateTime.tryParse(isoVal.toString())?.toLocal();
+    if (dt == null) return '';
+    return DateFormat('MMM d, y • h:mm a').format(dt);
   }
 
   Future<void> _loadUser() async {
@@ -1425,6 +1433,13 @@ class _DriveScreenState extends State<DriveScreen> {
                                                   _formatBytes(file['sizeBytes']),
                                                   style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
                                                 ),
+                                                if (file['createdAt'] != null)
+                                                  Text(
+                                                    _formatDateTime(file['createdAt']),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                    style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+                                                  ),
                                               ],
                                             ),
                                           ),
@@ -1548,7 +1563,11 @@ class _DriveScreenState extends State<DriveScreen> {
                                     child: ListTile(
                                       leading: const Icon(Icons.insert_drive_file, color: Color(0xFF4F46E5)),
                                       title: Text(file['name'], maxLines: 1, overflow: TextOverflow.ellipsis),
-                                      subtitle: Text('${_formatBytes(file['sizeBytes'])} • NOOR DRIVE'),
+                                      subtitle: Text(
+                                        '${_formatBytes(file['sizeBytes'])}${file['createdAt'] != null ? ' • ${_formatDateTime(file['createdAt'])}' : ''}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                       onTap: () => _previewOrOpenFile(file),
                                       trailing: PopupMenuButton<String>(
                                         onSelected: (action) {
