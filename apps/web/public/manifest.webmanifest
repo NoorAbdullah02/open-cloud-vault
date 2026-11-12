@@ -1,0 +1,17 @@
+{
+  "name": "NOOR DRIVE",
+  "short_name": "NOOR DRIVE",
+  "description": "Personal Telegram Cloud Vault",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f7f9",
+  "theme_color": "#18181b",
+  "icons": [
+    {
+      "src": "/owner.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}
+

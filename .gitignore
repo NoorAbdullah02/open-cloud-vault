@@ -1,0 +1,13 @@
+node_modules
+dist
+.next
+.env
+**/.env
+.env.local
+storage/vault/*
+storage/chunks/*
+!storage/vault/.gitkeep
+!storage/chunks/.gitkeep
+*.log
+.DS_Store
+

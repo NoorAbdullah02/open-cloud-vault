@@ -1,0 +1,350 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  SUPER_ADMIN
+  USER
+  GUEST
+}
+
+enum SharePermission {
+  VIEWER
+  COMMENTER
+  EDITOR
+}
+
+enum StorageBackend {
+  LOCAL_DISK
+  TELEGRAM_MTPROTO
+  S3_COMPATIBLE
+}
+
+enum UploadStatus {
+  PENDING
+  IN_PROGRESS
+  PAUSED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model User {
+  id                     String         @id @default(uuid())
+  email                  String         @unique
+  passwordHash           String
+  role                   Role           @default(USER)
+  isVerified             Boolean        @default(false)
+  verificationToken      String?
+  resetPasswordToken     String?
+  resetPasswordExpires   DateTime?
+  isSuspended            Boolean        @default(false)
+  twoFactorEnabled       Boolean        @default(false)
+  twoFactorSecret        String?
+  preferredStorageBackend StorageBackend @default(LOCAL_DISK)
+  telegramConsentGiven   Boolean        @default(false)
+  telegramChatTarget     String?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  profile       Profile?
+  quota         UserQuota?
+  devices       Device[]
+  sessions      Session[]
+  folders       Folder[]
+  files         File[]
+  uploadSessions UploadSession[]
+  sharesCreated Share[]        @relation("ShareOwner")
+  sharesReceived Share[]       @relation("SharedWith")
+  comments      Comment[]
+  tags          Tag[]
+  notifications Notification[]
+  activities    Activity[]
+  auditLogs     AuditLog[]
+}
+
+model Profile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName    String
+  avatarUrl   String?
+  bio         String?
+  theme       String   @default("system") // light | dark | system
+  language    String   @default("en")
+  updatedAt   DateTime @updatedAt
+}
+
+model UserQuota {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storageQuotaBytes BigInt   @default(107374182400) // 100 GB default for personal use
+  usedStorageBytes  BigInt   @default(0)
+  maxFileSizeBytes  BigInt   @default(2147483648)   // 2 GB default
+  updatedAt         DateTime @updatedAt
+}
+
+model Device {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceName  String
+  platform    String    // web | macos | windows | ios | android
+  deviceHash  String
+  lastActive  DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+
+  sessions    Session[]
+
+  @@unique([userId, deviceHash])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId     String?
+  device       Device?  @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  refreshToken String   @unique
+  ipAddress    String?
+  userAgent    String?
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+model StorageProvider {
+  id          String         @id @default(uuid())
+  name        String         @unique
+  backend     StorageBackend @unique
+  isEnabled   Boolean        @default(false)
+  isDefault   Boolean        @default(false)
+  configJson  Json?          // Non-secret config (e.g. local path, telegram target channel)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  storageObjects StorageObject[]
+}
+
+model StorageObject {
+  id                String          @id @default(uuid())
+  providerId        String
+  provider          StorageProvider @relation(fields: [providerId], references: [id])
+  backend           StorageBackend
+  objectKey         String          // Local file path, S3 key, or Telegram Message/Document reference
+  telegramMessageId Int?
+  telegramChatId    String?
+  checksumSha256    String
+  sizeBytes         BigInt
+  isEncrypted       Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+
+  files             File[]
+  fileVersions      FileVersion[]
+
+  @@index([checksumSha256])
+  @@index([backend])
+}
+
+model Folder {
+  id         String    @id @default(uuid())
+  name       String
+  parentId   String?
+  parent     Folder?   @relation("SubFolders", fields: [parentId], references: [id], onDelete: Cascade)
+  subFolders Folder[]  @relation("SubFolders")
+  ownerId    String
+  owner      User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  isStarred  Boolean   @default(false)
+  isTrash    Boolean   @default(false)
+  trashedAt  DateTime?
+  color      String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  files      File[]
+  shares     Share[]
+
+  @@index([ownerId, parentId])
+  @@index([ownerId, isTrash])
+}
+
+model File {
+  id              String         @id @default(uuid())
+  name            String
+  extension       String
+  mimeType        String
+  sizeBytes       BigInt
+  checksumSha256  String
+  storageObjectId String
+  storageObject   StorageObject  @relation(fields: [storageObjectId], references: [id])
+  folderId        String?
+  folder          Folder?        @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  ownerId         String
+  owner           User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  isStarred       Boolean        @default(false)
+  isTrash         Boolean        @default(false)
+  trashedAt       DateTime?
+  description     String?
+  version         Int            @default(1)
+  lastAccessedAt  DateTime       @default(now())
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  versions        FileVersion[]
+  shares          Share[]
+  comments        Comment[]
+  fileTags        FileTag[]
+  activities      Activity[]
+
+  @@index([ownerId, folderId])
+  @@index([ownerId, isStarred])
+  @@index([ownerId, isTrash])
+  @@index([checksumSha256])
+  @@index([name])
+}
+
+model FileVersion {
+  id              String        @id @default(uuid())
+  fileId          String
+  file            File          @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  versionNumber   Int
+  sizeBytes       BigInt
+  checksumSha256  String
+  storageObjectId String
+  storageObject   StorageObject @relation(fields: [storageObjectId], references: [id])
+  createdAt       DateTime      @default(now())
+
+  @@unique([fileId, versionNumber])
+}
+
+model UploadSession {
+  id             String         @id @default(uuid())
+  userId         String
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileName       String
+  mimeType       String
+  totalSizeBytes BigInt
+  uploadedBytes  BigInt         @default(0)
+  chunkSize      Int
+  totalChunks    Int
+  receivedChunks Int[]          @default([])
+  checksumSha256 String?
+  folderId       String?
+  targetBackend  StorageBackend @default(LOCAL_DISK)
+  status         UploadStatus   @default(PENDING)
+  expiresAt      DateTime
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([userId, status])
+}
+
+model Share {
+  id             String          @id @default(uuid())
+  ownerId        String
+  owner          User            @relation("ShareOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  sharedWithId   String?
+  sharedWith     User?           @relation("SharedWith", fields: [sharedWithId], references: [id], onDelete: Cascade)
+  sharedWithEmail String?
+  fileId         String?
+  file           File?           @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  folderId       String?
+  folder         Folder?         @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  permission     SharePermission @default(VIEWER)
+  shareToken     String?         @unique
+  passwordHash   String?
+  expiresAt      DateTime?
+  accessCount    Int             @default(0)
+  isRevoked      Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([shareToken])
+  @@index([sharedWithId])
+  @@index([ownerId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  fileId    String
+  file      File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Tag {
+  id        String    @id @default(uuid())
+  name      String
+  color     String?
+  ownerId   String
+  owner     User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  fileTags  FileTag[]
+
+  @@unique([ownerId, name])
+}
+
+model FileTag {
+  fileId String
+  file   File   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  tagId  String
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([fileId, tagId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Activity {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileId     String?
+  file       File?    @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  action     String   // UPLOAD | DOWNLOAD | RENAME | MOVE | SHARE | TRASH | RESTORE
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  targetType String
+  targetId   String?
+  ipAddress  String?
+  userAgent  String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([action])
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
