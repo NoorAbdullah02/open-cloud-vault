@@ -420,6 +420,9 @@ function DriveDashboardContent() {
   }, [loadDrive]);
 
   // Global Window Drag & Drop Listeners (Robust across all OS: Ubuntu, Linux, Windows, macOS)
+  // Use a ref so the drop handler always has the latest folderId/handleUploadFiles without re-registering listeners
+  const handleDropItemsRef = useRef<((dt: DataTransfer) => void) | null>(null);
+
   useEffect(() => {
     let dragCounter = 0;
     const onWindowDragEnter = (e: DragEvent) => {
@@ -449,8 +452,8 @@ function DriveDashboardContent() {
       dragCounter = 0;
       setIsDragging(false);
       setDragTargetFolderId(null);
-      if (e.dataTransfer) {
-        handleDropItems(e.dataTransfer);
+      if (e.dataTransfer && handleDropItemsRef.current) {
+        handleDropItemsRef.current(e.dataTransfer);
       }
     };
 
@@ -465,7 +468,7 @@ function DriveDashboardContent() {
       window.removeEventListener('dragleave', onWindowDragLeave);
       window.removeEventListener('drop', onWindowDrop);
     };
-  }, [folderId]);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -491,7 +494,7 @@ function DriveDashboardContent() {
     return `${m}m ${s}s left`;
   };
 
-  const handleUploadFiles = async (fileList: FileList | File[]) => {
+  const handleUploadFiles = useCallback(async (fileList: FileList | File[]) => {
     const arr = Array.from(fileList);
     if (arr.length === 0) return;
     showToast(`Uploading ${arr.length} item${arr.length > 1 ? 's' : ''}...`);
@@ -573,7 +576,7 @@ function DriveDashboardContent() {
     driveViewCache.clear();
     loadDrive(true);
     loadUser();
-  };
+  }, [folderId, selectedBackend, loadDrive, loadUser]);
 
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -950,7 +953,7 @@ function DriveDashboardContent() {
     }
   };
 
-  const handleDropItems = async (dataTransfer: DataTransfer) => {
+  const handleDropItems = useCallback(async (dataTransfer: DataTransfer) => {
     const rawFiles = dataTransfer.files ? Array.from(dataTransfer.files) : [];
     const items = dataTransfer.items;
 
@@ -1047,7 +1050,10 @@ function DriveDashboardContent() {
     } else if (rawFiles.length > 0) {
       handleUploadFiles(rawFiles);
     }
-  };
+  }, [folderId, handleUploadFiles, loadDrive]);
+
+  // Keep ref in sync so the stable drag listener always calls the latest version
+  handleDropItemsRef.current = handleDropItems;
 
   const usedPercent = user
     ? Math.min(
@@ -1119,36 +1125,48 @@ function DriveDashboardContent() {
         </div>
 
         {/* Primary Action Buttons */}
+        {/* Hidden file inputs — display:none works universally (Ubuntu/Linux/Mac/Windows) */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const picked = e.target.files ? Array.from(e.target.files) : [];
+            if (picked.length > 0) handleUploadFiles(picked);
+            // Reset so same file can be re-selected
+            try { e.target.value = ''; } catch {}
+          }}
+        />
+        <input
+          ref={(el) => {
+            folderInputRef.current = el;
+            if (el) {
+              el.setAttribute('webkitdirectory', '');
+              el.setAttribute('directory', '');
+              (el as any).webkitdirectory = true;
+            }
+          }}
+          type="file"
+          multiple
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const picked = e.target.files ? Array.from(e.target.files) : [];
+            if (picked.length > 0) handleUploadFiles(picked);
+            try { e.target.value = ''; } catch {}
+          }}
+        />
         <div className="px-4 mb-5 space-y-2">
           <div className="flex gap-2">
-            <div className="relative flex-1">
-              <input
-                id="noor-file-upload"
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                onChange={(e) => {
-                  const target = e.target;
-                  const picked = target.files ? Array.from(target.files) : [];
-                  if (picked.length > 0) {
-                    handleUploadFiles(picked);
-                  }
-                  setTimeout(() => {
-                    try {
-                      target.value = '';
-                    } catch {}
-                  }, 300);
-                }}
-              />
-              <div
-                style={{ backgroundColor: accentColor }}
-                className="w-full py-2.5 px-3 rounded-xl hover:opacity-90 text-white text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] pointer-events-none"
-              >
-                <Upload className="w-4 h-4" />
-                <span>Upload File</span>
-              </div>
-            </div>
+            <button
+              type="button"
+              className="flex-1 py-2.5 px-3 rounded-xl hover:opacity-90 text-white text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+              style={{ backgroundColor: accentColor }}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className="w-4 h-4" />
+              <span>Upload File</span>
+            </button>
             <button
               type="button"
               onClick={() => setNewFolderOpen(true)}
@@ -1158,38 +1176,14 @@ function DriveDashboardContent() {
               <FolderPlus className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
             </button>
           </div>
-          <div className="relative w-full">
-            <input
-              id="noor-folder-upload"
-              ref={(el) => {
-                folderInputRef.current = el;
-                if (el) {
-                  el.setAttribute('webkitdirectory', '');
-                  el.setAttribute('directory', '');
-                  el.webkitdirectory = true;
-                }
-              }}
-              type="file"
-              multiple
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-              onChange={(e) => {
-                const target = e.target;
-                const picked = target.files ? Array.from(target.files) : [];
-                if (picked.length > 0) {
-                  handleUploadFiles(picked);
-                }
-                setTimeout(() => {
-                  try {
-                    target.value = '';
-                  } catch {}
-                }, 300);
-              }}
-            />
-            <div className="w-full py-2 px-3 rounded-xl bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition border border-slate-200/90 dark:border-slate-700 shadow-xs pointer-events-none">
-              <FolderIcon className="w-3.5 h-3.5 text-amber-500" />
-              <span>Upload Folder</span>
-            </div>
-          </div>
+          <button
+            type="button"
+            className="w-full py-2 px-3 rounded-xl bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition border border-slate-200/90 dark:border-slate-700 shadow-xs active:scale-[0.98]"
+            onClick={() => folderInputRef.current?.click()}
+          >
+            <FolderIcon className="w-3.5 h-3.5 text-amber-500" />
+            <span>Upload Folder</span>
+          </button>
         </div>
 
         {/* Navigation */}
