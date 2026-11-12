@@ -419,13 +419,53 @@ function DriveDashboardContent() {
     loadDrive();
   }, [loadDrive]);
 
+  // Global Window Drag & Drop Listeners (Robust across all OS: Ubuntu, Linux, Windows, macOS)
   useEffect(() => {
-    if (folderInputRef.current) {
-      folderInputRef.current.setAttribute('webkitdirectory', '');
-      folderInputRef.current.setAttribute('directory', '');
-      folderInputRef.current.webkitdirectory = true;
-    }
-  }, []);
+    let dragCounter = 0;
+    const onWindowDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter++;
+      setIsDragging(true);
+    };
+
+    const onWindowDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    };
+
+    const onWindowDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter--;
+      if (dragCounter <= 0) {
+        dragCounter = 0;
+        setIsDragging(false);
+      }
+    };
+
+    const onWindowDrop = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter = 0;
+      setIsDragging(false);
+      setDragTargetFolderId(null);
+      if (e.dataTransfer) {
+        handleDropItems(e.dataTransfer);
+      }
+    };
+
+    window.addEventListener('dragenter', onWindowDragEnter);
+    window.addEventListener('dragover', onWindowDragOver);
+    window.addEventListener('dragleave', onWindowDragLeave);
+    window.addEventListener('drop', onWindowDrop);
+
+    return () => {
+      window.removeEventListener('dragenter', onWindowDragEnter);
+      window.removeEventListener('dragover', onWindowDragOver);
+      window.removeEventListener('dragleave', onWindowDragLeave);
+      window.removeEventListener('drop', onWindowDrop);
+    };
+  }, [folderId]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -910,15 +950,21 @@ function DriveDashboardContent() {
   };
 
   const handleDropItems = async (dataTransfer: DataTransfer) => {
+    const rawFiles = dataTransfer.files ? Array.from(dataTransfer.files) : [];
     const items = dataTransfer.items;
-    if (!items || items.length === 0) {
-      if (dataTransfer.files?.length) handleUploadFiles(dataTransfer.files);
+
+    // Fast-path: if no items or browser doesn't support webkitGetAsEntry
+    if (!items || items.length === 0 || !items[0]?.webkitGetAsEntry) {
+      if (rawFiles.length > 0) handleUploadFiles(rawFiles);
       return;
     }
 
     const collectedFiles: File[] = [];
     const emptyDirs: string[] = [];
+    let hasDirectories = false;
+
     const readEntry = async (entry: any, pathPrefix = ''): Promise<void> => {
+      if (!entry) return;
       if (entry.isFile) {
         await new Promise<void>((resolve) => {
           entry.file(
@@ -926,12 +972,6 @@ function DriveDashboardContent() {
               if (pathPrefix) {
                 const rel = `${pathPrefix}${file.name}`;
                 (file as any)._relativePath = rel;
-                try {
-                  Object.defineProperty(file, 'webkitRelativePath', {
-                    value: rel,
-                    configurable: true,
-                  });
-                } catch {}
               }
               collectedFiles.push(file);
               resolve();
@@ -940,6 +980,7 @@ function DriveDashboardContent() {
           );
         });
       } else if (entry.isDirectory) {
+        hasDirectories = true;
         const reader = entry.createReader();
         const entries: any[] = await new Promise((resolve) => {
           const all: any[] = [];
@@ -969,8 +1010,10 @@ function DriveDashboardContent() {
 
     const entries: any[] = [];
     for (let i = 0; i < items.length; i++) {
-      const entry = items[i].webkitGetAsEntry?.();
-      if (entry) entries.push(entry);
+      try {
+        const entry = items[i].webkitGetAsEntry?.();
+        if (entry) entries.push(entry);
+      } catch {}
     }
 
     if (entries.length > 0) {
@@ -997,11 +1040,11 @@ function DriveDashboardContent() {
       }
       if (collectedFiles.length > 0) {
         handleUploadFiles(collectedFiles);
-      } else if (emptyDirs.length === 0 && dataTransfer.files?.length) {
-        handleUploadFiles(Array.from(dataTransfer.files));
+      } else if (rawFiles.length > 0) {
+        handleUploadFiles(rawFiles);
       }
-    } else if (dataTransfer.files?.length) {
-      handleUploadFiles(Array.from(dataTransfer.files));
+    } else if (rawFiles.length > 0) {
+      handleUploadFiles(rawFiles);
     }
   };
 
@@ -1023,50 +1066,19 @@ function DriveDashboardContent() {
   ];
 
   return (
-    <div
-      className="min-h-screen flex bg-[#f6f7f9] dark:bg-[#0b0f17] text-zinc-900 dark:text-slate-100"
-      onDragEnter={(e) => {
-        if (Array.from(e.dataTransfer.types || []).includes('Files')) {
-          e.preventDefault();
-          setIsDragging(true);
-        }
-      }}
-      onDragOver={(e) => {
-        if (Array.from(e.dataTransfer.types || []).includes('Files')) {
-          e.preventDefault();
-          if (!isDragging) setIsDragging(true);
-        }
-      }}
-      onDragLeave={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-          setIsDragging(false);
-          setDragTargetFolderId(null);
-        }
-      }}
-      onDrop={(e) => {
-        setIsDragging(false);
-        setDragTargetFolderId(null);
-        if (
-          Array.from(e.dataTransfer.types || []).includes('Files') ||
-          (e.dataTransfer.files && e.dataTransfer.files.length > 0)
-        ) {
-          e.preventDefault();
-          handleDropItems(e.dataTransfer);
-        }
-      }}
-    >
+    <div className="min-h-screen flex bg-[#f6f7f9] dark:bg-[#0b0f17] text-zinc-900 dark:text-slate-100">
       {/* Drag & Drop Overlay */}
       {isDragging && (
-        <div className="fixed inset-0 z-50 bg-indigo-500/15 backdrop-blur-sm border-4 border-dashed border-indigo-500 flex items-center justify-center pointer-events-none">
-          <div className="bg-white dark:bg-slate-900 px-10 py-8 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-3">
-              <Upload className="w-7 h-7 animate-bounce" />
+        <div className="fixed inset-0 z-50 bg-indigo-500/20 backdrop-blur-xs border-4 border-dashed border-indigo-500 flex items-center justify-center pointer-events-none transition-all">
+          <div className="bg-white dark:bg-slate-900 px-10 py-8 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 text-center animate-in fade-in zoom-in-95">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 flex items-center justify-center mx-auto mb-3 shadow-inner">
+              <Upload className="w-8 h-8 animate-bounce text-indigo-600 dark:text-indigo-400" />
             </div>
-            <p className="text-lg font-bold text-slate-900 dark:text-white">
-              Drop files to upload to NOOR DRIVE
+            <p className="text-xl font-bold text-slate-900 dark:text-white">
+              Drop files anywhere to upload
             </p>
-            <p className="text-xs text-slate-500 mt-1">
-              Destination: Noor Cloud Vault
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 font-medium">
+              Uploading directly to NOOR DRIVE
             </p>
           </div>
         </div>
@@ -1114,10 +1126,12 @@ function DriveDashboardContent() {
                 ref={fileInputRef}
                 type="file"
                 multiple
+                onClick={(e) => {
+                  (e.currentTarget as HTMLInputElement).value = '';
+                }}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
                 onChange={(e) => {
                   const picked = e.target.files ? Array.from(e.target.files) : [];
-                  e.target.value = '';
                   if (picked.length > 0) {
                     handleUploadFiles(picked);
                   }
@@ -1153,10 +1167,12 @@ function DriveDashboardContent() {
               }}
               type="file"
               multiple
+              onClick={(e) => {
+                (e.currentTarget as HTMLInputElement).value = '';
+              }}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
               onChange={(e) => {
                 const picked = e.target.files ? Array.from(e.target.files) : [];
-                e.target.value = '';
                 if (picked.length > 0) {
                   handleUploadFiles(picked);
                 }
@@ -1671,12 +1687,29 @@ function DriveDashboardContent() {
               <p className="text-sm text-slate-500 max-w-sm mt-1 mb-5">
                 Drag and drop photos, videos, or documents here, or click Upload to store them securely.
               </p>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-md shadow-indigo-500/20 transition"
-              >
-                Upload First File
-              </button>
+              <div className="relative">
+                <input
+                  type="file"
+                  multiple
+                  onClick={(e) => {
+                    (e.currentTarget as HTMLInputElement).value = '';
+                  }}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                  onChange={(e) => {
+                    const picked = e.target.files ? Array.from(e.target.files) : [];
+                    if (picked.length > 0) {
+                      handleUploadFiles(picked);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-md shadow-indigo-500/20 transition pointer-events-none flex items-center gap-2"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>Upload Files</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="space-y-8">
