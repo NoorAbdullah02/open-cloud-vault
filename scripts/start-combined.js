@@ -10,8 +10,13 @@ const rootDir = path.resolve(__dirname, '..');
 
 console.log(`Starting NOOR CLOUD combined server (Public: ${PUBLIC_PORT}, API: ${API_PORT}, Web: ${WEB_PORT})...`);
 
+const fs = require('fs');
+const apiEntry = fs.existsSync(path.join(rootDir, 'apps/api/dist/src/main.js'))
+  ? 'apps/api/dist/src/main.js'
+  : 'apps/api/dist/main.js';
+
 // 1. Start NestJS API on internal port 4000
-const apiProc = spawn('node', ['apps/api/dist/main.js'], {
+const apiProc = spawn('node', [apiEntry], {
   cwd: rootDir,
   env: { ...process.env, PORT: String(API_PORT), API_PORT: String(API_PORT) },
   stdio: 'inherit',
@@ -69,3 +74,4 @@ function shutdown() {
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+
