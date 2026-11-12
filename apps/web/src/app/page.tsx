@@ -956,7 +956,8 @@ function DriveDashboardContent() {
               onClick={() => {
                 setAppDownloadModalOpen(true);
                 const apkUrl =
-                  process.env.NEXT_PUBLIC_ANDROID_APK_URL || '/downloads/noor-drive.apk';
+                  process.env.NEXT_PUBLIC_ANDROID_APK_URL ||
+                  'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.apk';
                 fetch(apkUrl, { method: 'HEAD' })
                   .then((r) => {
                     const len = r.ok ? r.headers.get('content-length') : null;
@@ -2112,36 +2113,29 @@ function DriveDashboardContent() {
             </div>
 
             <div className="space-y-2.5">
-              {apkSizeBytes ? (
-                <a
-                  href={process.env.NEXT_PUBLIC_ANDROID_APK_URL || '/downloads/noor-drive.apk'}
-                  download="noor-drive.apk"
-                  className="flex items-center justify-between p-4 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-zinc-400 bg-slate-50/70 dark:bg-slate-800/50 transition"
-                >
-                  <div>
-                    <p className="text-sm font-bold text-slate-900 dark:text-white">
-                      NOOR DRIVE for Android (.apk)
-                    </p>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Size: {formatBytes(apkSizeBytes)}
-                    </p>
-                  </div>
-                  <div className="px-3.5 py-2 rounded-xl bg-zinc-900 text-white text-xs font-semibold flex items-center gap-1.5">
-                    <Download className="w-3.5 h-3.5" /> Download
-                  </div>
-                </a>
-              ) : (
-                <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50/70 dark:bg-amber-500/10 dark:border-amber-500/20 space-y-1.5">
+              <a
+                href={
+                  process.env.NEXT_PUBLIC_ANDROID_APK_URL ||
+                  'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.apk'
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between p-4 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-zinc-400 bg-slate-50/70 dark:bg-slate-800/50 transition"
+              >
+                <div>
                   <p className="text-sm font-bold text-slate-900 dark:text-white">
-                    APK Not Built Yet
+                    NOOR DRIVE for Android (.apk)
                   </p>
-                  <p className="text-xs text-slate-600 dark:text-slate-300">
-                    The Flutter Android APK hasn&apos;t been built and uploaded to{' '}
-                    <code className="font-mono">/downloads/noor-drive.apk</code> yet. Use{' '}
-                    <strong>Add to Home Screen</strong> below to install on your phone right now!
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {apkSizeBytes
+                      ? `Size: ${formatBytes(apkSizeBytes)}`
+                      : 'Flutter Release APK • ~22 MB (GitHub Release)'}
                   </p>
                 </div>
-              )}
+                <div className="px-3.5 py-2 rounded-xl bg-zinc-900 text-white text-xs font-semibold flex items-center gap-1.5">
+                  <Download className="w-3.5 h-3.5" /> Download
+                </div>
+              </a>
             </div>
 
             <div className="p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 text-xs text-slate-600 dark:text-slate-300">

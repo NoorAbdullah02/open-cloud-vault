@@ -1,0 +1,56 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/build-android-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.1'
+          channel: 'stable'
+          cache: true
+
+      - name: Initialize Android project & permissions
+        working-directory: apps/mobile
+        run: |
+          flutter create . --platforms=android --project-name noor_drive_app --org com.noordrive.app
+          sed -i 's/<application/<uses-permission android:name="android.permission.INTERNET" \/>\n    <application/' android/app/src/main/AndroidManifest.xml
+
+      - name: Install dependencies & build release APK
+        working-directory: apps/mobile
+        run: |
+          flutter pub get
+          flutter build apk --release --dart-define=API_URL=https://noor-cloud-vault.onrender.com/api
+          cp build/app/outputs/flutter-apk/app-release.apk noor-drive.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: noor-drive-apk
+          path: apps/mobile/noor-drive.apk
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-latest
+          name: NOOR DRIVE Android App
+          files: apps/mobile/noor-drive.apk
+          overwrite: true
