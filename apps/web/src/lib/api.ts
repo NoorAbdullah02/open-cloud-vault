@@ -1,10 +1,14 @@
 export function getApiUrl(): string {
   if (typeof window !== 'undefined') {
-    // In browser: if not local Next dev server on port 3000, ALWAYS use relative '/api'
+    // In browser: On Render or any production / non-localhost domain, ALWAYS use relative '/api'
+    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      return '/api';
+    }
+    // On localhost, if port is not 3000 (e.g. custom or production combined server on another port)
     if (window.location.port !== '3000') {
       return '/api';
     }
-    // Local Next dev: point to API on same host port 4000
+    // Local standalone Next dev server pointing to Nest API on port 4000
     return `${window.location.protocol}//${window.location.hostname}:4000/api`;
   }
   return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
