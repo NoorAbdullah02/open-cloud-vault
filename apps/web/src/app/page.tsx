@@ -494,6 +494,7 @@ function DriveDashboardContent() {
   const handleUploadFiles = async (fileList: FileList | File[]) => {
     const arr = Array.from(fileList);
     if (arr.length === 0) return;
+    showToast(`Uploading ${arr.length} item${arr.length > 1 ? 's' : ''}...`);
 
     // Cache folder paths when uploading a directory (webkitRelativePath)
     const folderCache = new Map<string, string>();
@@ -1126,15 +1127,18 @@ function DriveDashboardContent() {
                 ref={fileInputRef}
                 type="file"
                 multiple
-                onClick={(e) => {
-                  (e.currentTarget as HTMLInputElement).value = '';
-                }}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
                 onChange={(e) => {
-                  const picked = e.target.files ? Array.from(e.target.files) : [];
+                  const target = e.target;
+                  const picked = target.files ? Array.from(target.files) : [];
                   if (picked.length > 0) {
                     handleUploadFiles(picked);
                   }
+                  setTimeout(() => {
+                    try {
+                      target.value = '';
+                    } catch {}
+                  }, 300);
                 }}
               />
               <div
@@ -1167,15 +1171,18 @@ function DriveDashboardContent() {
               }}
               type="file"
               multiple
-              onClick={(e) => {
-                (e.currentTarget as HTMLInputElement).value = '';
-              }}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
               onChange={(e) => {
-                const picked = e.target.files ? Array.from(e.target.files) : [];
+                const target = e.target;
+                const picked = target.files ? Array.from(target.files) : [];
                 if (picked.length > 0) {
                   handleUploadFiles(picked);
                 }
+                setTimeout(() => {
+                  try {
+                    target.value = '';
+                  } catch {}
+                }, 300);
               }}
             />
             <div className="w-full py-2 px-3 rounded-xl bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition border border-slate-200/90 dark:border-slate-700 shadow-xs pointer-events-none">
@@ -1691,15 +1698,18 @@ function DriveDashboardContent() {
                 <input
                   type="file"
                   multiple
-                  onClick={(e) => {
-                    (e.currentTarget as HTMLInputElement).value = '';
-                  }}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
                   onChange={(e) => {
-                    const picked = e.target.files ? Array.from(e.target.files) : [];
+                    const target = e.target;
+                    const picked = target.files ? Array.from(target.files) : [];
                     if (picked.length > 0) {
                       handleUploadFiles(picked);
                     }
+                    setTimeout(() => {
+                      try {
+                        target.value = '';
+                      } catch {}
+                    }, 300);
                   }}
                 />
                 <button
@@ -2715,11 +2725,16 @@ function DriveDashboardContent() {
           multiple
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
           onChange={(e) => {
-            const picked = e.target.files ? Array.from(e.target.files) : [];
-            e.target.value = '';
+            const target = e.target;
+            const picked = target.files ? Array.from(target.files) : [];
             if (picked.length > 0) {
               handleUploadFiles(picked);
             }
+            setTimeout(() => {
+              try {
+                target.value = '';
+              } catch {}
+            }, 300);
           }}
         />
         <Upload className="w-6 h-6 pointer-events-none" />
