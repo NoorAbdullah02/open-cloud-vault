@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: noor-drive-api
+    name: noorvault-api
     runtime: node
     plan: free
     buildCommand: npm install && npm run build --workspace=@noor-drive/api
@@ -42,7 +42,7 @@ services:
         value: me
 
   - type: web
-    name: noor-drive-web
+    name: noorvault
     runtime: node
     plan: free
     buildCommand: npm install && npm run build --workspace=@noor-drive/web
