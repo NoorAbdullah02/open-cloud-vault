@@ -1,16 +1,14 @@
 export function getApiUrl(): string {
   if (typeof window !== 'undefined') {
-    // In production combined mode (or on Render), /api is served on the same origin
-    if (window.location.hostname.endsWith('.onrender.com') || window.location.port !== '3000') {
+    // In browser: if not local Next dev server on port 3000, ALWAYS use relative '/api'
+    if (window.location.port !== '3000') {
       return '/api';
     }
+    // Local Next dev: point to API on same host port 4000
     return `${window.location.protocol}//${window.location.hostname}:4000/api`;
   }
-  const envUrl = process.env.NEXT_PUBLIC_API_URL;
-  return envUrl || 'http://localhost:4000/api';
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 }
-
-const API_URL = getApiUrl();
 
 export function getStoredTokens() {
   if (typeof window === 'undefined') return { accessToken: null, refreshToken: null };
@@ -44,13 +42,14 @@ export async function apiFetch<T = any>(
     headers.set('Content-Type', 'application/json');
   }
 
-  let res = await fetch(`${API_URL}${endpoint}`, {
+  const base = getApiUrl();
+  let res = await fetch(`${base}${endpoint}`, {
     ...options,
     headers,
   });
 
   if (res.status === 401 && refreshToken) {
-    const refreshRes = await fetch(`${API_URL}/auth/refresh`, {
+    const refreshRes = await fetch(`${base}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
@@ -60,7 +59,7 @@ export async function apiFetch<T = any>(
       const data = await refreshRes.json();
       setStoredTokens(data.accessToken, data.refreshToken);
       headers.set('Authorization', `Bearer ${data.accessToken}`);
-      res = await fetch(`${API_URL}${endpoint}`, {
+      res = await fetch(`${base}${endpoint}`, {
         ...options,
         headers,
       });
@@ -82,13 +81,12 @@ export async function apiFetch<T = any>(
 }
 
 export function getDownloadUrl(fileId: string, inline = false): string {
-  const { accessToken } = getStoredTokens();
-  return `${API_URL}/drive/files/${fileId}/download?inline=${inline}`;
+  return `${getApiUrl()}/drive/files/${fileId}/download?inline=${inline}`;
 }
 
 export async function fetchAuthorizedBlobUrl(fileId: string): Promise<string> {
   const { accessToken } = getStoredTokens();
-  const res = await fetch(`${API_URL}/drive/files/${fileId}/download?inline=true`, {
+  const res = await fetch(`${getApiUrl()}/drive/files/${fileId}/download?inline=true`, {
     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
   });
   if (!res.ok) throw new Error('Failed to load file');
@@ -109,7 +107,7 @@ async function tryRefreshTokens(): Promise<boolean> {
   const { refreshToken } = getStoredTokens();
   if (!refreshToken) return false;
   try {
-    const refreshRes = await fetch(`${API_URL}/auth/refresh`, {
+    const refreshRes = await fetch(`${getApiUrl()}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),

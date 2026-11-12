@@ -1108,14 +1108,29 @@ function DriveDashboardContent() {
         {/* Primary Action Buttons */}
         <div className="px-4 mb-5 space-y-2">
           <div className="flex gap-2">
-            <label
-              htmlFor="noor-file-upload"
-              style={{ backgroundColor: accentColor }}
-              className="flex-1 py-2.5 px-3 rounded-xl hover:opacity-90 text-white text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer select-none"
-            >
-              <Upload className="w-4 h-4" />
-              <span>Upload File</span>
-            </label>
+            <div className="relative flex-1">
+              <input
+                id="noor-file-upload"
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                onChange={(e) => {
+                  const picked = e.target.files ? Array.from(e.target.files) : [];
+                  e.target.value = '';
+                  if (picked.length > 0) {
+                    handleUploadFiles(picked);
+                  }
+                }}
+              />
+              <div
+                style={{ backgroundColor: accentColor }}
+                className="w-full py-2.5 px-3 rounded-xl hover:opacity-90 text-white text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] pointer-events-none"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Upload File</span>
+              </div>
+            </div>
             <button
               type="button"
               onClick={() => setNewFolderOpen(true)}
@@ -1125,41 +1140,33 @@ function DriveDashboardContent() {
               <FolderPlus className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
             </button>
           </div>
-          <label
-            htmlFor="noor-folder-upload"
-            className="w-full py-2 px-3 rounded-xl bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition border border-slate-200/90 dark:border-slate-700 shadow-xs active:scale-[0.98] cursor-pointer select-none"
-          >
-            <FolderIcon className="w-3.5 h-3.5 text-amber-500" />
-            <span>Upload Folder</span>
-          </label>
-          <input
-            id="noor-file-upload"
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="fixed -top-96 left-0 opacity-0 w-px h-px pointer-events-none"
-            onChange={(e) => {
-              const picked = e.target.files ? Array.from(e.target.files) : [];
-              e.target.value = '';
-              if (picked.length > 0) {
-                handleUploadFiles(picked);
-              }
-            }}
-          />
-          <input
-            id="noor-folder-upload"
-            ref={folderInputRef}
-            type="file"
-            multiple
-            className="fixed -top-96 left-0 opacity-0 w-px h-px pointer-events-none"
-            onChange={(e) => {
-              const picked = e.target.files ? Array.from(e.target.files) : [];
-              e.target.value = '';
-              if (picked.length > 0) {
-                handleUploadFiles(picked);
-              }
-            }}
-          />
+          <div className="relative w-full">
+            <input
+              id="noor-folder-upload"
+              ref={(el) => {
+                folderInputRef.current = el;
+                if (el) {
+                  el.setAttribute('webkitdirectory', '');
+                  el.setAttribute('directory', '');
+                  el.webkitdirectory = true;
+                }
+              }}
+              type="file"
+              multiple
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+              onChange={(e) => {
+                const picked = e.target.files ? Array.from(e.target.files) : [];
+                e.target.value = '';
+                if (picked.length > 0) {
+                  handleUploadFiles(picked);
+                }
+              }}
+            />
+            <div className="w-full py-2 px-3 rounded-xl bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition border border-slate-200/90 dark:border-slate-700 shadow-xs pointer-events-none">
+              <FolderIcon className="w-3.5 h-3.5 text-amber-500" />
+              <span>Upload Folder</span>
+            </div>
+          </div>
         </div>
 
         {/* Navigation */}
@@ -2665,14 +2672,25 @@ function DriveDashboardContent() {
       )}
 
       {/* Mobile Floating Upload Button */}
-      <button
-        onClick={() => fileInputRef.current?.click()}
+      <div
         title="Upload File"
         style={{ backgroundColor: accentColor }}
-        className="md:hidden fixed bottom-6 right-6 z-30 w-14 h-14 rounded-2xl hover:opacity-90 text-white shadow-xl flex items-center justify-center active:scale-95 transition"
+        className="md:hidden fixed bottom-6 right-6 z-30 w-14 h-14 rounded-2xl hover:opacity-90 text-white shadow-xl flex items-center justify-center active:scale-95 transition overflow-hidden cursor-pointer"
       >
-        <Upload className="w-6 h-6" />
-      </button>
+        <input
+          type="file"
+          multiple
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+          onChange={(e) => {
+            const picked = e.target.files ? Array.from(e.target.files) : [];
+            e.target.value = '';
+            if (picked.length > 0) {
+              handleUploadFiles(picked);
+            }
+          }}
+        />
+        <Upload className="w-6 h-6 pointer-events-none" />
+      </div>
 
       {/* Download App Modal */}
       {appDownloadModalOpen && (
