@@ -18,6 +18,7 @@ import {
 import { getApiUrl } from '@/lib/api';
 import PdfViewer from '@/components/PdfViewer';
 import DocxViewer from '@/components/DocxViewer';
+import PptxViewer from '@/components/PptxViewer';
 
 const API_URL = getApiUrl();
 
@@ -243,6 +244,9 @@ export default function PublicSharePage() {
               ) : data.file.extension === 'docx' ||
                 data.file.mimeType.includes('wordprocessingml') ? (
                 <DocxViewer url={getDownloadLink(data.file.id, true)} />
+              ) : data.file.extension === 'pptx' ||
+                data.file.mimeType.includes('presentationml') ? (
+                <PptxViewer url={getDownloadLink(data.file.id, true)} />
               ) : previewText !== null ? (
                 <pre className="w-full max-h-[75vh] overflow-auto p-5 rounded-2xl bg-zinc-50 border border-zinc-200/70 text-zinc-800 text-xs font-mono whitespace-pre-wrap">
                   {previewText}

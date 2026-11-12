@@ -378,6 +378,7 @@ class _DriveScreenState extends State<DriveScreen> {
 
   Future<void> _previewOrOpenFile(dynamic file) async {
     final mime = (file['mimeType'] ?? '') as String;
+    final ext = (file['extension'] ?? '').toString().toLowerCase();
     if (mime.startsWith('image/')) {
       final token = await apiClient.storage.read(key: 'access_token');
       if (!mounted) return;
@@ -414,6 +415,46 @@ class _DriveScreenState extends State<DriveScreen> {
       );
       return;
     }
+
+    if (mime.startsWith('text/') || ['md', 'txt', 'json', 'csv', 'log'].contains(ext)) {
+      try {
+        final res = await apiClient.dio.get(
+          '/drive/files/${file['id']}/download?inline=true',
+          options: Options(responseType: ResponseType.plain),
+        );
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (_) => Dialog.fullscreen(
+            backgroundColor: Colors.white,
+            child: Scaffold(
+              backgroundColor: Colors.white,
+              appBar: AppBar(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF0F172A),
+                title: Text(file['name'], overflow: TextOverflow.ellipsis),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.download),
+                    onPressed: () => _downloadAndOpen(file),
+                  ),
+                ],
+              ),
+              body: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: SelectableText(
+                  res.data?.toString() ?? '',
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                ),
+              ),
+            ),
+          ),
+        );
+        return;
+      } catch (_) {}
+    }
+
+    // PDF, Word (.docx), PPTX, Video, Audio -> download and open in native Android viewer
     await _downloadAndOpen(file);
   }
 
