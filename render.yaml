@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: noor-cloud
+    name: noor-cloud-vault
     runtime: node
     plan: free
     buildCommand: npm install && npm run build
@@ -39,4 +39,4 @@ services:
       - key: TELEGRAM_TARGET_CHANNEL
         value: me
       - key: CORS_ORIGIN
-        value: https://noor-cloud.onrender.com
+        value: https://noor-cloud-vault.onrender.com
