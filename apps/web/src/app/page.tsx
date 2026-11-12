@@ -426,12 +426,14 @@ function DriveDashboardContent() {
   useEffect(() => {
     let dragCounter = 0;
     const onWindowDragEnter = (e: DragEvent) => {
+      if (e.dataTransfer?.types?.includes('application/x-noor-item')) return;
       e.preventDefault();
       dragCounter++;
       setIsDragging(true);
     };
 
     const onWindowDragOver = (e: DragEvent) => {
+      if (e.dataTransfer?.types?.includes('application/x-noor-item')) return;
       e.preventDefault();
       if (e.dataTransfer) {
         e.dataTransfer.dropEffect = 'copy';
@@ -439,6 +441,7 @@ function DriveDashboardContent() {
     };
 
     const onWindowDragLeave = (e: DragEvent) => {
+      if (e.dataTransfer?.types?.includes('application/x-noor-item')) return;
       e.preventDefault();
       dragCounter--;
       if (dragCounter <= 0) {
@@ -448,6 +451,7 @@ function DriveDashboardContent() {
     };
 
     const onWindowDrop = (e: DragEvent) => {
+      if (e.dataTransfer?.types?.includes('application/x-noor-item')) return;
       e.preventDefault();
       dragCounter = 0;
       setIsDragging(false);
@@ -1074,6 +1078,39 @@ function DriveDashboardContent() {
 
   return (
     <div className="min-h-screen flex bg-[#f6f7f9] dark:bg-[#0b0f17] text-zinc-900 dark:text-slate-100">
+      {/* Universal Hidden Inputs at top root level - works across all devices, viewports & OS */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const picked = e.target.files ? Array.from(e.target.files) : [];
+          if (picked.length > 0) handleUploadFiles(picked);
+          try { e.target.value = ''; } catch {}
+        }}
+      />
+      <input
+        ref={(el) => {
+          folderInputRef.current = el;
+          if (el) {
+            el.setAttribute('webkitdirectory', '');
+            el.setAttribute('directory', '');
+            (el as any).webkitdirectory = true;
+          }
+        }}
+        type="file"
+        multiple
+        className="hidden"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const picked = e.target.files ? Array.from(e.target.files) : [];
+          if (picked.length > 0) handleUploadFiles(picked);
+          try { e.target.value = ''; } catch {}
+        }}
+      />
+
       {/* Drag & Drop Overlay */}
       {isDragging && (
         <div className="fixed inset-0 z-50 bg-indigo-500/20 backdrop-blur-xs border-4 border-dashed border-indigo-500 flex items-center justify-center pointer-events-none transition-all">
@@ -1125,37 +1162,6 @@ function DriveDashboardContent() {
         </div>
 
         {/* Primary Action Buttons */}
-        {/* Hidden file inputs — display:none works universally (Ubuntu/Linux/Mac/Windows) */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          style={{ display: 'none' }}
-          onChange={(e) => {
-            const picked = e.target.files ? Array.from(e.target.files) : [];
-            if (picked.length > 0) handleUploadFiles(picked);
-            // Reset so same file can be re-selected
-            try { e.target.value = ''; } catch {}
-          }}
-        />
-        <input
-          ref={(el) => {
-            folderInputRef.current = el;
-            if (el) {
-              el.setAttribute('webkitdirectory', '');
-              el.setAttribute('directory', '');
-              (el as any).webkitdirectory = true;
-            }
-          }}
-          type="file"
-          multiple
-          style={{ display: 'none' }}
-          onChange={(e) => {
-            const picked = e.target.files ? Array.from(e.target.files) : [];
-            if (picked.length > 0) handleUploadFiles(picked);
-            try { e.target.value = ''; } catch {}
-          }}
-        />
         <div className="px-4 mb-5 space-y-2">
           <div className="flex gap-2">
             <button
@@ -1688,32 +1694,14 @@ function DriveDashboardContent() {
               <p className="text-sm text-slate-500 max-w-sm mt-1 mb-5">
                 Drag and drop photos, videos, or documents here, or click Upload to store them securely.
               </p>
-              <div className="relative">
-                <input
-                  type="file"
-                  multiple
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                  onChange={(e) => {
-                    const target = e.target;
-                    const picked = target.files ? Array.from(target.files) : [];
-                    if (picked.length > 0) {
-                      handleUploadFiles(picked);
-                    }
-                    setTimeout(() => {
-                      try {
-                        target.value = '';
-                      } catch {}
-                    }, 300);
-                  }}
-                />
-                <button
-                  type="button"
-                  className="px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-md shadow-indigo-500/20 transition pointer-events-none flex items-center gap-2"
-                >
-                  <Upload className="w-4 h-4" />
-                  <span>Upload Files</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-md shadow-indigo-500/20 transition flex items-center gap-2 active:scale-95 cursor-pointer"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Upload Files</span>
+              </button>
             </div>
           ) : (
             <div className="space-y-8">
@@ -2709,30 +2697,15 @@ function DriveDashboardContent() {
       )}
 
       {/* Mobile Floating Upload Button */}
-      <div
+      <button
+        type="button"
         title="Upload File"
         style={{ backgroundColor: accentColor }}
-        className="md:hidden fixed bottom-6 right-6 z-30 w-14 h-14 rounded-2xl hover:opacity-90 text-white shadow-xl flex items-center justify-center active:scale-95 transition overflow-hidden cursor-pointer"
+        onClick={() => fileInputRef.current?.click()}
+        className="md:hidden fixed bottom-6 right-6 z-30 w-14 h-14 rounded-2xl hover:opacity-90 text-white shadow-xl flex items-center justify-center active:scale-95 transition cursor-pointer"
       >
-        <input
-          type="file"
-          multiple
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-          onChange={(e) => {
-            const target = e.target;
-            const picked = target.files ? Array.from(target.files) : [];
-            if (picked.length > 0) {
-              handleUploadFiles(picked);
-            }
-            setTimeout(() => {
-              try {
-                target.value = '';
-              } catch {}
-            }, 300);
-          }}
-        />
-        <Upload className="w-6 h-6 pointer-events-none" />
-      </div>
+        <Upload className="w-6 h-6" />
+      </button>
 
       {/* Download App Modal */}
       {appDownloadModalOpen && (
