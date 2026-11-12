@@ -391,6 +391,53 @@ export class DriveService {
     }
   }
 
+  async moveItem(
+    userId: string,
+    type: 'file' | 'folder',
+    id: string,
+    targetFolderId: string | null,
+  ) {
+    if (targetFolderId) {
+      const target = await this.prisma.folder.findUnique({ where: { id: targetFolderId } });
+      if (!target || target.ownerId !== userId || target.isTrash) {
+        throw new NotFoundException('Destination folder not found');
+      }
+    }
+
+    if (type === 'file') {
+      const file = await this.prisma.file.findUnique({ where: { id } });
+      if (!file || file.ownerId !== userId) throw new NotFoundException('File not found');
+      const updated = await this.prisma.file.update({
+        where: { id },
+        data: { folderId: targetFolderId ?? null },
+        include: { storageObject: true },
+      });
+      return this.serializeFile(updated);
+    } else {
+      const folder = await this.prisma.folder.findUnique({ where: { id } });
+      if (!folder || folder.ownerId !== userId) throw new NotFoundException('Folder not found');
+      if (targetFolderId === id) {
+        throw new BadRequestException('Cannot move a folder into itself');
+      }
+      // Prevent circular move into a descendant
+      let cursor: string | null = targetFolderId;
+      while (cursor) {
+        if (cursor === id) {
+          throw new BadRequestException('Cannot move a folder into its own subfolder');
+        }
+        const parent = await this.prisma.folder.findUnique({
+          where: { id: cursor },
+          select: { parentId: true },
+        });
+        cursor = parent?.parentId ?? null;
+      }
+      return this.prisma.folder.update({
+        where: { id },
+        data: { parentId: targetFolderId ?? null },
+      });
+    }
+  }
+
   async trashItem(userId: string, type: 'file' | 'folder', id: string) {
     if (type === 'file') {
       const file = await this.prisma.file.findUnique({ where: { id } });

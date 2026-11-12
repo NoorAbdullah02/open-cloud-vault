@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +9,8 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'package:xml/xml.dart';
 import '../../core/api_client.dart';
 
 class DriveScreen extends StatefulWidget {
@@ -346,11 +350,20 @@ class _DriveScreenState extends State<DriveScreen> {
     );
     if (name == null || name.isEmpty) return;
 
-    await apiClient.dio.post('/drive/folders', data: {
-      'name': name,
-      if (_folderId != null) 'parentId': _folderId,
-    });
-    _loadDrive(silent: true);
+    try {
+      final res = await apiClient.dio.post('/drive/folders', data: {
+        'name': name,
+        if (_folderId != null) 'parentId': _folderId,
+      });
+      if (mounted && res.data is Map) {
+        setState(() {
+          _folders = [res.data, ..._folders];
+        });
+      }
+      _loadDrive(silent: true);
+    } catch (e) {
+      _showSnack('Could not create folder: $e', isError: true);
+    }
   }
 
   Future<void> _renameItem(String type, String id, String currentName) async {
@@ -369,18 +382,36 @@ class _DriveScreenState extends State<DriveScreen> {
         ],
       ),
     );
-    if (newName == null || newName.isEmpty) return;
+    if (newName == null || newName.isEmpty || newName == currentName) return;
 
-    await apiClient.dio.patch('/drive/$type/$id/rename', data: {'name': newName});
-    _showSnack('Renamed');
-    _loadDrive(silent: true);
+    if (mounted) {
+      setState(() {
+        if (type == 'folder') {
+          _folders = _folders.map((f) => f['id'] == id ? {...Map.from(f), 'name': newName} : f).toList();
+        } else {
+          _files = _files.map((f) => f['id'] == id ? {...Map.from(f), 'name': newName} : f).toList();
+        }
+      });
+    }
+    try {
+      await apiClient.dio.patch('/drive/$type/$id/rename', data: {'name': newName});
+      _showSnack('Renamed');
+      _loadDrive(silent: true);
+    } catch (e) {
+      _showSnack('Rename failed: $e', isError: true);
+      _loadDrive(silent: true);
+    }
   }
 
   Future<void> _previewOrOpenFile(dynamic file) async {
     final mime = (file['mimeType'] ?? '') as String;
     final ext = (file['extension'] ?? '').toString().toLowerCase();
+    final token = await apiClient.storage.read(key: 'access_token');
+    final authHeaders = token != null ? {'Authorization': 'Bearer $token'} : <String, String>{};
+    final inlineUrl = '${ApiClient.baseUrl}/drive/files/${file['id']}/download?inline=true';
+
+    // 1. In-App Image Preview
     if (mime.startsWith('image/')) {
-      final token = await apiClient.storage.read(key: 'access_token');
       if (!mounted) return;
       showDialog(
         context: context,
@@ -402,8 +433,8 @@ class _DriveScreenState extends State<DriveScreen> {
             body: Center(
               child: InteractiveViewer(
                 child: Image.network(
-                  '${ApiClient.baseUrl}/drive/files/${file['id']}/download?inline=true',
-                  headers: token != null ? {'Authorization': 'Bearer $token'} : null,
+                  inlineUrl,
+                  headers: authHeaders,
                   loadingBuilder: (_, child, progress) => progress == null
                       ? child
                       : const CircularProgressIndicator(color: Colors.white),
@@ -416,6 +447,196 @@ class _DriveScreenState extends State<DriveScreen> {
       return;
     }
 
+    // 2. In-App PDF Preview
+    if (mime.contains('pdf') || ext == 'pdf') {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (_) => Dialog.fullscreen(
+          backgroundColor: Colors.white,
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            appBar: AppBar(
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF0F172A),
+              title: Text(file['name'], overflow: TextOverflow.ellipsis),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.download),
+                  onPressed: () => _downloadAndOpen(file),
+                ),
+              ],
+            ),
+            body: SfPdfViewer.network(
+              inlineUrl,
+              headers: authHeaders,
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+
+    // 3. In-App Word (.docx) Preview
+    if (ext == 'docx' || mime.contains('wordprocessingml')) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+      try {
+        final res = await apiClient.dio.get<List<int>>(
+          '/drive/files/${file['id']}/download?inline=true',
+          options: Options(responseType: ResponseType.bytes),
+        );
+        final archive = ZipDecoder().decodeBytes(res.data!);
+        final docFile = archive.files.firstWhere((f) => f.name == 'word/document.xml');
+        final xmlStr = utf8.decode(docFile.content as List<int>);
+        final doc = XmlDocument.parse(xmlStr);
+        final paragraphs = doc
+            .findAllElements('w:p')
+            .map((p) => p.findAllElements('w:t').map((t) => t.innerText).join())
+            .where((line) => line.trim().isNotEmpty)
+            .toList();
+
+        if (!mounted) return;
+        Navigator.of(context, rootNavigator: true).pop();
+        showDialog(
+          context: context,
+          builder: (_) => Dialog.fullscreen(
+            backgroundColor: Colors.white,
+            child: Scaffold(
+              backgroundColor: Colors.white,
+              appBar: AppBar(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF0F172A),
+                title: Text(file['name'], overflow: TextOverflow.ellipsis),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.download),
+                    onPressed: () => _downloadAndOpen(file),
+                  ),
+                ],
+              ),
+              body: ListView.separated(
+                padding: const EdgeInsets.all(20),
+                itemCount: paragraphs.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                itemBuilder: (_, i) => SelectableText(
+                  paragraphs[i],
+                  style: const TextStyle(fontSize: 15, height: 1.5, color: Color(0xFF0F172A)),
+                ),
+              ),
+            ),
+          ),
+        );
+        return;
+      } catch (_) {
+        if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+
+    // 4. In-App PowerPoint (.pptx) Slide Preview
+    if (ext == 'pptx' || mime.contains('presentationml')) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+      try {
+        final res = await apiClient.dio.get<List<int>>(
+          '/drive/files/${file['id']}/download?inline=true',
+          options: Options(responseType: ResponseType.bytes),
+        );
+        final archive = ZipDecoder().decodeBytes(res.data!);
+        final slideFiles = archive.files
+            .where((f) => RegExp(r'^ppt/slides/slide\d+\.xml$').hasMatch(f.name))
+            .toList()
+          ..sort((a, b) {
+            final na = int.tryParse(RegExp(r'slide(\d+)\.xml').firstMatch(a.name)?.group(1) ?? '0') ?? 0;
+            final nb = int.tryParse(RegExp(r'slide(\d+)\.xml').firstMatch(b.name)?.group(1) ?? '0') ?? 0;
+            return na.compareTo(nb);
+          });
+
+        final slides = <Map<String, dynamic>>[];
+        for (final sf in slideFiles) {
+          final xmlStr = utf8.decode(sf.content as List<int>);
+          final doc = XmlDocument.parse(xmlStr);
+          final lines = doc
+              .findAllElements('a:p')
+              .map((p) => p.findAllElements('a:t').map((t) => t.innerText).join().trim())
+              .where((l) => l.isNotEmpty)
+              .toList();
+          final numStr = RegExp(r'slide(\d+)\.xml').firstMatch(sf.name)?.group(1) ?? '?';
+          slides.add({'number': numStr, 'lines': lines});
+        }
+
+        if (!mounted) return;
+        Navigator.of(context, rootNavigator: true).pop();
+        showDialog(
+          context: context,
+          builder: (_) => Dialog.fullscreen(
+            backgroundColor: const Color(0xFFF6F7F9),
+            child: Scaffold(
+              backgroundColor: const Color(0xFFF6F7F9),
+              appBar: AppBar(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF0F172A),
+                title: Text(file['name'], overflow: TextOverflow.ellipsis),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.download),
+                    onPressed: () => _downloadAndOpen(file),
+                  ),
+                ],
+              ),
+              body: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: slides.length,
+                itemBuilder: (_, i) {
+                  final s = slides[i];
+                  final lines = s['lines'] as List<String>;
+                  return Card(
+                    color: Colors.white,
+                    elevation: 0,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'SLIDE ${s['number']}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFD97706),
+                            ),
+                          ),
+                          const Divider(),
+                          for (final line in lines)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: SelectableText(line, style: const TextStyle(fontSize: 14)),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+        return;
+      } catch (_) {}
+    }
+
+    // 5. In-App Text / Markdown / Code Preview
     if (mime.startsWith('text/') || ['md', 'txt', 'json', 'csv', 'log'].contains(ext)) {
       try {
         final res = await apiClient.dio.get(
@@ -454,7 +675,7 @@ class _DriveScreenState extends State<DriveScreen> {
       } catch (_) {}
     }
 
-    // PDF, Word (.docx), PPTX, Video, Audio -> download and open in native Android viewer
+    // Fallback for Video/Audio/Other -> download and open in native Android viewer
     await _downloadAndOpen(file);
   }
 
@@ -1088,21 +1309,23 @@ class _DriveScreenState extends State<DriveScreen> {
                               itemBuilder: (context, index) {
                                 if (index < _folders.length) {
                                   final folder = _folders[index];
-                                  return InkWell(
-                                    onTap: () {
-                                      setState(() => _folderId = folder['id']);
-                                      _loadDrive();
-                                    },
-                                    child: Card(
-                                      color: Colors.white,
-                                      elevation: 0,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                        side: const BorderSide(color: Color(0xFFE2E8F0)),
-                                      ),
-                                      child: Stack(
-                                        children: [
-                                          Center(
+                                  return Card(
+                                    color: Colors.white,
+                                    elevation: 0,
+                                    clipBehavior: Clip.antiAlias,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      side: const BorderSide(color: Color(0xFFE2E8F0)),
+                                    ),
+                                    child: Stack(
+                                      children: [
+                                        InkWell(
+                                          borderRadius: BorderRadius.circular(16),
+                                          onTap: () {
+                                            setState(() => _folderId = folder['id']);
+                                            _loadDrive();
+                                          },
+                                          child: Center(
                                             child: Padding(
                                               padding: const EdgeInsets.all(12),
                                               child: Column(
@@ -1120,9 +1343,12 @@ class _DriveScreenState extends State<DriveScreen> {
                                               ),
                                             ),
                                           ),
-                                          Positioned(
-                                            top: 2,
-                                            right: 2,
+                                        ),
+                                        Positioned(
+                                          top: 2,
+                                          right: 2,
+                                          child: Material(
+                                            color: Colors.transparent,
                                             child: PopupMenuButton<String>(
                                               icon: const Icon(Icons.more_vert, size: 18, color: Color(0xFF64748B)),
                                               onSelected: (action) {
@@ -1162,24 +1388,26 @@ class _DriveScreenState extends State<DriveScreen> {
                                                     ],
                                             ),
                                           ),
-                                        ],
-                                      ),
+                                        ),
+                                      ],
                                     ),
                                   );
                                 }
                                 final file = _files[index - _folders.length];
-                                return InkWell(
-                                  onTap: () => _previewOrOpenFile(file),
-                                  child: Card(
-                                    color: Colors.white,
-                                    elevation: 0,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      side: const BorderSide(color: Color(0xFFE2E8F0)),
-                                    ),
-                                    child: Stack(
-                                      children: [
-                                        Center(
+                                return Card(
+                                  color: Colors.white,
+                                  elevation: 0,
+                                  clipBehavior: Clip.antiAlias,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    side: const BorderSide(color: Color(0xFFE2E8F0)),
+                                  ),
+                                  child: Stack(
+                                    children: [
+                                      InkWell(
+                                        borderRadius: BorderRadius.circular(16),
+                                        onTap: () => _previewOrOpenFile(file),
+                                        child: Center(
                                           child: Padding(
                                             padding: const EdgeInsets.all(12),
                                             child: Column(
@@ -1201,9 +1429,12 @@ class _DriveScreenState extends State<DriveScreen> {
                                             ),
                                           ),
                                         ),
-                                        Positioned(
-                                          top: 2,
-                                          right: 2,
+                                      ),
+                                      Positioned(
+                                        top: 2,
+                                        right: 2,
+                                        child: Material(
+                                          color: Colors.transparent,
                                           child: PopupMenuButton<String>(
                                             icon: const Icon(Icons.more_vert, size: 18, color: Color(0xFF64748B)),
                                             onSelected: (action) {
@@ -1243,8 +1474,8 @@ class _DriveScreenState extends State<DriveScreen> {
                                                   ],
                                           ),
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
                                 );
                               },

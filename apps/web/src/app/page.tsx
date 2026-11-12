@@ -262,6 +262,7 @@ function DriveDashboardContent() {
 
   // Upload & Drag states
   const [isDragging, setIsDragging] = useState(false);
+  const [dragTargetFolderId, setDragTargetFolderId] = useState<string | null>(null);
   const [uploadingFiles, setUploadingFiles] = useState<
     { id: string; name: string; progress: UploadProgressInfo; controller: AbortController }[]
   >([]);
@@ -461,7 +462,9 @@ function DriveDashboardContent() {
       ]);
 
       try {
-        const relPath = (file as any).webkitRelativePath as string | undefined;
+        const relPath = ((file as any)._relativePath || (file as any).webkitRelativePath) as
+          | string
+          | undefined;
         const targetFolderId = await resolveTargetFolder(relPath);
 
         const formData = new FormData();
@@ -791,6 +794,34 @@ function DriveDashboardContent() {
     router.push('/login');
   };
 
+  const handleMoveItem = async (
+    type: 'file' | 'folder',
+    id: string,
+    targetFolderId: string | null,
+  ) => {
+    if (type === 'folder' && id === targetFolderId) return;
+    if (targetFolderId === folderId) return;
+
+    if (type === 'file') {
+      setFiles((prev) => prev.filter((f) => f.id !== id));
+    } else {
+      setFolders((prev) => prev.filter((f) => f.id !== id));
+    }
+
+    try {
+      await apiFetch(`/drive/${type}/${id}/move`, {
+        method: 'PATCH',
+        body: JSON.stringify({ parentId: targetFolderId }),
+      });
+      showToast('Moved successfully');
+      driveViewCache.clear();
+      loadDrive(true);
+    } catch (err: any) {
+      showToast(err.message || 'Move failed', 'error');
+      loadDrive(true);
+    }
+  };
+
   const handleDropItems = async (dataTransfer: DataTransfer) => {
     const items = dataTransfer.items;
     if (!items || items.length === 0) {
@@ -799,36 +830,52 @@ function DriveDashboardContent() {
     }
 
     const collectedFiles: File[] = [];
+    const emptyDirs: string[] = [];
     const readEntry = async (entry: any, pathPrefix = ''): Promise<void> => {
       if (entry.isFile) {
         await new Promise<void>((resolve) => {
-          entry.file((file: File) => {
-            if (pathPrefix) {
-              Object.defineProperty(file, 'webkitRelativePath', {
-                value: `${pathPrefix}${file.name}`,
-              });
-            }
-            collectedFiles.push(file);
-            resolve();
-          });
+          entry.file(
+            (file: File) => {
+              if (pathPrefix) {
+                const rel = `${pathPrefix}${file.name}`;
+                (file as any)._relativePath = rel;
+                try {
+                  Object.defineProperty(file, 'webkitRelativePath', {
+                    value: rel,
+                    configurable: true,
+                  });
+                } catch {}
+              }
+              collectedFiles.push(file);
+              resolve();
+            },
+            () => resolve(),
+          );
         });
       } else if (entry.isDirectory) {
         const reader = entry.createReader();
         const entries: any[] = await new Promise((resolve) => {
           const all: any[] = [];
           const readBatch = () => {
-            reader.readEntries((batch: any[]) => {
-              if (batch.length === 0) resolve(all);
-              else {
-                all.push(...batch);
-                readBatch();
-              }
-            });
+            reader.readEntries(
+              (batch: any[]) => {
+                if (batch.length === 0) resolve(all);
+                else {
+                  all.push(...batch);
+                  readBatch();
+                }
+              },
+              () => resolve(all),
+            );
           };
           readBatch();
         });
-        for (const child of entries) {
-          await readEntry(child, `${pathPrefix}${entry.name}/`);
+        if (entries.length === 0) {
+          emptyDirs.push(`${pathPrefix}${entry.name}`);
+        } else {
+          for (const child of entries) {
+            await readEntry(child, `${pathPrefix}${entry.name}/`);
+          }
         }
       }
     };
@@ -842,6 +889,24 @@ function DriveDashboardContent() {
     if (entries.length > 0) {
       for (const entry of entries) {
         await readEntry(entry);
+      }
+      for (const dirName of emptyDirs) {
+        try {
+          const parts = dirName.split('/').filter(Boolean);
+          let parent = folderId;
+          for (const part of parts) {
+            const created = await apiFetch('/drive/folders', {
+              method: 'POST',
+              body: JSON.stringify({ name: part, parentId: parent || undefined }),
+            });
+            parent = created.id;
+          }
+        } catch {}
+      }
+      if (emptyDirs.length > 0 && collectedFiles.length === 0) {
+        showToast('Folder uploaded');
+        driveViewCache.clear();
+        loadDrive(true);
       }
       if (collectedFiles.length > 0) {
         handleUploadFiles(collectedFiles);
@@ -871,15 +936,31 @@ function DriveDashboardContent() {
   return (
     <div
       className="min-h-screen flex bg-[#f6f7f9] dark:bg-[#0b0f17] text-zinc-900 dark:text-slate-100"
-      onDragOver={(e) => {
-        e.preventDefault();
-        setIsDragging(true);
+      onDragEnter={(e) => {
+        if (e.dataTransfer.types.includes('Files')) {
+          e.preventDefault();
+          setIsDragging(true);
+        }
       }}
-      onDragLeave={() => setIsDragging(false)}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes('Files')) {
+          e.preventDefault();
+          if (!isDragging) setIsDragging(true);
+        }
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          setIsDragging(false);
+          setDragTargetFolderId(null);
+        }
+      }}
       onDrop={(e) => {
-        e.preventDefault();
         setIsDragging(false);
-        handleDropItems(e.dataTransfer);
+        setDragTargetFolderId(null);
+        if (e.dataTransfer.types.includes('Files')) {
+          e.preventDefault();
+          handleDropItems(e.dataTransfer);
+        }
       }}
     >
       {/* Drag & Drop Overlay */}
@@ -1259,7 +1340,29 @@ function DriveDashboardContent() {
               )}
               <button
                 onClick={() => navigateDrive(view, null)}
-                className="font-bold text-lg text-slate-900 dark:text-white hover:text-indigo-600 transition capitalize"
+                onDragOver={(e) => {
+                  if (e.dataTransfer.types.includes('application/x-noor-item')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDragTargetFolderId('root');
+                  }
+                }}
+                onDragLeave={() => setDragTargetFolderId((prev) => (prev === 'root' ? null : prev))}
+                onDrop={(e) => {
+                  const raw = e.dataTransfer.getData('application/x-noor-item');
+                  if (raw) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDragTargetFolderId(null);
+                    try {
+                      const item = JSON.parse(raw);
+                      handleMoveItem(item.type, item.id, null);
+                    } catch {}
+                  }
+                }}
+                className={`font-bold text-lg text-slate-900 dark:text-white hover:text-indigo-600 transition capitalize px-1.5 py-0.5 rounded-lg ${
+                  dragTargetFolderId === 'root' ? 'ring-2 ring-indigo-500 bg-indigo-50 dark:bg-indigo-500/20' : ''
+                }`}
               >
                 {view.replace('-', ' ')}
               </button>
@@ -1268,7 +1371,29 @@ function DriveDashboardContent() {
                   <ChevronRight className="w-4 h-4 text-slate-400" />
                   <button
                     onClick={() => navigateDrive(view, crumb.id)}
-                    className="font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 transition"
+                    onDragOver={(e) => {
+                      if (e.dataTransfer.types.includes('application/x-noor-item')) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDragTargetFolderId(crumb.id);
+                      }
+                    }}
+                    onDragLeave={() => setDragTargetFolderId((prev) => (prev === crumb.id ? null : prev))}
+                    onDrop={(e) => {
+                      const raw = e.dataTransfer.getData('application/x-noor-item');
+                      if (raw) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDragTargetFolderId(null);
+                        try {
+                          const item = JSON.parse(raw);
+                          handleMoveItem(item.type, item.id, crumb.id);
+                        } catch {}
+                      }
+                    }}
+                    className={`font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 transition px-1.5 py-0.5 rounded-lg ${
+                      dragTargetFolderId === crumb.id ? 'ring-2 ring-indigo-500 bg-indigo-50 dark:bg-indigo-500/20' : ''
+                    }`}
                   >
                     {crumb.name}
                   </button>
@@ -1385,7 +1510,43 @@ function DriveDashboardContent() {
                     {folders.map((folder) => (
                       <div
                         key={folder.id}
-                        className="group p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:shadow-md hover:-translate-y-0.5 flex items-center justify-between gap-2 cursor-pointer transition-all"
+                        draggable={view !== 'trash'}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData(
+                            'application/x-noor-item',
+                            JSON.stringify({ type: 'folder', id: folder.id }),
+                          );
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onDragOver={(e) => {
+                          if (e.dataTransfer.types.includes('application/x-noor-item')) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (dragTargetFolderId !== folder.id) {
+                              setDragTargetFolderId(folder.id);
+                            }
+                          }
+                        }}
+                        onDragLeave={() =>
+                          setDragTargetFolderId((prev) => (prev === folder.id ? null : prev))
+                        }
+                        onDrop={(e) => {
+                          const raw = e.dataTransfer.getData('application/x-noor-item');
+                          if (raw) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setDragTargetFolderId(null);
+                            try {
+                              const item = JSON.parse(raw);
+                              handleMoveItem(item.type, item.id, folder.id);
+                            } catch {}
+                          }
+                        }}
+                        className={`group p-3.5 rounded-2xl bg-white dark:bg-slate-900 border hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:shadow-md hover:-translate-y-0.5 flex items-center justify-between gap-2 cursor-pointer transition-all ${
+                          dragTargetFolderId === folder.id
+                            ? 'border-indigo-500 ring-2 ring-indigo-500 bg-indigo-50/60 dark:bg-indigo-500/10'
+                            : 'border-slate-200/80 dark:border-slate-800'
+                        }`}
                         onDoubleClick={() => navigateDrive(view, folder.id)}
                       >
                         <div
@@ -1509,6 +1670,14 @@ function DriveDashboardContent() {
                         return (
                           <div
                             key={file.id}
+                            draggable={view !== 'trash'}
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData(
+                                'application/x-noor-item',
+                                JSON.stringify({ type: 'file', id: file.id }),
+                              );
+                              e.dataTransfer.effectAllowed = 'move';
+                            }}
                             className="group rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:shadow-lg hover:-translate-y-0.5 overflow-hidden flex flex-col justify-between transition-all"
                           >
                             {/* Visual Preview Header */}
@@ -1656,6 +1825,14 @@ function DriveDashboardContent() {
                             return (
                               <tr
                                 key={file.id}
+                                draggable={view !== 'trash'}
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData(
+                                    'application/x-noor-item',
+                                    JSON.stringify({ type: 'file', id: file.id }),
+                                  );
+                                  e.dataTransfer.effectAllowed = 'move';
+                                }}
                                 className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition"
                               >
                                 <td

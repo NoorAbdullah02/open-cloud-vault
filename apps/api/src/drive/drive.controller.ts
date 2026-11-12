@@ -109,6 +109,16 @@ export class DriveController {
     return this.driveService.renameItem(user.id, type, id, name);
   }
 
+  @Patch(':type/:id/move')
+  moveItem(
+    @CurrentUser() user: AuthUser,
+    @Param('type') type: 'file' | 'folder',
+    @Param('id') id: string,
+    @Body('parentId') parentId: string | null,
+  ) {
+    return this.driveService.moveItem(user.id, type, id, parentId ?? null);
+  }
+
   @Patch(':type/:id/trash')
   trashItem(
     @CurrentUser() user: AuthUser,
