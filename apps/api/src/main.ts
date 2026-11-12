@@ -24,7 +24,9 @@ async function bootstrap() {
   );
   app.use(cookieParser());
 
-  const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+  const allowedOrigins = (
+    process.env.CORS_ORIGIN || 'http://localhost:3000,https://noor-cloud-vault.onrender.com'
+  )
     .split(',')
     .map((o) => o.trim());
 
