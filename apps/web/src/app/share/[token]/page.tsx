@@ -235,10 +235,20 @@ export default function PublicSharePage() {
               ) : data.file.mimeType.startsWith('audio/') ? (
                 <audio src={getDownloadLink(data.file.id, true)} controls className="w-full max-w-md" />
               ) : data.file.mimeType.includes('pdf') ? (
-                <iframe
-                  src={getDownloadLink(data.file.id, true)}
-                  className="w-full h-[75vh] rounded-2xl border border-zinc-100"
-                />
+                <div className="w-full flex flex-col items-center gap-3">
+                  <iframe
+                    src={getDownloadLink(data.file.id, true)}
+                    className="w-full h-[70vh] rounded-2xl border border-zinc-100"
+                    title={data.file.name}
+                  />
+                  <a
+                    href={getDownloadLink(data.file.id, false)}
+                    download={data.file.name}
+                    className="sm:hidden px-4 py-2 rounded-xl bg-zinc-900 text-white text-xs font-semibold flex items-center gap-1.5"
+                  >
+                    <Download className="w-4 h-4" /> Open PDF in Phone Viewer
+                  </a>
+                </div>
               ) : previewText !== null ? (
                 <pre className="w-full max-h-[75vh] overflow-auto p-5 rounded-2xl bg-zinc-50 border border-zinc-200/70 text-zinc-800 text-xs font-mono whitespace-pre-wrap">
                   {previewText}

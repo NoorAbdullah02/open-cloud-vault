@@ -170,11 +170,14 @@ function FileThumbnail({
 
   if (src && isPdf) {
     return (
-      <iframe
-        src={`${src}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
-        title="PDF Preview"
-        className="w-full h-full bg-white pointer-events-none border-0"
-      />
+      <div className="w-full h-full flex items-center justify-center">
+        <iframe
+          src={`${src}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+          title="PDF Preview"
+          className="hidden sm:block w-full h-full bg-white pointer-events-none border-0"
+        />
+        <div className="sm:hidden">{fallbackIcon}</div>
+      </div>
     );
   }
 
@@ -1729,7 +1732,19 @@ function DriveDashboardContent() {
             ) : previewModal.file.mimeType.startsWith('audio/') ? (
               <audio src={previewModal.url} controls />
             ) : previewModal.file.mimeType.includes('pdf') ? (
-              <iframe src={previewModal.url} className="w-full h-full rounded-2xl bg-white" />
+              <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+                <iframe
+                  src={previewModal.url}
+                  className="w-full flex-1 rounded-2xl bg-white"
+                  title={previewModal.file.name}
+                />
+                <button
+                  onClick={() => handleDownload(previewModal.file)}
+                  className="sm:hidden px-5 py-2.5 rounded-xl bg-white text-zinc-900 text-xs font-semibold flex items-center gap-2 shadow-md"
+                >
+                  <Download className="w-4 h-4" /> Open PDF in Phone Viewer
+                </button>
+              </div>
             ) : previewModal.textContent !== undefined ? (
               <pre className="w-full max-w-4xl max-h-full overflow-auto p-6 rounded-2xl bg-white text-slate-900 text-xs font-mono shadow-2xl whitespace-pre-wrap">
                 {previewModal.textContent}
@@ -2097,25 +2112,36 @@ function DriveDashboardContent() {
             </div>
 
             <div className="space-y-2.5">
-              <a
-                href={process.env.NEXT_PUBLIC_ANDROID_APK_URL || '/downloads/noor-drive.apk'}
-                download="noor-drive.apk"
-                className="flex items-center justify-between p-4 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-zinc-400 bg-slate-50/70 dark:bg-slate-800/50 transition"
-              >
-                <div>
+              {apkSizeBytes ? (
+                <a
+                  href={process.env.NEXT_PUBLIC_ANDROID_APK_URL || '/downloads/noor-drive.apk'}
+                  download="noor-drive.apk"
+                  className="flex items-center justify-between p-4 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-zinc-400 bg-slate-50/70 dark:bg-slate-800/50 transition"
+                >
+                  <div>
+                    <p className="text-sm font-bold text-slate-900 dark:text-white">
+                      NOOR DRIVE for Android (.apk)
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Size: {formatBytes(apkSizeBytes)}
+                    </p>
+                  </div>
+                  <div className="px-3.5 py-2 rounded-xl bg-zinc-900 text-white text-xs font-semibold flex items-center gap-1.5">
+                    <Download className="w-3.5 h-3.5" /> Download
+                  </div>
+                </a>
+              ) : (
+                <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50/70 dark:bg-amber-500/10 dark:border-amber-500/20 space-y-1.5">
                   <p className="text-sm font-bold text-slate-900 dark:text-white">
-                    NOOR DRIVE for Android (.apk)
+                    APK Not Built Yet
                   </p>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {apkSizeBytes
-                      ? `Size: ${formatBytes(apkSizeBytes)}`
-                      : 'Flutter APK • ~20–25 MB (build & place in /downloads/noor-drive.apk)'}
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    The Flutter Android APK hasn&apos;t been built and uploaded to{' '}
+                    <code className="font-mono">/downloads/noor-drive.apk</code> yet. Use{' '}
+                    <strong>Add to Home Screen</strong> below to install on your phone right now!
                   </p>
                 </div>
-                <div className="px-3.5 py-2 rounded-xl bg-zinc-900 text-white text-xs font-semibold flex items-center gap-1.5">
-                  <Download className="w-3.5 h-3.5" /> Download
-                </div>
-              </a>
+              )}
             </div>
 
             <div className="p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 text-xs text-slate-600 dark:text-slate-300">
