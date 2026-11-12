@@ -6,7 +6,7 @@ class ApiClient {
   // e.g. https://noor-drive-api.onrender.com/api
   static const String baseUrl = String.fromEnvironment(
     'API_URL',
-    defaultValue: 'http://localhost:4000/api',
+    defaultValue: 'https://noor-cloud-api.onrender.com/api',
   );
 
   final Dio dio;
