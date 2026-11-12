@@ -1263,7 +1263,7 @@ function DriveDashboardContent() {
                   <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
                     Folders
                   </h2>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
                     {folders.map((folder) => (
                       <div
                         key={folder.id}
