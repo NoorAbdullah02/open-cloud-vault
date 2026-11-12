@@ -521,6 +521,7 @@ function DriveDashboardContent() {
         setUploadingFiles((prev) => prev.filter((u) => u.id !== uploadId));
       }
     }
+    driveViewCache.clear();
     loadDrive(true);
     loadUser();
   };
@@ -1130,10 +1131,15 @@ function DriveDashboardContent() {
             }}
           />
           <input
-            ref={folderInputRef}
+            ref={(el) => {
+              folderInputRef.current = el;
+              if (el) {
+                el.webkitdirectory = true;
+                (el as any).directory = true;
+              }
+            }}
             type="file"
             multiple
-            {...({ webkitdirectory: '', directory: '' } as any)}
             className="hidden"
             onChange={(e) => {
               if (e.target.files) {

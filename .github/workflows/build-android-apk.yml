@@ -32,7 +32,7 @@ jobs:
         working-directory: apps/mobile
         run: |
           flutter create . --platforms=android --project-name noor_drive_app --org com.noordrive.app
-          sed -i 's/<application/<uses-permission android:name="android.permission.INTERNET" \/>\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" \/>\n    <uses-permission android:name="android.permission.USE_BIOMETRIC" \/>\n    <application/' android/app/src/main/AndroidManifest.xml
+          sed -i 's/<application/<uses-permission android:name="android.permission.INTERNET" \/>\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" \/>\n    <uses-permission android:name="android.permission.USE_BIOMETRIC" \/>\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" \/>\n    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" \/>\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" \/>\n    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" \/>\n    <application/' android/app/src/main/AndroidManifest.xml
           sed -i 's/android:label="noor_drive_app"/android:label="NOOR DRIVE"/' android/app/src/main/AndroidManifest.xml
           find android/app/src -name "MainActivity.kt" -exec sed -i 's/import io.flutter.embedding.android.FlutterActivity/import io.flutter.embedding.android.FlutterFragmentActivity/' {} +
           find android/app/src -name "MainActivity.kt" -exec sed -i 's/: FlutterActivity()/: FlutterFragmentActivity()/' {} +

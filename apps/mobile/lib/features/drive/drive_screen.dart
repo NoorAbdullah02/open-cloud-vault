@@ -384,7 +384,78 @@ class _DriveScreenState extends State<DriveScreen> {
     if (dirPath == null) return;
 
     final rootDir = Directory(dirPath);
-    final rootName = rootDir.uri.pathSegments.where((s) => s.isNotEmpty).last;
+    final segments = rootDir.uri.pathSegments.where((s) => s.isNotEmpty).toList();
+    final rootName = segments.isNotEmpty ? segments.last : 'Uploaded Folder';
+
+    List<File> filesToUpload = [];
+    try {
+      final entities = rootDir.listSync(recursive: true);
+      filesToUpload = entities.whereType<File>().toList();
+    } catch (_) {
+      // Android 11+ Scoped Storage fallback: create folder & pick files inside it
+      if (!mounted) return;
+      final nameCtrl = TextEditingController(text: rootName);
+      final customName = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Upload Folder Files'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Android restricts direct folder reading. Confirm the folder name and select the files to upload into it:',
+                style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Folder Name'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, nameCtrl.text.trim()),
+              child: const Text('Select Files'),
+            ),
+          ],
+        ),
+      );
+      if (customName == null || customName.isEmpty) return;
+
+      final picked = await FilePicker.platform.pickFiles(allowMultiple: true);
+      if (picked == null || picked.files.isEmpty) return;
+
+      try {
+        final createdRoot = await apiClient.dio.post('/drive/folders', data: {
+          'name': customName,
+          if (_folderId != null) 'parentId': _folderId,
+        });
+        final rootFolderId = createdRoot.data['id'] as String;
+        for (final pf in picked.files) {
+          if (pf.path != null) {
+            await _uploadSingleFile(pf.path!, pf.name, rootFolderId);
+          }
+        }
+        _showSnack('Folder "$customName" uploaded to NOOR DRIVE!');
+        _driveCache.clear();
+        await _loadDrive(silent: true);
+        await _loadUser();
+      } catch (e) {
+        _showSnack('Folder upload failed: $e', isError: true);
+      } finally {
+        if (mounted) {
+          setState(() {
+            _uploadingName = null;
+            _syncingDrive = false;
+            _uploadCancelToken = null;
+          });
+        }
+      }
+      return;
+    }
 
     try {
       final createdRoot = await apiClient.dio.post('/drive/folders', data: {
@@ -393,14 +464,39 @@ class _DriveScreenState extends State<DriveScreen> {
       });
       final rootFolderId = createdRoot.data['id'] as String;
 
-      final entities = rootDir.listSync(recursive: true);
-      for (final entity in entities) {
-        if (entity is File) {
-          final fileName = entity.uri.pathSegments.last;
-          await _uploadSingleFile(entity.path, fileName, rootFolderId);
+      final subfolderCache = <String, String>{};
+      final basePrefix = rootDir.path.endsWith(Platform.pathSeparator)
+          ? rootDir.path
+          : '${rootDir.path}${Platform.pathSeparator}';
+
+      for (final file in filesToUpload) {
+        String targetFolderId = rootFolderId;
+        final rel = file.path.startsWith(basePrefix)
+            ? file.path.substring(basePrefix.length)
+            : file.uri.pathSegments.last;
+        final parts = rel.split(Platform.pathSeparator);
+        if (parts.length > 1) {
+          final subParts = parts.sublist(0, parts.length - 1);
+          String built = '';
+          for (final part in subParts) {
+            built = built.isEmpty ? part : '$built/$part';
+            if (subfolderCache.containsKey(built)) {
+              targetFolderId = subfolderCache[built]!;
+            } else {
+              final subRes = await apiClient.dio.post('/drive/folders', data: {
+                'name': part,
+                'parentId': targetFolderId,
+              });
+              targetFolderId = subRes.data['id'] as String;
+              subfolderCache[built] = targetFolderId;
+            }
+          }
         }
+        final fileName = parts.last;
+        await _uploadSingleFile(file.path, fileName, targetFolderId);
       }
       _showSnack('Folder "$rootName" uploaded to NOOR DRIVE!');
+      _driveCache.clear();
       await _loadDrive(silent: true);
       await _loadUser();
     } catch (e) {
