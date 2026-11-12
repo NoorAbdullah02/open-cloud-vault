@@ -81,6 +81,15 @@ export class DriveController {
     stream.pipe(res);
   }
 
+  @Get('folders/:id/download')
+  async downloadFolderZip(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    return this.driveService.streamFolderAsZip(user.id, id, res);
+  }
+
   @Patch(':type/:id/star')
   toggleStar(
     @CurrentUser() user: AuthUser,

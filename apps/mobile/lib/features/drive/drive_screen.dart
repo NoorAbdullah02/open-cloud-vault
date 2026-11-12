@@ -22,25 +22,89 @@ class _DriveScreenState extends State<DriveScreen> {
   String _search = '';
   bool _isGrid = false;
   bool _loading = true;
+  Color _accentColor = const Color(0xFF18181B);
 
   // Live upload progress state
   String? _uploadingName;
   int _uploadLoaded = 0;
   int _uploadTotal = 0;
   double _uploadSpeed = 0;
-  bool _syncingTelegram = false;
+  int _uploadEtaSeconds = 0;
+  bool _syncingDrive = false;
+  CancelToken? _uploadCancelToken;
 
   Map<String, dynamic>? _user;
   List<dynamic> _folders = [];
   List<dynamic> _files = [];
   List<dynamic> _breadcrumbs = [];
+  final Map<String, Map<String, List<dynamic>>> _driveCache = {};
   Timer? _searchDebounce;
 
   @override
   void initState() {
     super.initState();
+    _loadAccentColor();
     _loadUser();
     _loadDrive();
+    _checkForAppUpdate(silent: true);
+  }
+
+  Future<void> _loadAccentColor() async {
+    final hex = await apiClient.storage.read(key: 'accent_color');
+    if (hex != null && mounted) {
+      setState(() => _accentColor = Color(int.parse(hex)));
+    }
+  }
+
+  Future<void> _setAccentColor(Color color) async {
+    setState(() => _accentColor = color);
+    await apiClient.storage.write(key: 'accent_color', value: color.value.toString());
+  }
+
+  Future<void> _checkForAppUpdate({bool silent = false}) async {
+    try {
+      final res = await Dio().get(
+        'https://api.github.com/repos/NoorAbdullah02/open-cloud-vault/releases/latest',
+      );
+      final tag = (res.data['tag_name'] ?? '') as String;
+      final match = RegExp(r'v1\.0\.(\d+)').firstMatch(tag);
+      final remoteBuild = match != null ? int.tryParse(match.group(1)!) ?? 0 : 0;
+
+      if (remoteBuild > ApiClient.buildNumber && mounted) {
+        final apkAsset = (res.data['assets'] as List?)?.firstWhere(
+          (a) => (a['name'] ?? '').toString().endsWith('.apk'),
+          orElse: () => null,
+        );
+        final downloadUrl = apkAsset?['browser_download_url'] ??
+            'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.apk';
+
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Update Available!'),
+            content: Text('A new version of NOOR DRIVE (Build #$remoteBuild) is ready.'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Later')),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  _showSnack('Downloading update...');
+                  final dir = await getTemporaryDirectory();
+                  final apkPath = '${dir.path}/noor-drive-update.apk';
+                  await Dio().download(downloadUrl, apkPath);
+                  await OpenFilex.open(apkPath);
+                },
+                child: const Text('Download & Install'),
+              ),
+            ],
+          ),
+        );
+      } else if (!silent && mounted) {
+        _showSnack('You are on the latest version (Build #${ApiClient.buildNumber})');
+      }
+    } catch (_) {
+      if (!silent && mounted) _showSnack('Could not check for updates', isError: true);
+    }
   }
 
   @override
@@ -70,7 +134,19 @@ class _DriveScreenState extends State<DriveScreen> {
   }
 
   Future<void> _loadDrive({bool silent = false}) async {
-    if (!silent) setState(() => _loading = true);
+    final cacheKey = '$_view:${_folderId ?? 'root'}:$_search';
+    final cached = _driveCache[cacheKey];
+    if (cached != null && !silent) {
+      setState(() {
+        _folders = cached['folders']!;
+        _files = cached['files']!;
+        _breadcrumbs = cached['breadcrumbs']!;
+        _loading = false;
+      });
+    } else if (!silent) {
+      setState(() => _loading = true);
+    }
+
     try {
       final res = await apiClient.dio.get(
         '/drive',
@@ -80,11 +156,19 @@ class _DriveScreenState extends State<DriveScreen> {
           if (_search.isNotEmpty) 'search': _search,
         },
       );
+      final folders = List<dynamic>.from(res.data['folders'] ?? []);
+      final files = List<dynamic>.from(res.data['files'] ?? []);
+      final breadcrumbs = List<dynamic>.from(res.data['breadcrumbs'] ?? []);
+      _driveCache[cacheKey] = {
+        'folders': folders,
+        'files': files,
+        'breadcrumbs': breadcrumbs,
+      };
       if (mounted) {
         setState(() {
-          _folders = res.data['folders'] ?? [];
-          _files = res.data['files'] ?? [];
-          _breadcrumbs = res.data['breadcrumbs'] ?? [];
+          _folders = folders;
+          _files = files;
+          _breadcrumbs = breadcrumbs;
         });
       }
     } catch (e) {
@@ -105,6 +189,7 @@ class _DriveScreenState extends State<DriveScreen> {
 
   Future<void> _uploadSingleFile(String path, String name, String? targetFolderId) async {
     final startTime = DateTime.now();
+    _uploadCancelToken = CancelToken();
     final formData = FormData.fromMap({
       'file': await MultipartFile.fromFile(path, filename: name),
       if (targetFolderId != null) 'folderId': targetFolderId,
@@ -114,15 +199,20 @@ class _DriveScreenState extends State<DriveScreen> {
     await apiClient.dio.post(
       '/drive/upload',
       data: formData,
+      cancelToken: _uploadCancelToken,
       onSendProgress: (sent, total) {
         if (!mounted) return;
         final elapsed = DateTime.now().difference(startTime).inMilliseconds / 1000.0;
+        final speed = elapsed > 0.1 ? sent / elapsed : 0.0;
+        final remaining = (total - sent).clamp(0, total);
+        final eta = speed > 0 ? (remaining / speed).ceil() : 0;
         setState(() {
           _uploadingName = name;
           _uploadLoaded = sent;
           _uploadTotal = total;
-          _uploadSpeed = elapsed > 0.1 ? sent / elapsed : 0;
-          _syncingTelegram = total > 0 && sent >= total;
+          _uploadSpeed = speed;
+          _uploadEtaSeconds = eta;
+          _syncingDrive = total > 0 && sent >= total;
         });
       },
     );
@@ -137,16 +227,23 @@ class _DriveScreenState extends State<DriveScreen> {
         if (f.path == null) continue;
         await _uploadSingleFile(f.path!, f.name, _folderId);
       }
-      _showSnack('Uploaded to Telegram Vault!');
+      _showSnack('Uploaded to NOOR DRIVE!');
       await _loadDrive(silent: true);
       await _loadUser();
+    } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) {
+        _showSnack('Upload cancelled', isError: true);
+      } else {
+        _showSnack('Upload failed: ${e.message}', isError: true);
+      }
     } catch (e) {
       _showSnack('Upload failed: $e', isError: true);
     } finally {
       if (mounted) {
         setState(() {
           _uploadingName = null;
-          _syncingTelegram = false;
+          _syncingDrive = false;
+          _uploadCancelToken = null;
         });
       }
     }
@@ -173,7 +270,7 @@ class _DriveScreenState extends State<DriveScreen> {
           await _uploadSingleFile(entity.path, fileName, rootFolderId);
         }
       }
-      _showSnack('Folder "$rootName" uploaded to Telegram!');
+      _showSnack('Folder "$rootName" uploaded to NOOR DRIVE!');
       await _loadDrive(silent: true);
       await _loadUser();
     } catch (e) {
@@ -182,7 +279,8 @@ class _DriveScreenState extends State<DriveScreen> {
       if (mounted) {
         setState(() {
           _uploadingName = null;
-          _syncingTelegram = false;
+          _syncingDrive = false;
+          _uploadCancelToken = null;
         });
       }
     }
@@ -459,26 +557,50 @@ class _DriveScreenState extends State<DriveScreen> {
   }
 
   Future<void> _toggleStar(String type, String id) async {
+    setState(() {
+      if (type == 'file') {
+        _files = _files.map((f) => f['id'] == id ? {...f, 'isStarred': !(f['isStarred'] ?? false)} : f).toList();
+      } else {
+        _folders = _folders.map((f) => f['id'] == id ? {...f, 'isStarred': !(f['isStarred'] ?? false)} : f).toList();
+      }
+    });
     await apiClient.dio.patch('/drive/$type/$id/star');
-    _loadDrive(silent: true);
   }
 
   Future<void> _trashItem(String type, String id) async {
+    setState(() {
+      if (type == 'file') {
+        _files = _files.where((f) => f['id'] != id).toList();
+      } else {
+        _folders = _folders.where((f) => f['id'] != id).toList();
+      }
+    });
     await apiClient.dio.patch('/drive/$type/$id/trash');
     _showSnack('Moved to Trash');
-    _loadDrive(silent: true);
   }
 
   Future<void> _restoreItem(String type, String id) async {
+    setState(() {
+      if (type == 'file') {
+        _files = _files.where((f) => f['id'] != id).toList();
+      } else {
+        _folders = _folders.where((f) => f['id'] != id).toList();
+      }
+    });
     await apiClient.dio.patch('/drive/$type/$id/restore');
     _showSnack('Restored');
-    _loadDrive(silent: true);
   }
 
   Future<void> _permanentDelete(String type, String id) async {
+    setState(() {
+      if (type == 'file') {
+        _files = _files.where((f) => f['id'] != id).toList();
+      } else {
+        _folders = _folders.where((f) => f['id'] != id).toList();
+      }
+    });
     await apiClient.dio.delete('/drive/${type == 'file' ? 'files' : 'folders'}/$id');
     _showSnack('Permanently deleted');
-    _loadDrive(silent: true);
     _loadUser();
   }
 
@@ -594,7 +716,7 @@ class _DriveScreenState extends State<DriveScreen> {
                             style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                           ),
                           Text(
-                            'Telegram Cloud Vault',
+                            'Personal Cloud Vault',
                             style: TextStyle(color: Colors.white70, fontSize: 12),
                           ),
                         ],
@@ -622,6 +744,39 @@ class _DriveScreenState extends State<DriveScreen> {
                           _loadDrive();
                         },
                       ),
+                    ListTile(
+                      leading: Icon(Icons.palette_outlined, color: _accentColor),
+                      title: const Text('Customize Theme Color'),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Row(
+                          children: [
+                            for (final c in const [
+                              Color(0xFF18181B),
+                              Color(0xFF2563EB),
+                              Color(0xFF4F46E5),
+                              Color(0xFF059669),
+                              Color(0xFFE11D48),
+                            ])
+                              GestureDetector(
+                                onTap: () => _setAccentColor(c),
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 10),
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    color: c,
+                                    shape: BoxShape.circle,
+                                    border: _accentColor.value == c.value
+                                        ? Border.all(color: Colors.black26, width: 3)
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
                     const Divider(),
                     ListTile(
                       leading: const Icon(Icons.security, color: Color(0xFF059669)),
@@ -629,6 +784,14 @@ class _DriveScreenState extends State<DriveScreen> {
                       onTap: () {
                         Navigator.pop(context);
                         _openSecurityDialog();
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.system_update, color: Color(0xFF2563EB)),
+                      title: const Text('Check for App Update'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _checkForAppUpdate(silent: false);
                       },
                     ),
                   ],
@@ -646,7 +809,7 @@ class _DriveScreenState extends State<DriveScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Telegram Vault Storage', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      const Text('NOOR DRIVE Storage', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       LinearProgressIndicator(value: usedRatio, minHeight: 6, borderRadius: BorderRadius.circular(4)),
                       const SizedBox(height: 6),
@@ -663,7 +826,7 @@ class _DriveScreenState extends State<DriveScreen> {
         ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: _uploadingName != null ? null : _uploadFiles,
-          backgroundColor: const Color(0xFF18181B),
+          backgroundColor: _accentColor,
           foregroundColor: Colors.white,
           icon: _uploadingName != null
               ? const SizedBox(
@@ -680,7 +843,7 @@ class _DriveScreenState extends State<DriveScreen> {
               padding: const EdgeInsets.all(12),
               child: TextField(
                 decoration: InputDecoration(
-                  hintText: 'Search your Telegram vault...',
+                  hintText: 'Search NOOR DRIVE...',
                   prefixIcon: const Icon(Icons.search),
                   filled: true,
                   fillColor: Colors.white,
@@ -701,7 +864,7 @@ class _DriveScreenState extends State<DriveScreen> {
             if (_uploadingName != null)
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
@@ -710,20 +873,48 @@ class _DriveScreenState extends State<DriveScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      _syncingTelegram
-                          ? 'Syncing "$_uploadingName" to Telegram...'
-                          : 'Uploading "$_uploadingName"',
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _syncingDrive
+                                ? 'Saving "$_uploadingName" to NOOR DRIVE...'
+                                : 'Uploading "$_uploadingName" (${_uploadTotal > 0 ? ((_uploadLoaded / _uploadTotal) * 100).round() : 0}%)',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18, color: Color(0xFFE11D48)),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => _uploadCancelToken?.cancel('Cancelled by user'),
+                          tooltip: 'Cancel Upload',
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 6),
                     LinearProgressIndicator(
                       value: _uploadTotal > 0 ? _uploadLoaded / _uploadTotal : null,
+                      color: _accentColor,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${_formatBytes(_uploadLoaded)} / ${_formatBytes(_uploadTotal)} • ${_formatBytes(_uploadSpeed.toInt())}/s',
-                      style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${_formatBytes(_uploadLoaded)} / ${_formatBytes(_uploadTotal)}',
+                          style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                        ),
+                        Text(
+                          _syncingDrive
+                              ? 'Finalizing...'
+                              : '${_formatBytes(_uploadSpeed.toInt())}/s • ${_uploadEtaSeconds}s left',
+                          style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -893,7 +1084,7 @@ class _DriveScreenState extends State<DriveScreen> {
                                     child: ListTile(
                                       leading: const Icon(Icons.insert_drive_file, color: Color(0xFF4F46E5)),
                                       title: Text(file['name'], maxLines: 1, overflow: TextOverflow.ellipsis),
-                                      subtitle: Text('${_formatBytes(file['sizeBytes'])} • Telegram'),
+                                      subtitle: Text('${_formatBytes(file['sizeBytes'])} • NOOR DRIVE'),
                                       onTap: () => _previewOrOpenFile(file),
                                       trailing: PopupMenuButton<String>(
                                         onSelected: (action) {

@@ -33,12 +33,14 @@ jobs:
         run: |
           flutter create . --platforms=android --project-name noor_drive_app --org com.noordrive.app
           sed -i 's/<application/<uses-permission android:name="android.permission.INTERNET" \/>\n    <application/' android/app/src/main/AndroidManifest.xml
+          sed -i 's/android:label="noor_drive_app"/android:label="NOOR DRIVE"/' android/app/src/main/AndroidManifest.xml
 
-      - name: Install dependencies & build release APK
+      - name: Install dependencies, generate launcher icon & build APK
         working-directory: apps/mobile
         run: |
           flutter pub get
-          flutter build apk --release --dart-define=API_URL=https://noor-cloud-vault.onrender.com/api
+          dart run flutter_launcher_icons
+          flutter build apk --release --dart-define=API_URL=https://noor-cloud-vault.onrender.com/api --dart-define=APP_BUILD_NUMBER=${{ github.run_number }}
           cp build/app/outputs/flutter-apk/app-release.apk noor-drive.apk
 
       - name: Upload APK artifact
@@ -50,7 +52,8 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: android-latest
-          name: NOOR DRIVE Android App
+          tag_name: v1.0.${{ github.run_number }}
+          name: NOOR DRIVE Android v1.0.${{ github.run_number }}
           files: apps/mobile/noor-drive.apk
-          overwrite: true
+          make_latest: true
+

@@ -108,13 +108,22 @@ export interface UploadProgressInfo {
 export function uploadFileWithProgress(
   formData: FormData,
   onProgress: (info: UploadProgressInfo) => void,
+  signal?: AbortSignal,
 ): Promise<any> {
   return new Promise((resolve, reject) => {
     const { accessToken } = getStoredTokens();
     const xhr = new XMLHttpRequest();
     const startTime = Date.now();
 
-    xhr.open('POST', `${API_URL}/drive/upload`, true);
+    if (signal) {
+      if (signal.aborted) {
+        reject(new Error('Upload cancelled'));
+        return;
+      }
+      signal.addEventListener('abort', () => xhr.abort(), { once: true });
+    }
+
+    xhr.open('POST', `${getApiUrl()}/drive/upload`, true);
     if (accessToken) {
       xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`);
     }
@@ -154,6 +163,7 @@ export function uploadFileWithProgress(
       }
     };
 
+    xhr.onabort = () => reject(new Error('Upload cancelled'));
     xhr.onerror = () => reject(new Error('Network error during upload'));
     xhr.send(formData);
   });

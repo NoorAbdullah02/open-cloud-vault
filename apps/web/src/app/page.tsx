@@ -46,10 +46,12 @@ import {
   apiFetch,
   clearStoredTokens,
   fetchAuthorizedBlobUrl,
+  getApiUrl,
   getStoredTokens,
   uploadFileWithProgress,
   UploadProgressInfo,
 } from '@/lib/api';
+import PdfViewer from '@/components/PdfViewer';
 
 type ViewMode = 'my-drive' | 'recent' | 'starred' | 'photos' | 'videos' | 'documents' | 'trash';
 
@@ -223,12 +225,13 @@ function DriveDashboardContent() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [darkMode, setDarkMode] = useState(false); // White / Light Mode by default
+  const [accentColor, setAccentColor] = useState<string>('#18181b');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Upload & Drag states
   const [isDragging, setIsDragging] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState<
-    { id: string; name: string; progress: UploadProgressInfo }[]
+    { id: string; name: string; progress: UploadProgressInfo; controller: AbortController }[]
   >([]);
 
   // Modals
@@ -287,6 +290,11 @@ function DriveDashboardContent() {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('noor_accent_color');
+    if (saved) setAccentColor(saved);
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
@@ -401,11 +409,13 @@ function DriveDashboardContent() {
 
     for (const file of arr) {
       const uploadId = `${file.name}-${Date.now()}-${Math.random()}`;
+      const controller = new AbortController();
       setUploadingFiles((prev) => [
         ...prev,
         {
           id: uploadId,
           name: file.name,
+          controller,
           progress: {
             loadedBytes: 0,
             totalBytes: file.size,
@@ -426,14 +436,22 @@ function DriveDashboardContent() {
         if (targetFolderId) formData.append('folderId', targetFolderId);
         formData.append('backend', selectedBackend);
 
-        await uploadFileWithProgress(formData, (progress) => {
-          setUploadingFiles((prev) =>
-            prev.map((u) => (u.id === uploadId ? { ...u, progress } : u)),
-          );
-        });
-        showToast(`Uploaded ${file.name}`);
+        await uploadFileWithProgress(
+          formData,
+          (progress) => {
+            setUploadingFiles((prev) =>
+              prev.map((u) => (u.id === uploadId ? { ...u, progress } : u)),
+            );
+          },
+          controller.signal,
+        );
+        showToast(`Uploaded "${file.name}" to NOOR DRIVE`);
       } catch (err: any) {
-        showToast(`${file.name}: ${err.message}`, 'error');
+        if (err.message === 'Upload cancelled') {
+          showToast(`Cancelled "${file.name}"`, 'error');
+        } else {
+          showToast(`${file.name}: ${err.message}`, 'error');
+        }
       } finally {
         setUploadingFiles((prev) => prev.filter((u) => u.id !== uploadId));
       }
@@ -613,6 +631,26 @@ function DriveDashboardContent() {
       URL.revokeObjectURL(url);
     } catch {
       showToast('Download failed', 'error');
+    }
+  };
+
+  const handleDownloadFolder = async (folder: any) => {
+    try {
+      showToast(`Preparing ${folder.name}.zip...`);
+      const { accessToken } = getStoredTokens();
+      const res = await fetch(`${getApiUrl()}/drive/folders/${folder.id}/download`, {
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      });
+      if (!res.ok) throw new Error('Folder download failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${folder.name}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      showToast('Folder download failed', 'error');
     }
   };
 
@@ -869,7 +907,8 @@ function DriveDashboardContent() {
           <div className="flex gap-2">
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex-1 py-2.5 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 text-white text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+              style={{ backgroundColor: accentColor }}
+              className="flex-1 py-2.5 px-3 rounded-xl hover:opacity-90 text-white text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
             >
               <Upload className="w-4 h-4" />
               <span>Upload File</span>
@@ -1001,14 +1040,24 @@ function DriveDashboardContent() {
           <div className="mt-2.5 pt-2.5 border-t border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between text-[11px]">
             <span className="text-slate-500 flex items-center gap-1">
               <Send className="w-3 h-3 text-sky-500" />
-              {selectedBackend === 'TELEGRAM_MTPROTO' ? 'Telegram Vault' : 'Local Disk'}
+              Telegram Vault
             </span>
-            <button
-              onClick={() => setStorageModalOpen(true)}
-              className="text-indigo-600 font-semibold hover:underline"
-            >
-              Switch
-            </button>
+            <div className="flex items-center gap-1.5">
+              {['#18181b', '#2563eb', '#4f46e5', '#059669', '#e11d48'].map((hex) => (
+                <button
+                  key={hex}
+                  onClick={() => {
+                    setAccentColor(hex);
+                    localStorage.setItem('noor_accent_color', hex);
+                  }}
+                  title="Customize Theme Color"
+                  style={{ backgroundColor: hex }}
+                  className={`w-3.5 h-3.5 rounded-full transition ${
+                    accentColor === hex ? 'ring-2 ring-offset-1 ring-slate-400 scale-110' : 'opacity-75 hover:opacity-100'
+                  }`}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </aside>
@@ -1214,11 +1263,20 @@ function DriveDashboardContent() {
                         {u.name}
                       </span>
                     </div>
-                    <span className="text-xs font-bold text-indigo-600 shrink-0">
-                      {u.progress.phase === 'telegram'
-                        ? 'Syncing to Telegram...'
-                        : `${u.progress.percent}%`}
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs font-bold text-indigo-600">
+                        {u.progress.phase === 'telegram'
+                          ? 'Saving to NOOR DRIVE...'
+                          : `${u.progress.percent}%`}
+                      </span>
+                      <button
+                        onClick={() => u.controller.abort()}
+                        title="Cancel Upload"
+                        className="p-1 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                   <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                     <div
@@ -1232,7 +1290,7 @@ function DriveDashboardContent() {
                     </span>
                     <span>
                       {u.progress.phase === 'telegram'
-                        ? 'Finalizing in Telegram vault...'
+                        ? 'Finalizing in NOOR DRIVE...'
                         : `${formatBytes(u.progress.speedBytesPerSec)}/s • ${formatEta(
                             u.progress.etaSeconds,
                           )}`}
@@ -1310,6 +1368,16 @@ function DriveDashboardContent() {
                                 folder.isStarred ? 'text-amber-400 fill-amber-400' : 'text-slate-400'
                               }`}
                             />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadFolder(folder);
+                            }}
+                            title="Download Folder (.zip)"
+                            className="p-1 rounded-lg hover:bg-sky-50 dark:hover:bg-slate-800 text-slate-400 hover:text-sky-600"
+                          >
+                            <Download className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={(e) => {
@@ -1777,7 +1845,7 @@ function DriveDashboardContent() {
             {previewModal.loading || !previewModal.url ? (
               <div className="text-white text-center space-y-3">
                 <Loader2 className="w-10 h-10 animate-spin mx-auto text-sky-400" />
-                <p className="text-sm text-slate-300">Loading preview from Telegram vault...</p>
+                <p className="text-sm text-slate-300">Loading preview from NOOR DRIVE...</p>
               </div>
             ) : previewModal.file.mimeType.startsWith('image/') ? (
               <img
@@ -1795,32 +1863,7 @@ function DriveDashboardContent() {
             ) : previewModal.file.mimeType.startsWith('audio/') ? (
               <audio src={previewModal.url} controls className="w-full max-w-md" />
             ) : previewModal.file.mimeType.includes('pdf') ? (
-              <>
-                <iframe
-                  src={previewModal.url}
-                  className="hidden sm:block w-full h-full rounded-2xl bg-white"
-                  title={previewModal.file.name}
-                />
-                <div className="sm:hidden bg-white rounded-3xl p-6 text-center max-w-xs w-full space-y-4 shadow-2xl">
-                  <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
-                    <FileText className="w-7 h-7" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-900 truncate">
-                      {previewModal.file.name}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {formatBytes(previewModal.file.sizeBytes)} • PDF Document
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleDownload(previewModal.file)}
-                    className="w-full py-3 rounded-xl bg-zinc-900 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-md"
-                  >
-                    <Download className="w-4 h-4" /> Open PDF on Phone
-                  </button>
-                </div>
-              </>
+              <PdfViewer url={previewModal.url} />
             ) : previewModal.textContent !== undefined ? (
               <pre className="w-full max-w-4xl max-h-[80dvh] overflow-auto p-4 sm:p-6 rounded-2xl bg-white text-slate-900 text-xs font-mono shadow-2xl whitespace-pre-wrap break-words">
                 {previewModal.textContent}
@@ -2167,7 +2210,8 @@ function DriveDashboardContent() {
       <button
         onClick={() => fileInputRef.current?.click()}
         title="Upload File"
-        className="md:hidden fixed bottom-6 right-6 z-30 w-14 h-14 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-white shadow-xl flex items-center justify-center active:scale-95 transition"
+        style={{ backgroundColor: accentColor }}
+        className="md:hidden fixed bottom-6 right-6 z-30 w-14 h-14 rounded-2xl hover:opacity-90 text-white shadow-xl flex items-center justify-center active:scale-95 transition"
       >
         <Upload className="w-6 h-6" />
       </button>

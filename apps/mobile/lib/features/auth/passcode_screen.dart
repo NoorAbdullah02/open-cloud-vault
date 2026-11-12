@@ -110,7 +110,7 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Enter your passcode to unlock your Telegram vault',
+                  'Enter your passcode to unlock NOOR DRIVE',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
                 ),

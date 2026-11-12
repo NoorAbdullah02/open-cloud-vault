@@ -8,6 +8,7 @@ class ApiClient {
     'API_URL',
     defaultValue: 'https://noor-cloud-vault.onrender.com/api',
   );
+  static const int buildNumber = int.fromEnvironment('APP_BUILD_NUMBER', defaultValue: 1);
 
   final Dio dio;
   final FlutterSecureStorage storage;
