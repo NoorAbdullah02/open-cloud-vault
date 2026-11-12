@@ -891,10 +891,7 @@ function DriveDashboardContent() {
               Drop files to upload to NOOR DRIVE
             </p>
             <p className="text-xs text-slate-500 mt-1">
-              Destination:{' '}
-              {selectedBackend === 'TELEGRAM_MTPROTO'
-                ? 'Telegram MTProto Private Vault'
-                : 'Local Encrypted Vault'}
+              Destination: Noor Cloud Vault
             </p>
           </div>
         </div>
@@ -1019,7 +1016,7 @@ function DriveDashboardContent() {
               className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 transition"
             >
               <Database className="w-4 h-4 text-sky-500" />
-              <span>Storage &amp; Telegram</span>
+              <span>Cloud Storage</span>
             </button>
             <button
               onClick={openSecuritySettings}
@@ -1071,7 +1068,7 @@ function DriveDashboardContent() {
           <div className="mt-2.5 pt-2.5 border-t border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between text-[11px]">
             <span className="text-slate-500 flex items-center gap-1">
               <Send className="w-3 h-3 text-sky-500" />
-              Telegram Vault
+              Noor Cloud
             </span>
             <div className="flex items-center gap-1.5">
               {['#18181b', '#2563eb', '#4f46e5', '#059669', '#e11d48'].map((hex) => (
@@ -1204,7 +1201,7 @@ function DriveDashboardContent() {
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-slate-500">Storage Engine</p>
                   <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
-                    {selectedBackend === 'TELEGRAM_MTPROTO' ? 'Telegram' : 'Local Vault'}
+                    Noor Cloud
                   </p>
                 </div>
               </div>
@@ -1267,7 +1264,7 @@ function DriveDashboardContent() {
                   setConfirmModal({
                     title: 'Empty Trash?',
                     description:
-                      'All files and folders in Trash will be permanently deleted from Neon DB and your Telegram vault.',
+                      'All files and folders in Trash will be permanently deleted from NOOR DRIVE.',
                     confirmText: 'Empty Trash',
                     onConfirm: handleEmptyTrash,
                   })
@@ -1592,7 +1589,7 @@ function DriveDashboardContent() {
                                         setConfirmModal({
                                           title: `Delete "${file.name}" forever?`,
                                           description:
-                                            'This file will be permanently deleted from Neon DB and your Telegram vault.',
+                                            'This file will be permanently deleted from NOOR DRIVE.',
                                           confirmText: 'Delete Forever',
                                           onConfirm: () => handlePermanentDelete('file', file.id),
                                         })
@@ -1654,9 +1651,7 @@ function DriveDashboardContent() {
                                 <td className="py-3 px-4 text-slate-500">{formatBytes(file.sizeBytes)}</td>
                                 <td className="py-3 px-4">
                                   <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                                    {file.storageBackend === 'TELEGRAM_MTPROTO'
-                                      ? 'Telegram'
-                                      : 'Local Disk'}
+                                    NOOR DRIVE
                                   </span>
                                 </td>
                                 <td className="py-3 px-4 text-right space-x-1">
@@ -1715,7 +1710,7 @@ function DriveDashboardContent() {
                                           setConfirmModal({
                                             title: `Delete "${file.name}" forever?`,
                                             description:
-                                              'This file will be permanently deleted from Neon DB and your Telegram vault.',
+                                              'This file will be permanently deleted from NOOR DRIVE.',
                                             confirmText: 'Delete Forever',
                                             onConfirm: () => handlePermanentDelete('file', file.id),
                                           })
@@ -1772,7 +1767,7 @@ function DriveDashboardContent() {
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">
                   Create New Folder
                 </h3>
-                <p className="text-xs text-slate-500">Organize your Telegram vault</p>
+                <p className="text-xs text-slate-500">Organize your Noor Cloud</p>
               </div>
             </div>
             <input
@@ -1924,7 +1919,7 @@ function DriveDashboardContent() {
           <div className="animate-modal-pop w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-5">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold flex items-center gap-2">
-                <Database className="w-5 h-5 text-sky-500" /> Storage &amp; Telegram Vault
+                <Database className="w-5 h-5 text-sky-500" /> Noor Cloud Storage
               </h3>
               <button onClick={() => setStorageModalOpen(false)}>
                 <X className="w-5 h-5 text-slate-400" />
@@ -1939,14 +1934,14 @@ function DriveDashboardContent() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-bold text-slate-900 dark:text-white">
-                      Telegram MTProto Private Vault
+                      Noor Cloud Private Vault
                     </p>
                     <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase">
                       Always Active
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
-                    All files are streamed directly to your private Telegram Saved Messages or private channel (up to 2 GB per file). Zero files are stored on local disk.
+                    All files are encrypted and stored securely in your private Noor Cloud (up to 2 GB per file). Zero files are stored on local disk.
                   </p>
                 </div>
               </div>
@@ -1961,12 +1956,12 @@ function DriveDashboardContent() {
                   className="mt-0.5"
                 />
                 <span>
-                  I explicitly consent to storing my files in my personal Telegram account via MTProto (2 GB per-file limit).
+                  I confirm storing my files in my private Noor Cloud storage (2 GB per-file limit).
                 </span>
               </label>
               <div>
                 <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                  Target Chat / Channel (&quot;me&quot; for Saved Messages)
+                  Vault Target (&quot;me&quot; for Private Vault)
                 </label>
                 <input
                   type="text"

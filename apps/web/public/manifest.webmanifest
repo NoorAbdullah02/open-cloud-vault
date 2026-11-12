@@ -1,7 +1,7 @@
 {
   "name": "NOOR DRIVE",
   "short_name": "NOOR DRIVE",
-  "description": "Personal Telegram Cloud Vault",
+  "description": "Personal Noor Cloud Vault",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f6f7f9",
