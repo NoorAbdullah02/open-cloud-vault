@@ -77,7 +77,7 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
               border: Border.all(color: const Color(0xFFE2E8F0)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.slate900.withOpacity(0.06),
+                  color: const Color(0xFF0F172A).withOpacity(0.06),
                   blurRadius: 30,
                   offset: const Offset(0, 12),
                 ),
@@ -183,9 +183,5 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
       ),
     );
   }
-}
-
-extension on Colors {
-  static const Color slate900 = Color(0xFF0F172A);
 }
 
