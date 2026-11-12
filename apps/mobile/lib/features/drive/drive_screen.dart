@@ -587,6 +587,37 @@ class _DriveScreenState extends State<DriveScreen> {
     }
   }
 
+  Map<String, dynamic> _getFileVisualInfo(dynamic file) {
+    final mime = (file['mimeType'] ?? '') as String;
+    final ext = (file['extension'] ?? '').toString().toLowerCase();
+
+    if (mime.startsWith('image/')) {
+      return {'icon': Icons.image, 'color': const Color(0xFF0284C7), 'bg': const Color(0xFFF0F9FF), 'label': 'IMG'};
+    }
+    if (mime.startsWith('video/')) {
+      return {'icon': Icons.videocam, 'color': const Color(0xFF9333EA), 'bg': const Color(0xFFFAF5FF), 'label': 'VID'};
+    }
+    if (mime.startsWith('audio/')) {
+      return {'icon': Icons.audiotrack, 'color': const Color(0xFFDB2777), 'bg': const Color(0xFFFDF2F8), 'label': 'AUDIO'};
+    }
+    if (ext == 'pptx' || ext == 'ppt' || mime.contains('presentationml')) {
+      return {'icon': Icons.slideshow, 'color': const Color(0xFFEA580C), 'bg': const Color(0xFFFFF7ED), 'label': 'PPTX'};
+    }
+    if (ext == 'docx' || ext == 'doc' || mime.contains('wordprocessingml')) {
+      return {'icon': Icons.description, 'color': const Color(0xFF2563EB), 'bg': const Color(0xFFEFF6FF), 'label': 'DOCX'};
+    }
+    if (ext == 'pdf' || mime.contains('pdf')) {
+      return {'icon': Icons.picture_as_pdf, 'color': const Color(0xFFE11D48), 'bg': const Color(0xFFFFF1F2), 'label': 'PDF'};
+    }
+    if (ext == 'xlsx' || ext == 'xls' || ext == 'csv') {
+      return {'icon': Icons.table_chart, 'color': const Color(0xFF059669), 'bg': const Color(0xFFECFDF5), 'label': 'SHEET'};
+    }
+    if (ext == 'zip' || ext == 'rar' || mime.contains('zip')) {
+      return {'icon': Icons.folder_zip, 'color': const Color(0xFFD97706), 'bg': const Color(0xFFFFFBEB), 'label': 'ZIP'};
+    }
+    return {'icon': Icons.insert_drive_file, 'color': const Color(0xFF6366F1), 'bg': const Color(0xFFEEF2FF), 'label': ext.toUpperCase()};
+  }
+
   Future<void> _previewOrOpenFile(dynamic file) async {
     final mime = (file['mimeType'] ?? '') as String;
     final ext = (file['extension'] ?? '').toString().toLowerCase();
@@ -1676,7 +1707,24 @@ class _DriveScreenState extends State<DriveScreen> {
                                             child: Column(
                                               mainAxisAlignment: MainAxisAlignment.center,
                                               children: [
-                                                Icon(Icons.insert_drive_file, size: 38, color: _accentColor),
+                                                Builder(builder: (_) {
+                                                  final vis = _getFileVisualInfo(file);
+                                                  return Container(
+                                                    width: 44,
+                                                    height: 44,
+                                                    decoration: BoxDecoration(
+                                                      color: vis['bg'] as Color,
+                                                      borderRadius: BorderRadius.circular(12),
+                                                    ),
+                                                    child: Center(
+                                                      child: Icon(
+                                                        vis['icon'] as IconData,
+                                                        size: 24,
+                                                        color: vis['color'] as Color,
+                                                      ),
+                                                    ),
+                                                  );
+                                                }),
                                                 const SizedBox(height: 8),
                                                 Text(
                                                   file['name'],
@@ -1845,8 +1893,10 @@ class _DriveScreenState extends State<DriveScreen> {
                                       leading: Icon(
                                         _selectedKeys.contains('file:${file['id']}')
                                             ? Icons.check_circle
-                                            : Icons.insert_drive_file,
-                                        color: const Color(0xFF4F46E5),
+                                            : (_getFileVisualInfo(file)['icon'] as IconData),
+                                        color: _selectedKeys.contains('file:${file['id']}')
+                                            ? const Color(0xFF4F46E5)
+                                            : (_getFileVisualInfo(file)['color'] as Color),
                                       ),
                                       title: Text(file['name'], maxLines: 1, overflow: TextOverflow.ellipsis),
                                       subtitle: Text(

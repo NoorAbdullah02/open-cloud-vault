@@ -9,6 +9,8 @@
   },
   "dependencies": {
     "@noor-drive/shared-types": "*",
+    "docx-preview": "^0.4.1",
+    "jspdf": "^4.2.1",
     "jszip": "^3.10.2",
     "lucide-react": "^0.460.0",
     "mammoth": "^1.13.0",

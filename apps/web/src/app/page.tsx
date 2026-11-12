@@ -45,6 +45,10 @@ import {
   Info,
   Keyboard,
   Filter,
+  Presentation,
+  FileSpreadsheet,
+  AlertCircle,
+  Layers,
 } from 'lucide-react';
 import {
   apiFetch,
@@ -81,7 +85,8 @@ function formatDateTime(iso?: string) {
   });
 }
 
-function getFileVisual(mime: string) {
+function getFileVisual(mime: string, extension?: string) {
+  const ext = (extension || '').toLowerCase();
   if (mime.startsWith('image/')) {
     return {
       icon: <ImageIcon className="w-6 h-6 text-sky-600 dark:text-sky-400" />,
@@ -103,14 +108,58 @@ function getFileVisual(mime: string) {
       badge: 'Audio',
     };
   }
-  if (mime.includes('zip') || mime.includes('tar') || mime.includes('rar')) {
+  if (
+    mime.includes('presentation') ||
+    mime.includes('powerpoint') ||
+    ext === 'pptx' ||
+    ext === 'ppt'
+  ) {
+    return {
+      icon: <Presentation className="w-6 h-6 text-orange-600 dark:text-orange-400" />,
+      bg: 'bg-orange-50 dark:bg-orange-500/10',
+      badge: 'Presentation',
+    };
+  }
+  if (
+    mime.includes('word') ||
+    mime.includes('wordprocessingml') ||
+    ext === 'docx' ||
+    ext === 'doc'
+  ) {
+    return {
+      icon: <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />,
+      bg: 'bg-blue-50 dark:bg-blue-500/10',
+      badge: 'Word Document',
+    };
+  }
+  if (
+    mime.includes('spreadsheet') ||
+    mime.includes('excel') ||
+    ext === 'xlsx' ||
+    ext === 'xls' ||
+    ext === 'csv'
+  ) {
+    return {
+      icon: <FileSpreadsheet className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />,
+      bg: 'bg-emerald-50 dark:bg-emerald-500/10',
+      badge: 'Spreadsheet',
+    };
+  }
+  if (
+    mime.includes('zip') ||
+    mime.includes('tar') ||
+    mime.includes('rar') ||
+    mime.includes('7z') ||
+    ext === 'zip' ||
+    ext === 'rar'
+  ) {
     return {
       icon: <Archive className="w-6 h-6 text-amber-600 dark:text-amber-400" />,
       bg: 'bg-amber-50 dark:bg-amber-500/10',
       badge: 'Archive',
     };
   }
-  if (mime.includes('pdf')) {
+  if (mime.includes('pdf') || ext === 'pdf') {
     return {
       icon: <FileText className="w-6 h-6 text-rose-600 dark:text-rose-400" />,
       bg: 'bg-rose-50 dark:bg-rose-500/10',
@@ -124,8 +173,16 @@ function getFileVisual(mime: string) {
   };
 }
 
+interface DocCardPreview {
+  type: 'pptx' | 'docx';
+  thumbUrl?: string;
+  title?: string;
+  snippet?: string;
+}
+
 const thumbnailCache = new Map<string, string>();
 const textSnippetCache = new Map<string, string>();
+const docPreviewCache = new Map<string, DocCardPreview>();
 const driveViewCache = new Map<string, { folders: any[]; files: any[]; breadcrumbs: any[] }>();
 
 function FileThumbnail({
@@ -141,16 +198,31 @@ function FileThumbnail({
 }) {
   const [src, setSrc] = useState<string | null>(thumbnailCache.get(fileId) || null);
   const [snippet, setSnippet] = useState<string | null>(textSnippetCache.get(fileId) || null);
+  const [docPreview, setDocPreview] = useState<DocCardPreview | null>(
+    docPreviewCache.get(fileId) || null,
+  );
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
   const [pdfReady, setPdfReady] = useState(false);
 
+  const ext = (extension || '').toLowerCase();
   const isText =
     mimeType.startsWith('text/') ||
-    ['md', 'txt', 'json', 'csv', 'log', 'ts', 'js', 'py'].includes(extension || '');
-  const isPdf = mimeType.includes('pdf');
+    ['md', 'txt', 'json', 'csv', 'log', 'ts', 'js', 'py'].includes(ext);
+  const isPdf = mimeType.includes('pdf') || ext === 'pdf';
+  const isPptx =
+    mimeType.includes('presentation') ||
+    mimeType.includes('powerpoint') ||
+    ext === 'pptx' ||
+    ext === 'ppt';
+  const isDocx =
+    mimeType.includes('word') ||
+    mimeType.includes('wordprocessingml') ||
+    ext === 'docx' ||
+    ext === 'doc';
 
   useEffect(() => {
-    if (!mimeType.startsWith('image/') && !isText && !isPdf) return;
+    if (!mimeType.startsWith('image/') && !isText && !isPdf && !isPptx && !isDocx) return;
+
     if (thumbnailCache.has(fileId)) {
       setSrc(thumbnailCache.get(fileId)!);
       return;
@@ -159,6 +231,11 @@ function FileThumbnail({
       setSnippet(textSnippetCache.get(fileId)!);
       return;
     }
+    if (docPreviewCache.has(fileId)) {
+      setDocPreview(docPreviewCache.get(fileId)!);
+      return;
+    }
+
     let cancelled = false;
     fetchAuthorizedBlobUrl(fileId)
       .then(async (url) => {
@@ -168,16 +245,69 @@ function FileThumbnail({
           URL.revokeObjectURL(url);
           textSnippetCache.set(fileId, txt);
           if (!cancelled) setSnippet(txt);
+        } else if (isPptx) {
+          try {
+            const buf = await (await fetch(url)).arrayBuffer();
+            const JSZip = (await import('jszip')).default;
+            const zip = await JSZip.loadAsync(buf);
+            const thumb = zip.file('docProps/thumbnail.jpeg') || zip.file('docProps/thumbnail.png');
+            if (thumb) {
+              const b = await thumb.async('blob');
+              const tUrl = URL.createObjectURL(b);
+              const data: DocCardPreview = { type: 'pptx', thumbUrl: tUrl };
+              docPreviewCache.set(fileId, data);
+              if (!cancelled) setDocPreview(data);
+            } else if (zip.file('ppt/slides/slide1.xml')) {
+              const xml = await zip.files['ppt/slides/slide1.xml'].async('string');
+              const doc = new DOMParser().parseFromString(xml, 'application/xml');
+              const tNodes = Array.from(doc.getElementsByTagName('a:t'));
+              const lines = tNodes.map((t) => t.textContent || '').join(' ').trim();
+              const words = lines.split(/\s+/).filter(Boolean);
+              const title = words.slice(0, 6).join(' ');
+              const snippet = words.slice(6, 18).join(' ');
+              const data: DocCardPreview = { type: 'pptx', title: title || 'Slide 1', snippet };
+              docPreviewCache.set(fileId, data);
+              if (!cancelled) setDocPreview(data);
+            }
+          } catch {}
+          URL.revokeObjectURL(url);
+        } else if (isDocx) {
+          try {
+            const buf = await (await fetch(url)).arrayBuffer();
+            const JSZip = (await import('jszip')).default;
+            const zip = await JSZip.loadAsync(buf);
+            const thumb = zip.file('docProps/thumbnail.jpeg') || zip.file('docProps/thumbnail.png');
+            if (thumb) {
+              const b = await thumb.async('blob');
+              const tUrl = URL.createObjectURL(b);
+              const data: DocCardPreview = { type: 'docx', thumbUrl: tUrl };
+              docPreviewCache.set(fileId, data);
+              if (!cancelled) setDocPreview(data);
+            } else if (zip.file('word/document.xml')) {
+              const xml = await zip.files['word/document.xml'].async('string');
+              const doc = new DOMParser().parseFromString(xml, 'application/xml');
+              const tNodes = Array.from(doc.getElementsByTagName('w:t'));
+              const txt = tNodes.map((t) => t.textContent || '').join(' ').trim();
+              const words = txt.split(/\s+/).filter(Boolean);
+              const title = words.slice(0, 7).join(' ');
+              const snippet = words.slice(7, 22).join(' ');
+              const data: DocCardPreview = { type: 'docx', title: title || 'Word Document', snippet };
+              docPreviewCache.set(fileId, data);
+              if (!cancelled) setDocPreview(data);
+            }
+          } catch {}
+          URL.revokeObjectURL(url);
         } else {
           thumbnailCache.set(fileId, url);
           if (!cancelled) setSrc(url);
         }
       })
       .catch(() => {});
+
     return () => {
       cancelled = true;
     };
-  }, [fileId, mimeType, isText, isPdf]);
+  }, [fileId, mimeType, extension, isText, isPdf, isPptx, isDocx]);
 
   useEffect(() => {
     if (!isPdf || !src || !pdfCanvasRef.current) return;
@@ -215,6 +345,70 @@ function FileThumbnail({
         alt=""
         className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
       />
+    );
+  }
+
+  if (docPreview?.thumbUrl) {
+    return (
+      <img
+        src={docPreview.thumbUrl}
+        alt=""
+        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+      />
+    );
+  }
+
+  if (docPreview?.type === 'pptx') {
+    return (
+      <div className="w-full h-full bg-slate-900 text-white p-3 flex flex-col justify-between overflow-hidden select-none border-b border-orange-500/40">
+        <div className="flex items-center justify-between">
+          <span className="px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 font-bold text-[9px] uppercase tracking-wider flex items-center gap-1">
+            <Presentation className="w-2.5 h-2.5" /> SLIDE 1
+          </span>
+          <span className="text-[9px] text-slate-400 font-mono">16:9</span>
+        </div>
+        <div className="my-auto py-1">
+          <p className="text-xs font-bold text-white line-clamp-2 leading-tight">
+            {docPreview.title || 'PowerPoint Presentation'}
+          </p>
+          {docPreview.snippet && (
+            <p className="text-[10px] text-slate-300 line-clamp-2 mt-1 leading-snug">
+              {docPreview.snippet}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center justify-between text-[8px] text-slate-400 border-t border-white/10 pt-1">
+          <span className="text-orange-400 font-medium">Presentation Slide</span>
+          <span>Open</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (docPreview?.type === 'docx') {
+    return (
+      <div className="w-full h-full bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 p-3 flex flex-col justify-between overflow-hidden select-none border-b border-blue-500/30">
+        <div className="flex items-center justify-between">
+          <span className="px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-600 dark:text-blue-400 font-bold text-[9px] uppercase tracking-wider flex items-center gap-1">
+            <FileText className="w-2.5 h-2.5" /> DOCX
+          </span>
+          <span className="text-[9px] text-slate-400 font-mono">Page 1</span>
+        </div>
+        <div className="my-auto py-1">
+          <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 leading-tight">
+            {docPreview.title || 'Word Document'}
+          </p>
+          {docPreview.snippet && (
+            <p className="text-[10px] text-slate-600 dark:text-slate-400 line-clamp-2 mt-1 leading-snug">
+              {docPreview.snippet}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center justify-between text-[8px] text-slate-400 border-t border-slate-200 dark:border-slate-800 pt-1">
+          <span className="text-blue-500 font-medium">Document Page</span>
+          <span>Open</span>
+        </div>
+      </div>
     );
   }
 
@@ -326,6 +520,14 @@ function DriveDashboardContent() {
 
   // Keyboard Shortcuts Modal
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+
+  // Smart Folder & Batch Upload Confirmation Modal
+  const [uploadConfirmBatch, setUploadConfirmBatch] = useState<{
+    files: File[];
+    folderName?: string;
+    totalSizeBytes: number;
+    filterJunk: boolean;
+  } | null>(null);
 
   // Share Modal State
   const [shareModal, setShareModal] = useState<{
@@ -515,6 +717,7 @@ function DriveDashboardContent() {
         setSortMenuOpen(false);
         setInfoPanelOpen(false);
         setShortcutsModalOpen(false);
+        setUploadConfirmBatch(null);
         setPreviewModal(null);
         setShareModal(null);
         setRenameModal(null);
@@ -550,91 +753,171 @@ function DriveDashboardContent() {
     return `${m}m ${s}s left`;
   };
 
-  const handleUploadFiles = useCallback(async (fileList: FileList | File[]) => {
-    const arr = Array.from(fileList);
-    if (arr.length === 0) return;
-    console.log('[NOOR DRIVE] Starting upload for', arr.length, 'files:', arr.map((f) => f.name));
-    showToast(`Uploading ${arr.length} item${arr.length > 1 ? 's' : ''}...`);
-
-    // Cache folder paths when uploading a directory (webkitRelativePath)
-    const folderCache = new Map<string, string>();
-    const resolveTargetFolder = async (relativePath?: string): Promise<string | null> => {
-      if (!relativePath || !relativePath.includes('/')) return folderId;
-      const parts = relativePath.split('/').slice(0, -1); // exclude filename
-      let currentParent = folderId;
-      let builtPath = '';
-      for (const part of parts) {
-        builtPath = builtPath ? `${builtPath}/${part}` : part;
-        if (folderCache.has(builtPath)) {
-          currentParent = folderCache.get(builtPath)!;
-        } else {
-          const created = await apiFetch('/drive/folders', {
-            method: 'POST',
-            body: JSON.stringify({ name: part, parentId: currentParent }),
-          });
-          folderCache.set(builtPath, created.id);
-          currentParent = created.id;
-        }
-      }
-      return currentParent;
-    };
-
-    for (const file of arr) {
-      const uploadId = `${file.name}-${Date.now()}-${Math.random()}`;
-      const controller = new AbortController();
-      setUploadingFiles((prev) => [
-        ...prev,
-        {
-          id: uploadId,
-          name: file.name,
-          controller,
-          progress: {
-            loadedBytes: 0,
-            totalBytes: file.size,
-            percent: 0,
-            speedBytesPerSec: 0,
-            etaSeconds: 0,
-            phase: 'uploading',
-          },
-        },
-      ]);
-
-      try {
-        const relPath = ((file as any)._relativePath || (file as any).webkitRelativePath) as
-          | string
-          | undefined;
-        const targetFolderId = await resolveTargetFolder(relPath);
-
-        const formData = new FormData();
-        formData.append('file', file);
-        if (targetFolderId) formData.append('folderId', targetFolderId);
-        formData.append('backend', selectedBackend);
-
-        await uploadFileWithProgress(
-          formData,
-          (progress) => {
-            setUploadingFiles((prev) =>
-              prev.map((u) => (u.id === uploadId ? { ...u, progress } : u)),
-            );
-          },
-          controller.signal,
-        );
-        showToast(`Uploaded "${file.name}" to NOOR DRIVE`);
-      } catch (err: any) {
-        console.error('[NOOR DRIVE] Upload error for file', file.name, err);
-        if (err.message === 'Upload cancelled') {
-          showToast(`Cancelled "${file.name}"`, 'error');
-        } else {
-          showToast(`${file.name}: ${err.message}`, 'error');
-        }
-      } finally {
-        setUploadingFiles((prev) => prev.filter((u) => u.id !== uploadId));
-      }
+  const isJunkOrSystemFile = (file: File) => {
+    const rel = (
+      ((file as any)._relativePath || (file as any).webkitRelativePath || file.name) as string
+    ).toLowerCase();
+    const parts = rel.split('/');
+    const junkDirs = [
+      'node_modules',
+      '.git',
+      '.svn',
+      '.hg',
+      '.idea',
+      '.vscode',
+      '__pycache__',
+      '.next',
+      'build',
+      'dist',
+      'coverage',
+      '.cache',
+      '.turbo',
+      '.gradle',
+    ];
+    if (parts.some((p) => junkDirs.includes(p))) return true;
+    const fileName = parts[parts.length - 1];
+    const junkNames = [
+      '.ds_store',
+      'thumbs.db',
+      'desktop.ini',
+      '.gitignore',
+      '.gitattributes',
+      '.npmignore',
+      '.env.local',
+    ];
+    if (
+      junkNames.includes(fileName) ||
+      fileName.endsWith('.tmp') ||
+      fileName.endsWith('.crdownload') ||
+      fileName.startsWith('~$')
+    ) {
+      return true;
     }
-    driveViewCache.clear();
-    loadDrive(true);
-    loadUser();
-  }, [folderId, selectedBackend, loadDrive, loadUser]);
+    return false;
+  };
+
+  const executeUploadPipeline = useCallback(
+    async (arr: File[]) => {
+      if (arr.length === 0) return;
+      console.log('[NOOR DRIVE] Executing pipeline for', arr.length, 'files');
+      showToast(`Uploading ${arr.length} item${arr.length > 1 ? 's' : ''}...`);
+
+      const folderCache = new Map<string, string>();
+      const resolveTargetFolder = async (relativePath?: string): Promise<string | null> => {
+        if (!relativePath || !relativePath.includes('/')) return folderId;
+        const parts = relativePath.split('/').slice(0, -1);
+        let currentParent = folderId;
+        let builtPath = '';
+        for (const part of parts) {
+          builtPath = builtPath ? `${builtPath}/${part}` : part;
+          if (folderCache.has(builtPath)) {
+            currentParent = folderCache.get(builtPath)!;
+          } else {
+            const created = await apiFetch('/drive/folders', {
+              method: 'POST',
+              body: JSON.stringify({ name: part, parentId: currentParent }),
+            });
+            folderCache.set(builtPath, created.id);
+            currentParent = created.id;
+          }
+        }
+        return currentParent;
+      };
+
+      for (const file of arr) {
+        const uploadId = `${file.name}-${Date.now()}-${Math.random()}`;
+        const controller = new AbortController();
+        setUploadingFiles((prev) => [
+          ...prev,
+          {
+            id: uploadId,
+            name: file.name,
+            controller,
+            progress: {
+              loadedBytes: 0,
+              totalBytes: file.size,
+              percent: 0,
+              speedBytesPerSec: 0,
+              etaSeconds: 0,
+              phase: 'uploading',
+            },
+          },
+        ]);
+
+        try {
+          const relPath = ((file as any)._relativePath || (file as any).webkitRelativePath) as
+            | string
+            | undefined;
+          const targetFolderId = await resolveTargetFolder(relPath);
+
+          const formData = new FormData();
+          formData.append('file', file);
+          if (targetFolderId) formData.append('folderId', targetFolderId);
+          formData.append('backend', selectedBackend);
+
+          await uploadFileWithProgress(
+            formData,
+            (progress) => {
+              setUploadingFiles((prev) =>
+                prev.map((u) => (u.id === uploadId ? { ...u, progress } : u)),
+              );
+            },
+            controller.signal,
+          );
+          showToast(`Uploaded "${file.name}" to NOOR DRIVE`);
+        } catch (err: any) {
+          console.error('[NOOR DRIVE] Upload error for file', file.name, err);
+          if (err.message === 'Upload cancelled') {
+            showToast(`Cancelled "${file.name}"`, 'error');
+          } else {
+            showToast(`${file.name}: ${err.message}`, 'error');
+          }
+        } finally {
+          setUploadingFiles((prev) => prev.filter((u) => u.id !== uploadId));
+        }
+      }
+      driveViewCache.clear();
+      loadDrive(true);
+      loadUser();
+    },
+    [folderId, selectedBackend, loadDrive, loadUser],
+  );
+
+  const handleUploadFiles = useCallback(
+    async (fileList: FileList | File[]) => {
+      const arr = Array.from(fileList);
+      if (arr.length === 0) return;
+
+      const hasFolder = arr.some(
+        (f) => Boolean((f as any)._relativePath || (f as any).webkitRelativePath),
+      );
+
+      // If more than 15 files or folder upload, prompt confirmation & filter modal
+      if (arr.length > 15 || hasFolder) {
+        let folderName: string | undefined = undefined;
+        for (const f of arr) {
+          const rel = ((f as any)._relativePath || (f as any).webkitRelativePath) as
+            | string
+            | undefined;
+          if (rel && rel.includes('/')) {
+            folderName = rel.split('/')[0];
+            break;
+          }
+        }
+        const totalSizeBytes = arr.reduce((acc, f) => acc + (f.size || 0), 0);
+        setUploadConfirmBatch({
+          files: arr,
+          folderName: folderName || 'Batch Files',
+          totalSizeBytes,
+          filterJunk: true,
+        });
+        return;
+      }
+
+      await executeUploadPipeline(arr);
+    },
+    [executeUploadPipeline],
+  );
 
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1917,7 +2200,7 @@ function DriveDashboardContent() {
                     Folders
                   </h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
-                    {folders.map((folder) => (
+                    {sortedFolders.map((folder) => (
                       <div
                         key={folder.id}
                         draggable={view !== 'trash'}
@@ -2100,8 +2383,8 @@ function DriveDashboardContent() {
                   </h2>
                   {layout === 'grid' ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                      {files.map((file) => {
-                        const visual = getFileVisual(file.mimeType);
+                      {sortedFiles.map((file) => {
+                        const visual = getFileVisual(file.mimeType, file.extension);
                         return (
                           <div
                             key={file.id}
@@ -2300,8 +2583,8 @@ function DriveDashboardContent() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {files.map((file) => {
-                            const visual = getFileVisual(file.mimeType);
+                          {sortedFiles.map((file) => {
+                            const visual = getFileVisual(file.mimeType, file.extension);
                             return (
                               <tr
                                 key={file.id}
@@ -2471,7 +2754,7 @@ function DriveDashboardContent() {
                       <FolderIcon className="w-16 h-16 text-amber-500 mb-2 fill-amber-500/20" />
                     ) : (
                       <div className="w-16 h-16 flex items-center justify-center mb-2">
-                        {getFileVisual(activeDetailItem.item.mimeType).icon}
+                        {getFileVisual(activeDetailItem.item.mimeType, activeDetailItem.item.extension).icon}
                       </div>
                     )}
                     <p className="font-bold text-sm text-slate-900 dark:text-white break-words max-w-full">
@@ -2742,10 +3025,18 @@ function DriveDashboardContent() {
               <PdfViewer url={previewModal.url} />
             ) : previewModal.file.extension === 'docx' ||
               previewModal.file.mimeType.includes('wordprocessingml') ? (
-              <DocxViewer url={previewModal.url} />
+              <DocxViewer
+                url={previewModal.url}
+                fileName={previewModal.file.name}
+                onDownloadOriginal={() => handleDownload(previewModal.file)}
+              />
             ) : previewModal.file.extension === 'pptx' ||
               previewModal.file.mimeType.includes('presentationml') ? (
-              <PptxViewer url={previewModal.url} />
+              <PptxViewer
+                url={previewModal.url}
+                fileName={previewModal.file.name}
+                onDownloadOriginal={() => handleDownload(previewModal.file)}
+              />
             ) : previewModal.textContent !== undefined ? (
               <pre className="w-full max-w-4xl max-h-[80dvh] overflow-auto p-4 sm:p-6 rounded-2xl bg-white text-slate-900 text-xs font-mono shadow-2xl whitespace-pre-wrap break-words">
                 {previewModal.textContent}
@@ -2928,6 +3219,148 @@ function DriveDashboardContent() {
           </div>
         </div>
       )}
+
+      {/* Smart Folder & Batch Upload Confirmation Modal */}
+      {uploadConfirmBatch && (() => {
+        const filteredFiles = uploadConfirmBatch.filterJunk
+          ? uploadConfirmBatch.files.filter((f) => !isJunkOrSystemFile(f))
+          : uploadConfirmBatch.files;
+        const totalSize = filteredFiles.reduce((acc, f) => acc + (f.size || 0), 0);
+        const skippedCount = uploadConfirmBatch.files.length - filteredFiles.length;
+
+        let presCount = 0;
+        let docCount = 0;
+        let imgCount = 0;
+        let otherCount = 0;
+        for (const f of filteredFiles) {
+          const n = f.name.toLowerCase();
+          if (n.endsWith('.pptx') || n.endsWith('.ppt')) presCount++;
+          else if (n.endsWith('.docx') || n.endsWith('.doc') || n.endsWith('.pdf')) docCount++;
+          else if (
+            n.endsWith('.png') ||
+            n.endsWith('.jpg') ||
+            n.endsWith('.jpeg') ||
+            n.endsWith('.webp')
+          )
+            imgCount++;
+          else otherCount++;
+        }
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="animate-modal-pop w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                    <FolderPlus className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                      Upload Confirmation
+                    </h3>
+                    <p className="text-xs text-slate-500 truncate max-w-xs">
+                      {uploadConfirmBatch.folderName
+                        ? `Folder: ${uploadConfirmBatch.folderName}`
+                        : 'Batch Upload'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setUploadConfirmBatch(null)}
+                  className="p-1.5 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Summary Stats Card */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-500 font-medium">Ready to upload</span>
+                  <span className="text-sm font-bold text-slate-900 dark:text-white">
+                    {filteredFiles.length.toLocaleString()} files ({formatBytes(totalSize)})
+                  </span>
+                </div>
+
+                {/* Filter Junk Checkbox */}
+                <label className="flex items-start gap-2.5 p-3 rounded-xl bg-white dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={uploadConfirmBatch.filterJunk}
+                    onChange={(e) =>
+                      setUploadConfirmBatch((prev) =>
+                        prev ? { ...prev, filterJunk: e.target.checked } : null,
+                      )
+                    }
+                    className="mt-0.5 rounded accent-indigo-600 cursor-pointer"
+                  />
+                  <div className="text-xs">
+                    <p className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                      Smart Filter: Skip hidden &amp; cache files (Recommended)
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Filters out .git, node_modules, temp builds and cache so only real files are uploaded.
+                      {skippedCount > 0 && (
+                        <span className="font-semibold text-emerald-600 dark:text-emerald-400 ml-1">
+                          ({skippedCount.toLocaleString()} junk items excluded)
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </label>
+
+                {/* Categories badges */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {presCount > 0 && (
+                    <span className="px-2.5 py-1 rounded-lg bg-orange-50 dark:bg-orange-500/15 text-orange-600 dark:text-orange-400 text-[11px] font-semibold flex items-center gap-1">
+                      <Presentation className="w-3 h-3" /> {presCount} Presentations
+                    </span>
+                  )}
+                  {docCount > 0 && (
+                    <span className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400 text-[11px] font-semibold flex items-center gap-1">
+                      <FileText className="w-3 h-3" /> {docCount} Documents
+                    </span>
+                  )}
+                  {imgCount > 0 && (
+                    <span className="px-2.5 py-1 rounded-lg bg-sky-50 dark:bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[11px] font-semibold flex items-center gap-1">
+                      <ImageIcon className="w-3 h-3" /> {imgCount} Images
+                    </span>
+                  )}
+                  {otherCount > 0 && (
+                    <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-semibold">
+                      {otherCount} Others
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setUploadConfirmBatch(null)}
+                  className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const toUpload = filteredFiles;
+                    setUploadConfirmBatch(null);
+                    executeUploadPipeline(toUpload);
+                  }}
+                  className="px-5 py-2.5 rounded-xl text-xs sm:text-sm bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white font-semibold shadow-md active:scale-[0.98] transition flex items-center gap-1.5"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>Start Upload ({filteredFiles.length.toLocaleString()} files)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Security & Devices Modal */}
       {securityModalOpen && (

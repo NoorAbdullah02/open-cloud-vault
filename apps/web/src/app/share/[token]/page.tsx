@@ -243,10 +243,18 @@ export default function PublicSharePage() {
                 </div>
               ) : data.file.extension === 'docx' ||
                 data.file.mimeType.includes('wordprocessingml') ? (
-                <DocxViewer url={getDownloadLink(data.file.id, true)} />
+                <DocxViewer
+                  url={getDownloadLink(data.file.id, true)}
+                  fileName={data.file.name}
+                  onDownloadOriginal={() => window.open(getDownloadLink(data.file.id, false), '_blank')}
+                />
               ) : data.file.extension === 'pptx' ||
                 data.file.mimeType.includes('presentationml') ? (
-                <PptxViewer url={getDownloadLink(data.file.id, true)} />
+                <PptxViewer
+                  url={getDownloadLink(data.file.id, true)}
+                  fileName={data.file.name}
+                  onDownloadOriginal={() => window.open(getDownloadLink(data.file.id, false), '_blank')}
+                />
               ) : previewText !== null ? (
                 <pre className="w-full max-h-[75vh] overflow-auto p-5 rounded-2xl bg-zinc-50 border border-zinc-200/70 text-zinc-800 text-xs font-mono whitespace-pre-wrap">
                   {previewText}
