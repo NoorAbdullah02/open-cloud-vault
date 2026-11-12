@@ -38,7 +38,9 @@ All uploaded files stream directly from memory to your private **Telegram MTProt
 - **100% Stateless Telegram Storage:** Zero files saved to local disk — uploads stream in memory straight to Telegram MTProto.
 - **Live Upload Progress:** Displays uploaded MB / total MB, transfer speed (`MB/s`), estimated time remaining (ETA), and Telegram sync status.
 - **Folder & Drag-and-Drop Uploads:** Upload entire nested folder trees via button or drag-and-drop.
-- **Live Card Previews:** Inline thumbnails for images, miniature PDF previews, and live text/Markdown snippets right on Grid cards, plus fullscreen modal previews.
+- **Live Card Previews & In-App Document Viewers:** Inline thumbnails for images, miniature PDF previews, live text/Markdown snippets, and in-app **PDF, Word (`.docx`), PowerPoint (`.pptx`)** viewers on both Web and Android.
+- **Drag & Drop Upload + Organize:** Drop files or entire nested folders anywhere to upload, or drag files/folders directly onto another folder or breadcrumb to move them.
+- **Fingerprint / Biometric Unlock (Android):** Save credentials securely on first unlock and unlock seamlessly with your fingerprint afterwards.
 - **Fast Caching & In-App Back:** Cached folder views, 30-second JWT session cache, browser preview caching, browser history sync, and an in-app Back button.
 - **Google Drive-Style Sharing (No Passcode Required):**
   - Share any **single file** (opens with direct inline preview + download) or **folder** (`/share/<token>`).
@@ -72,7 +74,8 @@ Personal_Drive/
 
 ### 1. Install Dependencies
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/NoorAbdullah02/open-cloud-vault.git
+cd open-cloud-vault
 cd Personal_Drive
 npm install
 ```

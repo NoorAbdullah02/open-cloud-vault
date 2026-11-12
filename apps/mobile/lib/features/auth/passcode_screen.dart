@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:local_auth/local_auth.dart';
 import '../../core/api_client.dart';
 
 class PasscodeScreen extends StatefulWidget {
@@ -13,11 +14,86 @@ class PasscodeScreen extends StatefulWidget {
 class _PasscodeScreenState extends State<PasscodeScreen> {
   final _passcodeController = TextEditingController();
   final _totpController = TextEditingController();
+  final _localAuth = LocalAuthentication();
   bool _requires2fa = false;
   bool _loading = false;
+  bool _canUseBiometrics = false;
+  bool _hasSavedCredentials = false;
+  bool _rememberForBiometrics = true;
   String? _error;
 
-  Future<void> _unlock() async {
+  @override
+  void initState() {
+    super.initState();
+    _initBiometrics();
+  }
+
+  Future<void> _initBiometrics() async {
+    try {
+      final supported = await _localAuth.isDeviceSupported();
+      final canCheck = await _localAuth.canCheckBiometrics;
+      final savedPasscode = await apiClient.storage.read(key: 'saved_passcode');
+      final bioEnabled = await apiClient.storage.read(key: 'biometric_enabled');
+
+      if (!mounted) return;
+      final available = supported || canCheck;
+      final hasSaved = savedPasscode != null && savedPasscode.isNotEmpty;
+      setState(() {
+        _canUseBiometrics = available;
+        _hasSavedCredentials = hasSaved;
+      });
+
+      if (available && hasSaved && bioEnabled != 'false') {
+        await _unlockWithBiometrics();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _unlockWithBiometrics() async {
+    try {
+      final authenticated = await _localAuth.authenticate(
+        localizedReason: 'Unlock NOOR DRIVE with your fingerprint',
+        options: const AuthenticationOptions(
+          biometricOnly: false,
+          stickyAuth: true,
+        ),
+      );
+      if (!authenticated || !mounted) return;
+
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+
+      final token = await apiClient.storage.read(key: 'access_token');
+      if (token != null && token.isNotEmpty) {
+        try {
+          await apiClient.dio.get('/auth/me');
+          if (mounted) context.go('/drive');
+          return;
+        } catch (_) {}
+      }
+
+      final savedPasscode = await apiClient.storage.read(key: 'saved_passcode');
+      if (savedPasscode != null && savedPasscode.isNotEmpty) {
+        await _unlock(overridePasscode: savedPasscode);
+      } else {
+        setState(() {
+          _loading = false;
+          _error = 'Please enter your passcode once to enable fingerprint unlock.';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  Future<void> _unlock({String? overridePasscode}) async {
+    final passcode = (overridePasscode ?? _passcodeController.text).trim();
+    if (passcode.isEmpty) return;
+
     setState(() {
       _error = null;
       _loading = true;
@@ -27,7 +103,7 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
       final res = await apiClient.dio.post(
         '/auth/passcode',
         data: {
-          'passcode': _passcodeController.text.trim(),
+          'passcode': passcode,
           if (_requires2fa) 'totpCode': _totpController.text.trim(),
           'deviceName': Platform.operatingSystem,
           'platform': Platform.operatingSystem,
@@ -50,6 +126,14 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
         key: 'refresh_token',
         value: res.data['refreshToken'],
       );
+
+      if (_rememberForBiometrics) {
+        await apiClient.storage.write(key: 'saved_passcode', value: passcode);
+        await apiClient.storage.write(key: 'biometric_enabled', value: 'true');
+      } else {
+        await apiClient.storage.delete(key: 'saved_passcode');
+        await apiClient.storage.write(key: 'biometric_enabled', value: 'false');
+      }
 
       if (mounted) context.go('/drive');
     } catch (e) {
@@ -96,7 +180,7 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
                   ),
                   child: const CircleAvatar(
                     radius: 40,
-                    backgroundImage: AssetImage('assets/owner.jpg'),
+                    backgroundImage: AssetImage('assets/app_icon.png'),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -151,12 +235,28 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
                   ),
                   onSubmitted: (_) => _unlock(),
                 ),
-                const SizedBox(height: 20),
+                if (_canUseBiometrics && !_requires2fa) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Checkbox(
+                        value: _rememberForBiometrics,
+                        onChanged: (v) => setState(() => _rememberForBiometrics = v ?? true),
+                      ),
+                      const Text(
+                        'Save for Fingerprint Unlock',
+                        style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: _loading ? null : _unlock,
+                    onPressed: _loading ? null : () => _unlock(),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF4F46E5),
                       foregroundColor: Colors.white,
@@ -176,6 +276,30 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
                           ),
                   ),
                 ),
+                if (_canUseBiometrics && _hasSavedCredentials && !_requires2fa) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: OutlinedButton.icon(
+                      onPressed: _loading ? null : _unlockWithBiometrics,
+                      icon: const Icon(Icons.fingerprint, color: Color(0xFF4F46E5)),
+                      label: const Text(
+                        'Unlock with Fingerprint',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF4F46E5),
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFFC7D2FE)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
