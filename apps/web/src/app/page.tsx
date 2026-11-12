@@ -301,6 +301,16 @@ function DriveDashboardContent() {
     onConfirm: () => void;
   } | null>(null);
 
+  // Google Drive Style Right-Click Context Menu State
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    target:
+      | { type: 'blank' }
+      | { type: 'file'; item: any }
+      | { type: 'folder'; item: any };
+  } | null>(null);
+
   // Share Modal State
   const [shareModal, setShareModal] = useState<{
     type: 'file' | 'folder';
@@ -484,6 +494,7 @@ function DriveDashboardContent() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        setContextMenu(null);
         setPreviewModal(null);
         setShareModal(null);
         setRenameModal(null);
@@ -493,8 +504,15 @@ function DriveDashboardContent() {
         setSecurityModalOpen(false);
       }
     };
+    const onWindowClick = () => setContextMenu(null);
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('click', onWindowClick);
+    window.addEventListener('scroll', onWindowClick, true);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('click', onWindowClick);
+      window.removeEventListener('scroll', onWindowClick, true);
+    };
   }, []);
 
   const formatEta = (sec: number) => {
@@ -1148,7 +1166,7 @@ function DriveDashboardContent() {
                 ref={fileInputRef}
                 type="file"
                 multiple
-                style={{ position: 'fixed', top: '-10000px', left: '-10000px', opacity: 0, width: '1px', height: '1px', pointerEvents: 'none' }}
+                style={{ position: 'fixed', top: '-10000px', left: '-10000px', opacity: 0, width: '1px', height: '1px' }}
                 onChange={(e) => {
                   const target = e.target;
                   const picked = target.files ? Array.from(target.files) : [];
@@ -1182,7 +1200,7 @@ function DriveDashboardContent() {
               }}
               type="file"
               multiple
-              style={{ position: 'fixed', top: '-10000px', left: '-10000px', opacity: 0, width: '1px', height: '1px', pointerEvents: 'none' }}
+              style={{ position: 'fixed', top: '-10000px', left: '-10000px', opacity: 0, width: '1px', height: '1px' }}
               onChange={(e) => {
                 const target = e.target;
                 const picked = target.files ? Array.from(target.files) : [];
@@ -1396,7 +1414,18 @@ function DriveDashboardContent() {
         </header>
 
         {/* Drive Workspace */}
-        <main className="flex-1 p-4 md:p-8 overflow-y-auto space-y-6">
+        <main
+          onContextMenu={(e) => {
+            if ((e.target as HTMLElement)?.closest('input, textarea, button, a, [role="dialog"]')) return;
+            e.preventDefault();
+            setContextMenu({
+              x: Math.min(e.clientX, typeof window !== 'undefined' ? window.innerWidth - 240 : 500),
+              y: Math.min(e.clientY, typeof window !== 'undefined' ? window.innerHeight - 260 : 500),
+              target: { type: 'blank' },
+            });
+          }}
+          className="flex-1 p-4 md:p-8 overflow-y-auto space-y-6"
+        >
           {/* Quick Overview Cards (Only on My Drive root) */}
           {view === 'my-drive' && !folderId && !search && (
             <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 overflow-x-auto pb-1 sm:pb-0">
@@ -1703,7 +1732,7 @@ function DriveDashboardContent() {
                 <input
                   type="file"
                   multiple
-                  style={{ position: 'fixed', top: '-10000px', left: '-10000px', opacity: 0, width: '1px', height: '1px', pointerEvents: 'none' }}
+                  style={{ position: 'fixed', top: '-10000px', left: '-10000px', opacity: 0, width: '1px', height: '1px' }}
                   onChange={(e) => {
                     const target = e.target;
                     const picked = target.files ? Array.from(target.files) : [];
@@ -1769,6 +1798,15 @@ function DriveDashboardContent() {
                             : 'border-slate-200/80 dark:border-slate-800'
                         }`}
                         onDoubleClick={() => navigateDrive(view, folder.id)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setContextMenu({
+                            x: Math.min(e.clientX, typeof window !== 'undefined' ? window.innerWidth - 240 : 500),
+                            y: Math.min(e.clientY, typeof window !== 'undefined' ? window.innerHeight - 300 : 500),
+                            target: { type: 'folder', item: folder },
+                          });
+                        }}
                       >
                         <input
                           type="checkbox"
@@ -1916,6 +1954,15 @@ function DriveDashboardContent() {
                                 ? 'border-indigo-500 ring-2 ring-indigo-500/60'
                                 : 'border-slate-200/80 dark:border-slate-800'
                             }`}
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setContextMenu({
+                                x: Math.min(e.clientX, typeof window !== 'undefined' ? window.innerWidth - 240 : 500),
+                                y: Math.min(e.clientY, typeof window !== 'undefined' ? window.innerHeight - 300 : 500),
+                                target: { type: 'file', item: file },
+                              });
+                            }}
                           >
                             {/* Visual Preview Header */}
                             <div
@@ -2100,7 +2147,16 @@ function DriveDashboardContent() {
                                   );
                                   e.dataTransfer.effectAllowed = 'move';
                                 }}
-                                className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition"
+                                className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition cursor-pointer"
+                                onContextMenu={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setContextMenu({
+                                    x: Math.min(e.clientX, typeof window !== 'undefined' ? window.innerWidth - 240 : 500),
+                                    y: Math.min(e.clientY, typeof window !== 'undefined' ? window.innerHeight - 300 : 500),
+                                    target: { type: 'file', item: file },
+                                  });
+                                }}
                               >
                                 <td className="py-3 px-3">
                                   <input
@@ -2719,7 +2775,7 @@ function DriveDashboardContent() {
         <input
           type="file"
           multiple
-          style={{ position: 'fixed', top: '-10000px', left: '-10000px', opacity: 0, width: '1px', height: '1px', pointerEvents: 'none' }}
+          style={{ position: 'fixed', top: '-10000px', left: '-10000px', opacity: 0, width: '1px', height: '1px' }}
           onChange={(e) => {
             const target = e.target;
             const picked = target.files ? Array.from(target.files) : [];
@@ -2820,6 +2876,294 @@ function DriveDashboardContent() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Google Drive Style Right-Click Context Menu */}
+      {contextMenu && (
+        <div
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+          className="fixed z-50 w-56 py-1.5 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800 shadow-2xl shadow-slate-900/20 text-slate-800 dark:text-slate-100 text-xs font-medium animate-in fade-in zoom-in-95 select-none"
+        >
+          {contextMenu.target.type === 'blank' && (
+            <div className="space-y-0.5 px-1.5">
+              <button
+                onClick={() => {
+                  setContextMenu(null);
+                  setNewFolderOpen(true);
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
+              >
+                <FolderPlus className="w-4 h-4 text-amber-500" />
+                <span>New folder</span>
+              </button>
+              <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+              <label className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition cursor-pointer">
+                <input
+                  type="file"
+                  multiple
+                  style={{ position: 'fixed', top: '-10000px', left: '-10000px', opacity: 0, width: '1px', height: '1px' }}
+                  onChange={(e) => {
+                    const target = e.target;
+                    const picked = target.files ? Array.from(target.files) : [];
+                    if (picked.length > 0) handleUploadFiles(picked);
+                    setContextMenu(null);
+                    setTimeout(() => {
+                      try { target.value = ''; } catch {}
+                    }, 100);
+                  }}
+                />
+                <Upload className="w-4 h-4 text-indigo-500" />
+                <span>Upload files</span>
+              </label>
+              <label className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition cursor-pointer">
+                <input
+                  ref={(el) => {
+                    if (el) {
+                      el.setAttribute('webkitdirectory', '');
+                      el.setAttribute('directory', '');
+                      (el as any).webkitdirectory = true;
+                    }
+                  }}
+                  type="file"
+                  multiple
+                  style={{ position: 'fixed', top: '-10000px', left: '-10000px', opacity: 0, width: '1px', height: '1px' }}
+                  onChange={(e) => {
+                    const target = e.target;
+                    const picked = target.files ? Array.from(target.files) : [];
+                    if (picked.length > 0) handleUploadFiles(picked);
+                    setContextMenu(null);
+                    setTimeout(() => {
+                      try { target.value = ''; } catch {}
+                    }, 100);
+                  }}
+                />
+                <FolderIcon className="w-4 h-4 text-amber-500" />
+                <span>Upload folder</span>
+              </label>
+              <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+              <button
+                onClick={() => {
+                  setContextMenu(null);
+                  loadDrive(true);
+                  showToast('Drive refreshed');
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
+              >
+                <RotateCcw className="w-4 h-4 text-slate-400" />
+                <span>Refresh drive</span>
+              </button>
+            </div>
+          )}
+
+          {contextMenu.target.type === 'file' && (() => {
+            const file = contextMenu.target.item;
+            return (
+              <div className="space-y-0.5 px-1.5">
+                <button
+                  onClick={() => {
+                    setContextMenu(null);
+                    handlePreview(file);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition"
+                >
+                  <Eye className="w-4 h-4 text-indigo-500" />
+                  <span>Preview</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setContextMenu(null);
+                    handleDownload(file);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
+                >
+                  <Download className="w-4 h-4 text-sky-500" />
+                  <span>Download</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setContextMenu(null);
+                    openShareModal('file', file.id, file.name);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
+                >
+                  <Share2 className="w-4 h-4 text-indigo-500" />
+                  <span>Share link</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setContextMenu(null);
+                    handleStar('file', file.id);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
+                >
+                  <Star className={`w-4 h-4 ${file.isStarred ? 'text-amber-400 fill-amber-400' : 'text-slate-400'}`} />
+                  <span>{file.isStarred ? 'Remove from Starred' : 'Add to Starred'}</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setContextMenu(null);
+                    setRenameModal({ type: 'file', id: file.id, name: file.name });
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
+                >
+                  <Edit3 className="w-4 h-4 text-slate-500" />
+                  <span>Rename</span>
+                </button>
+                <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+                {view === 'trash' ? (
+                  <>
+                    <button
+                      onClick={() => {
+                        setContextMenu(null);
+                        handleRestore('file', file.id);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-emerald-50 dark:hover:bg-slate-800 text-emerald-600 transition"
+                    >
+                      <RotateCcw className="w-4 h-4 text-emerald-600" />
+                      <span>Restore</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setContextMenu(null);
+                        setConfirmModal({
+                          title: `Delete "${file.name}" forever?`,
+                          description: 'This file will be permanently deleted from NOOR DRIVE.',
+                          confirmText: 'Delete Forever',
+                          onConfirm: () => handlePermanentDelete('file', file.id),
+                        });
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-rose-50 dark:hover:bg-slate-800 text-rose-600 transition"
+                    >
+                      <Trash2 className="w-4 h-4 text-rose-600" />
+                      <span>Delete forever</span>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setContextMenu(null);
+                      setConfirmModal({
+                        title: `Move "${file.name}" to Trash?`,
+                        description: 'You can restore this file later from Trash.',
+                        confirmText: 'Move to Trash',
+                        onConfirm: () => handleTrash('file', file.id),
+                      });
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-rose-50 dark:hover:bg-slate-800 text-rose-600 transition"
+                  >
+                    <Trash2 className="w-4 h-4 text-rose-600" />
+                    <span>Move to trash</span>
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+
+          {contextMenu.target.type === 'folder' && (() => {
+            const folder = contextMenu.target.item;
+            return (
+              <div className="space-y-0.5 px-1.5">
+                <button
+                  onClick={() => {
+                    setContextMenu(null);
+                    navigateDrive(view, folder.id);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition"
+                >
+                  <FolderIcon className="w-4 h-4 text-amber-500" />
+                  <span>Open folder</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setContextMenu(null);
+                    handleDownloadFolder(folder);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
+                >
+                  <Download className="w-4 h-4 text-sky-500" />
+                  <span>Download (.zip)</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setContextMenu(null);
+                    openShareModal('folder', folder.id, folder.name);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
+                >
+                  <Share2 className="w-4 h-4 text-indigo-500" />
+                  <span>Share link</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setContextMenu(null);
+                    handleStar('folder', folder.id);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
+                >
+                  <Star className={`w-4 h-4 ${folder.isStarred ? 'text-amber-400 fill-amber-400' : 'text-slate-400'}`} />
+                  <span>{folder.isStarred ? 'Remove from Starred' : 'Add to Starred'}</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setContextMenu(null);
+                    setRenameModal({ type: 'folder', id: folder.id, name: folder.name });
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
+                >
+                  <Edit3 className="w-4 h-4 text-slate-500" />
+                  <span>Rename</span>
+                </button>
+                <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+                {view === 'trash' ? (
+                  <>
+                    <button
+                      onClick={() => {
+                        setContextMenu(null);
+                        handleRestore('folder', folder.id);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-emerald-50 dark:hover:bg-slate-800 text-emerald-600 transition"
+                    >
+                      <RotateCcw className="w-4 h-4 text-emerald-600" />
+                      <span>Restore</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setContextMenu(null);
+                        setConfirmModal({
+                          title: `Delete "${folder.name}" forever?`,
+                          description: 'This folder will be permanently deleted from NOOR DRIVE.',
+                          confirmText: 'Delete Forever',
+                          onConfirm: () => handlePermanentDelete('folder', folder.id),
+                        });
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-rose-50 dark:hover:bg-slate-800 text-rose-600 transition"
+                    >
+                      <Trash2 className="w-4 h-4 text-rose-600" />
+                      <span>Delete forever</span>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setContextMenu(null);
+                      setConfirmModal({
+                        title: `Move "${folder.name}" to Trash?`,
+                        description: 'You can restore this folder later from Trash.',
+                        confirmText: 'Move to Trash',
+                        onConfirm: () => handleTrash('folder', folder.id),
+                      });
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-rose-50 dark:hover:bg-slate-800 text-rose-600 transition"
+                  >
+                    <Trash2 className="w-4 h-4 text-rose-600" />
+                    <span>Move to trash</span>
+                  </button>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
