@@ -417,6 +417,22 @@ function DriveDashboardContent() {
     loadDrive();
   }, [loadDrive]);
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPreviewModal(null);
+        setShareModal(null);
+        setRenameModal(null);
+        setNewFolderOpen(false);
+        setConfirmModal(null);
+        setStorageModalOpen(false);
+        setSecurityModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   const formatEta = (sec: number) => {
     if (sec <= 0) return 'Almost done';
     if (sec < 60) return `${sec}s left`;

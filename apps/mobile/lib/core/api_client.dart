@@ -50,7 +50,8 @@ class ApiClient {
                 final cloned = await dio.fetch(error.requestOptions);
                 return handler.resolve(cloned);
               } catch (_) {
-                await storage.deleteAll();
+                await storage.delete(key: 'access_token');
+                await storage.delete(key: 'refresh_token');
               }
             }
           }

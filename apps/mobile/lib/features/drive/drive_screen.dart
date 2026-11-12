@@ -68,21 +68,36 @@ class _DriveScreenState extends State<DriveScreen> {
 
   Future<void> _checkForAppUpdate({bool silent = false}) async {
     try {
-      final res = await Dio().get(
-        'https://api.github.com/repos/NoorAbdullah02/open-cloud-vault/releases/latest',
-      );
-      final tag = (res.data['tag_name'] ?? '') as String;
+      String tag = '';
+      String downloadUrl =
+          'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.apk';
+
+      try {
+        final apiRes = await Dio(
+          BaseOptions(connectTimeout: const Duration(seconds: 20)),
+        ).get('${ApiClient.baseUrl}/shares/app-release');
+        tag = (apiRes.data['version'] ?? '') as String;
+        if (apiRes.data['downloadUrl'] != null) {
+          downloadUrl = apiRes.data['downloadUrl'].toString();
+        }
+      } catch (_) {
+        final ghRes = await Dio().get(
+          'https://api.github.com/repos/NoorAbdullah02/open-cloud-vault/releases/latest',
+        );
+        tag = (ghRes.data['tag_name'] ?? '') as String;
+        final apkAsset = (ghRes.data['assets'] as List?)?.firstWhere(
+          (a) => (a['name'] ?? '').toString().endsWith('.apk'),
+          orElse: () => null,
+        );
+        if (apkAsset != null && apkAsset['browser_download_url'] != null) {
+          downloadUrl = apkAsset['browser_download_url'].toString();
+        }
+      }
+
       final match = RegExp(r'v1\.0\.(\d+)').firstMatch(tag);
       final remoteBuild = match != null ? int.tryParse(match.group(1)!) ?? 0 : 0;
 
       if (remoteBuild > ApiClient.buildNumber && mounted) {
-        final apkAsset = (res.data['assets'] as List?)?.firstWhere(
-          (a) => (a['name'] ?? '').toString().endsWith('.apk'),
-          orElse: () => null,
-        );
-        final downloadUrl = apkAsset?['browser_download_url'] ??
-            'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.apk';
-
         showDialog(
           context: context,
           barrierDismissible: false,
@@ -96,7 +111,7 @@ class _DriveScreenState extends State<DriveScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('NOOR DRIVE Build #$remoteBuild is ready to install.'),
+                    Text('NOOR DRIVE Build #$remoteBuild is ready to install (Current: #${ApiClient.buildNumber}).'),
                     if (downloading) ...[
                       const SizedBox(height: 14),
                       LinearProgressIndicator(value: progress > 0 ? progress : null),
@@ -117,8 +132,9 @@ class _DriveScreenState extends State<DriveScreen> {
                         : () async {
                             setModalState(() => downloading = true);
                             try {
-                              final dir = await getTemporaryDirectory();
-                              final apkPath = '${dir.path}/noor-drive-update.apk';
+                              final dir = (await getExternalStorageDirectory()) ??
+                                  (await getApplicationDocumentsDirectory());
+                              final apkPath = '${dir.path}/noor-drive-update-v$remoteBuild.apk';
                               await Dio().download(
                                 downloadUrl,
                                 apkPath,
@@ -129,7 +145,16 @@ class _DriveScreenState extends State<DriveScreen> {
                                 },
                               );
                               if (ctx.mounted) Navigator.pop(ctx);
-                              await OpenFilex.open(apkPath);
+                              final result = await OpenFilex.open(
+                                apkPath,
+                                type: 'application/vnd.android.package-archive',
+                              );
+                              if (result.type != ResultType.done && mounted) {
+                                _showSnack(
+                                  'Allow "Install unknown apps" for NOOR DRIVE in Android Settings, then tap Check for Updates again.',
+                                  isError: true,
+                                );
+                              }
                             } catch (e) {
                               setModalState(() => downloading = false);
                               _showSnack('Update download failed: $e', isError: true);

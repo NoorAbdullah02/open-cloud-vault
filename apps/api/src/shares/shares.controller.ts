@@ -27,7 +27,7 @@ export class SharesController {
 
   @Get('app-release')
   async getAppRelease() {
-    if (cachedRelease && Date.now() - cachedRelease.fetchedAt < 300_000) {
+    if (cachedRelease && Date.now() - cachedRelease.fetchedAt < 60_000) {
       return cachedRelease;
     }
     try {
