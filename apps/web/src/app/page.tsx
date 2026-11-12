@@ -180,6 +180,32 @@ interface DocCardPreview {
   snippet?: string;
 }
 
+function extractParagraphs(xml: string): string[] {
+  const pBlocks = xml.split(/<\/?(?:[a-zA-Z0-9]+:)?p[ >]/i);
+  const result: string[] = [];
+  for (const block of pBlocks) {
+    const matches = [
+      ...block.matchAll(/<(?:[a-zA-Z0-9]+:)?t[^>]*>([\s\S]*?)<\/(?:[a-zA-Z0-9]+:)?t>/gi),
+    ];
+    if (matches.length > 0) {
+      const text = matches
+        .map((m) =>
+          m[1]
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&apos;/g, "'"),
+        )
+        .join('')
+        .trim();
+      if (text) result.push(text);
+    }
+  }
+  return result;
+}
+
 const thumbnailCache = new Map<string, string>();
 const textSnippetCache = new Map<string, string>();
 const docPreviewCache = new Map<string, DocCardPreview>();
@@ -259,13 +285,10 @@ function FileThumbnail({
               if (!cancelled) setDocPreview(data);
             } else if (zip.file('ppt/slides/slide1.xml')) {
               const xml = await zip.files['ppt/slides/slide1.xml'].async('string');
-              const doc = new DOMParser().parseFromString(xml, 'application/xml');
-              const tNodes = Array.from(doc.getElementsByTagName('a:t'));
-              const lines = tNodes.map((t) => t.textContent || '').join(' ').trim();
-              const words = lines.split(/\s+/).filter(Boolean);
-              const title = words.slice(0, 6).join(' ');
-              const snippet = words.slice(6, 18).join(' ');
-              const data: DocCardPreview = { type: 'pptx', title: title || 'Slide 1', snippet };
+              const lines = extractParagraphs(xml);
+              const title = lines.length > 0 ? lines[0] : 'Slide 1';
+              const snippet = lines.length > 1 ? lines.slice(1).join(' • ') : '';
+              const data: DocCardPreview = { type: 'pptx', title, snippet };
               docPreviewCache.set(fileId, data);
               if (!cancelled) setDocPreview(data);
             }
@@ -285,13 +308,10 @@ function FileThumbnail({
               if (!cancelled) setDocPreview(data);
             } else if (zip.file('word/document.xml')) {
               const xml = await zip.files['word/document.xml'].async('string');
-              const doc = new DOMParser().parseFromString(xml, 'application/xml');
-              const tNodes = Array.from(doc.getElementsByTagName('w:t'));
-              const txt = tNodes.map((t) => t.textContent || '').join(' ').trim();
-              const words = txt.split(/\s+/).filter(Boolean);
-              const title = words.slice(0, 7).join(' ');
-              const snippet = words.slice(7, 22).join(' ');
-              const data: DocCardPreview = { type: 'docx', title: title || 'Word Document', snippet };
+              const lines = extractParagraphs(xml);
+              const title = lines.length > 0 ? lines[0] : 'Word Document';
+              const snippet = lines.length > 1 ? lines.slice(1).join(' • ') : '';
+              const data: DocCardPreview = { type: 'docx', title, snippet };
               docPreviewCache.set(fileId, data);
               if (!cancelled) setDocPreview(data);
             }

@@ -776,12 +776,24 @@ class _DriveScreenState extends State<DriveScreen> {
         final slides = <Map<String, dynamic>>[];
         for (final sf in slideFiles) {
           final xmlStr = utf8.decode(sf.content as List<int>);
-          final doc = XmlDocument.parse(xmlStr);
-          final lines = doc
-              .findAllElements('a:p')
-              .map((p) => p.findAllElements('a:t').map((t) => t.innerText).join().trim())
-              .where((l) => l.isNotEmpty)
-              .toList();
+          final pBlocks = xmlStr.split(RegExp(r'<\/?(?:\w+:)?p[ >]', caseSensitive: false));
+          final lines = <String>[];
+          for (final block in pBlocks) {
+            final tMatches = RegExp(r'<(?:\w+:)?t[^>]*>([\s\S]*?)<\/(?:\w+:)?t>', caseSensitive: false)
+                .allMatches(block);
+            if (tMatches.isNotEmpty) {
+              final text = tMatches
+                  .map((m) => m.group(1) ?? '')
+                  .join()
+                  .replaceAll('&amp;', '&')
+                  .replaceAll('&lt;', '<')
+                  .replaceAll('&gt;', '>')
+                  .replaceAll('&quot;', '"')
+                  .replaceAll('&#39;', "'")
+                  .trim();
+              if (text.isNotEmpty) lines.add(text);
+            }
+          }
           final numStr = RegExp(r'slide(\d+)\.xml').firstMatch(sf.name)?.group(1) ?? '?';
           slides.add({'number': numStr, 'lines': lines});
         }
