@@ -41,6 +41,10 @@ import {
   Copy,
   Link2,
   ArrowLeft,
+  ArrowUpDown,
+  Info,
+  Keyboard,
+  Filter,
 } from 'lucide-react';
 import {
   apiFetch,
@@ -311,6 +315,18 @@ function DriveDashboardContent() {
       | { type: 'folder'; item: any };
   } | null>(null);
 
+  // Sorting & Filtering State
+  const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+
+  // Inspector / Details Panel State
+  const [infoPanelOpen, setInfoPanelOpen] = useState(false);
+  const [activeDetailItem, setActiveDetailItem] = useState<{ type: 'file' | 'folder'; item: any } | null>(null);
+
+  // Keyboard Shortcuts Modal
+  const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+
   // Share Modal State
   const [shareModal, setShareModal] = useState<{
     type: 'file' | 'folder';
@@ -493,8 +509,12 @@ function DriveDashboardContent() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      const isInput = (e.target as HTMLElement)?.closest('input, textarea, [contenteditable="true"]');
       if (e.key === 'Escape') {
         setContextMenu(null);
+        setSortMenuOpen(false);
+        setInfoPanelOpen(false);
+        setShortcutsModalOpen(false);
         setPreviewModal(null);
         setShareModal(null);
         setRenameModal(null);
@@ -502,9 +522,16 @@ function DriveDashboardContent() {
         setConfirmModal(null);
         setStorageModalOpen(false);
         setSecurityModalOpen(false);
+      } else if (!isInput && e.key === '?') {
+        setShortcutsModalOpen(true);
+      } else if (!isInput && (e.key === 'i' || e.key === 'I')) {
+        setInfoPanelOpen((prev) => !prev);
       }
     };
-    const onWindowClick = () => setContextMenu(null);
+    const onWindowClick = () => {
+      setContextMenu(null);
+      setSortMenuOpen(false);
+    };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('click', onWindowClick);
     window.addEventListener('scroll', onWindowClick, true);
@@ -1086,6 +1113,65 @@ function DriveDashboardContent() {
   // Keep ref in sync so the stable drag listener always calls the latest version
   handleDropItemsRef.current = handleDropItems;
 
+  // Sorted items based on user selection
+  const sortedFolders = [...folders].sort((a, b) => {
+    if (sortBy === 'name') {
+      const cmp = a.name.localeCompare(b.name);
+      return sortOrder === 'asc' ? cmp : -cmp;
+    }
+    if (sortBy === 'date') {
+      const ta = new Date(a.createdAt || 0).getTime();
+      const tb = new Date(b.createdAt || 0).getTime();
+      return sortOrder === 'asc' ? ta - tb : tb - ta;
+    }
+    return 0;
+  });
+
+  const sortedFiles = [...files].sort((a, b) => {
+    if (sortBy === 'name') {
+      const cmp = a.name.localeCompare(b.name);
+      return sortOrder === 'asc' ? cmp : -cmp;
+    }
+    if (sortBy === 'size') {
+      const sa = Number(a.sizeBytes || 0);
+      const sb = Number(b.sizeBytes || 0);
+      return sortOrder === 'asc' ? sa - sb : sb - sa;
+    }
+    if (sortBy === 'date') {
+      const ta = new Date(a.createdAt || 0).getTime();
+      const tb = new Date(b.createdAt || 0).getTime();
+      return sortOrder === 'asc' ? ta - tb : tb - ta;
+    }
+    return 0;
+  });
+
+  const storageBreakdown = (() => {
+    let imagesBytes = 0;
+    let videoBytes = 0;
+    let docBytes = 0;
+    let otherBytes = 0;
+
+    for (const f of files) {
+      const sz = Number(f.sizeBytes || 0);
+      const mime = f.mimeType || '';
+      if (mime.startsWith('image/')) imagesBytes += sz;
+      else if (mime.startsWith('video/') || mime.startsWith('audio/')) videoBytes += sz;
+      else if (mime.includes('pdf') || mime.startsWith('text/') || mime.includes('word') || mime.includes('document')) docBytes += sz;
+      else otherBytes += sz;
+    }
+    const total = Math.max(1, imagesBytes + videoBytes + docBytes + otherBytes);
+    return {
+      imagesBytes,
+      videoBytes,
+      docBytes,
+      otherBytes,
+      imagesPct: Math.round((imagesBytes / total) * 100),
+      videoPct: Math.round((videoBytes / total) * 100),
+      docPct: Math.round((docBytes / total) * 100),
+      otherPct: Math.round((otherBytes / total) * 100),
+    };
+  })();
+
   const usedPercent = user
     ? Math.min(
         100,
@@ -1373,6 +1459,81 @@ function DriveDashboardContent() {
                 </button>
               </div>
 
+              {/* Sort Menu */}
+              <div className="relative">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSortMenuOpen((prev) => !prev);
+                  }}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold shadow-xs transition ${
+                    sortMenuOpen
+                      ? 'bg-indigo-50 border-indigo-300 text-indigo-600 dark:bg-slate-800 dark:border-indigo-500'
+                      : 'bg-white dark:bg-slate-800 border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50'
+                  }`}
+                  title="Sort options"
+                >
+                  <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="hidden md:inline capitalize">
+                    {sortBy === 'name' ? 'Name' : sortBy === 'size' ? 'Size' : 'Date'} ({sortOrder === 'asc' ? '↑' : '↓'})
+                  </span>
+                </button>
+                {sortMenuOpen && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute right-0 mt-1.5 w-44 py-1.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl z-50 text-xs text-slate-700 dark:text-slate-200 animate-in fade-in zoom-in-95"
+                  >
+                    <p className="px-3 py-1 text-[10px] font-bold uppercase text-slate-400">Sort by</p>
+                    {[
+                      { id: 'date', label: 'Upload date' },
+                      { id: 'name', label: 'File name' },
+                      { id: 'size', label: 'File size' },
+                    ].map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          if (sortBy === s.id) {
+                            setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+                          } else {
+                            setSortBy(s.id as any);
+                            setSortOrder('desc');
+                          }
+                          setSortMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 transition ${
+                          sortBy === s.id ? 'font-bold text-indigo-600 dark:text-indigo-400' : ''
+                        }`}
+                      >
+                        <span>{s.label}</span>
+                        {sortBy === s.id && <span>{sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Info Inspector Toggle */}
+              <button
+                onClick={() => setInfoPanelOpen((prev) => !prev)}
+                className={`p-2 rounded-xl transition border shadow-xs ${
+                  infoPanelOpen
+                    ? 'bg-indigo-50 border-indigo-300 text-indigo-600 dark:bg-slate-800 dark:border-indigo-500'
+                    : 'bg-white dark:bg-slate-800 border-slate-200/90 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+                }`}
+                title="View details & properties (I)"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+
+              {/* Keyboard Shortcuts (?) */}
+              <button
+                onClick={() => setShortcutsModalOpen(true)}
+                className="hidden md:flex p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition shadow-xs"
+                title="Keyboard Shortcuts (?)"
+              >
+                <Keyboard className="w-4 h-4" />
+              </button>
+
               <button
                 onClick={() => setDarkMode(!darkMode)}
                 className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200/70 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition"
@@ -1413,8 +1574,9 @@ function DriveDashboardContent() {
           </div>
         </header>
 
-        {/* Drive Workspace */}
-        <main
+        {/* Drive Workspace & Inspector Container */}
+        <div className="flex-1 flex min-h-0 overflow-hidden relative">
+          <main
           onContextMenu={(e) => {
             if ((e.target as HTMLElement)?.closest('input, textarea, button, a, [role="dialog"]')) return;
             e.preventDefault();
@@ -1798,9 +1960,11 @@ function DriveDashboardContent() {
                             : 'border-slate-200/80 dark:border-slate-800'
                         }`}
                         onDoubleClick={() => navigateDrive(view, folder.id)}
+                        onClick={() => setActiveDetailItem({ type: 'folder', item: folder })}
                         onContextMenu={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
+                          setActiveDetailItem({ type: 'folder', item: folder });
                           setContextMenu({
                             x: Math.min(e.clientX, typeof window !== 'undefined' ? window.innerWidth - 240 : 500),
                             y: Math.min(e.clientY, typeof window !== 'undefined' ? window.innerHeight - 300 : 500),
@@ -1954,9 +2118,11 @@ function DriveDashboardContent() {
                                 ? 'border-indigo-500 ring-2 ring-indigo-500/60'
                                 : 'border-slate-200/80 dark:border-slate-800'
                             }`}
+                            onClick={() => setActiveDetailItem({ type: 'file', item: file })}
                             onContextMenu={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
+                              setActiveDetailItem({ type: 'file', item: file });
                               setContextMenu({
                                 x: Math.min(e.clientX, typeof window !== 'undefined' ? window.innerWidth - 240 : 500),
                                 y: Math.min(e.clientY, typeof window !== 'undefined' ? window.innerHeight - 300 : 500),
@@ -2148,9 +2314,11 @@ function DriveDashboardContent() {
                                   e.dataTransfer.effectAllowed = 'move';
                                 }}
                                 className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition cursor-pointer"
+                                onClick={() => setActiveDetailItem({ type: 'file', item: file })}
                                 onContextMenu={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
+                                  setActiveDetailItem({ type: 'file', item: file });
                                   setContextMenu({
                                     x: Math.min(e.clientX, typeof window !== 'undefined' ? window.innerWidth - 240 : 500),
                                     y: Math.min(e.clientY, typeof window !== 'undefined' ? window.innerHeight - 300 : 500),
@@ -2278,6 +2446,160 @@ function DriveDashboardContent() {
             </div>
           )}
         </main>
+
+        {/* Info / Details Inspector Panel (Google Drive Style) */}
+        {infoPanelOpen && (
+          <aside className="w-80 bg-white dark:bg-slate-900 border-l border-slate-200/80 dark:border-slate-800 flex flex-col shrink-0 animate-in slide-in-from-right duration-200 shadow-xl md:shadow-none z-30 fixed md:static inset-y-0 right-0">
+            <div className="p-4 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+              <span className="font-bold text-sm text-slate-800 dark:text-white flex items-center gap-2">
+                <Info className="w-4 h-4 text-indigo-500" />
+                {activeDetailItem ? (activeDetailItem.type === 'file' ? 'File Details' : 'Folder Details') : 'Drive Overview'}
+              </span>
+              <button
+                onClick={() => setInfoPanelOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 p-5 overflow-y-auto space-y-5 text-xs text-slate-600 dark:text-slate-300">
+              {activeDetailItem ? (
+                <>
+                  <div className="flex flex-col items-center justify-center p-6 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 text-center">
+                    {activeDetailItem.type === 'folder' ? (
+                      <FolderIcon className="w-16 h-16 text-amber-500 mb-2 fill-amber-500/20" />
+                    ) : (
+                      <div className="w-16 h-16 flex items-center justify-center mb-2">
+                        {getFileVisual(activeDetailItem.item.mimeType).icon}
+                      </div>
+                    )}
+                    <p className="font-bold text-sm text-slate-900 dark:text-white break-words max-w-full">
+                      {activeDetailItem.item.name}
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {activeDetailItem.type === 'file'
+                        ? `${formatBytes(activeDetailItem.item.sizeBytes)} • ${activeDetailItem.item.extension?.toUpperCase() || 'FILE'}`
+                        : 'Folder'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <p className="font-bold text-[11px] uppercase tracking-wider text-slate-400">Properties</p>
+                    <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800 space-y-2.5">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Storage</span>
+                        <span className="font-semibold text-slate-800 dark:text-white">Noor Cloud Private Vault</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Owner</span>
+                        <span className="font-semibold text-slate-800 dark:text-white">Noor Abdullah</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Uploaded</span>
+                        <span className="font-semibold text-slate-800 dark:text-white text-right">
+                          {formatDateTime(activeDetailItem.item.createdAt)}
+                        </span>
+                      </div>
+                      {activeDetailItem.type === 'file' && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">File Type</span>
+                          <span className="font-semibold text-slate-800 dark:text-white truncate max-w-[140px]">
+                            {activeDetailItem.item.mimeType}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    {activeDetailItem.type === 'file' ? (
+                      <>
+                        <button
+                          onClick={() => handlePreview(activeDetailItem.item)}
+                          className="w-full py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center justify-center gap-2 transition"
+                        >
+                          <Eye className="w-4 h-4" /> Preview File
+                        </button>
+                        <button
+                          onClick={() => handleDownload(activeDetailItem.item)}
+                          className="w-full py-2 px-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 font-semibold flex items-center justify-center gap-2 transition"
+                        >
+                          <Download className="w-4 h-4" /> Download
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => navigateDrive(view, activeDetailItem.item.id)}
+                          className="w-full py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center justify-center gap-2 transition"
+                        >
+                          <FolderIcon className="w-4 h-4" /> Open Folder
+                        </button>
+                        <button
+                          onClick={() => handleDownloadFolder(activeDetailItem.item)}
+                          className="w-full py-2 px-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 font-semibold flex items-center justify-center gap-2 transition"
+                        >
+                          <Download className="w-4 h-4" /> Download Zip
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/40">
+                    <p className="font-bold text-slate-800 dark:text-white mb-1">Drive Storage</p>
+                    <p className="text-[11px] text-slate-500 mb-3">
+                      {user ? `${formatBytes(user.usedStorageBytes)} of ${formatBytes(user.storageQuotaBytes)} used` : '...'}
+                    </p>
+                    <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden flex">
+                      <div style={{ width: `${storageBreakdown.imagesPct}%` }} className="bg-sky-500 h-full" title="Images" />
+                      <div style={{ width: `${storageBreakdown.videoPct}%` }} className="bg-purple-500 h-full" title="Videos & Audio" />
+                      <div style={{ width: `${storageBreakdown.docPct}%` }} className="bg-rose-500 h-full" title="Documents" />
+                      <div style={{ width: `${storageBreakdown.otherPct}%` }} className="bg-amber-500 h-full" title="Others" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="font-bold text-[11px] uppercase tracking-wider text-slate-400">Categories</p>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                        <span className="flex items-center gap-2 font-medium">
+                          <span className="w-2.5 h-2.5 rounded-full bg-sky-500" /> Photos &amp; Images
+                        </span>
+                        <span className="font-bold">{formatBytes(storageBreakdown.imagesBytes)}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                        <span className="flex items-center gap-2 font-medium">
+                          <span className="w-2.5 h-2.5 rounded-full bg-purple-500" /> Videos &amp; Music
+                        </span>
+                        <span className="font-bold">{formatBytes(storageBreakdown.videoBytes)}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                        <span className="flex items-center gap-2 font-medium">
+                          <span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> Documents &amp; PDFs
+                        </span>
+                        <span className="font-bold">{formatBytes(storageBreakdown.docBytes)}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                        <span className="flex items-center gap-2 font-medium">
+                          <span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Archives &amp; Other
+                        </span>
+                        <span className="font-bold">{formatBytes(storageBreakdown.otherBytes)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-400 text-center pt-2">
+                    Select any file or folder to view its individual properties and actions here.
+                  </p>
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
+        </div>
       </div>
 
       {/* New Folder Modal */}
@@ -2476,6 +2798,40 @@ function DriveDashboardContent() {
                   </p>
                 </div>
               </div>
+
+              {/* Storage Category Breakdown */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Storage Usage Breakdown</span>
+                  <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                    {user ? `${formatBytes(user.usedStorageBytes)} used` : ''}
+                  </span>
+                </div>
+                <div className="w-full h-3 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex">
+                  <div style={{ width: `${storageBreakdown.imagesPct}%` }} className="bg-emerald-500 h-full" title={`Images: ${formatBytes(storageBreakdown.imagesBytes)}`} />
+                  <div style={{ width: `${storageBreakdown.videoPct}%` }} className="bg-sky-500 h-full" title={`Video/Audio: ${formatBytes(storageBreakdown.videoBytes)}`} />
+                  <div style={{ width: `${storageBreakdown.docPct}%` }} className="bg-rose-500 h-full" title={`Documents: ${formatBytes(storageBreakdown.docBytes)}`} />
+                  <div style={{ width: `${storageBreakdown.otherPct}%` }} className="bg-amber-500 h-full" title={`Others: ${formatBytes(storageBreakdown.otherBytes)}`} />
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                  <div className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Images</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-200">{formatBytes(storageBreakdown.imagesBytes)}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-sky-500" /> Media</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-200">{formatBytes(storageBreakdown.videoBytes)}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-500" /> Docs &amp; PDFs</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-200">{formatBytes(storageBreakdown.docBytes)}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500" /> Others</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-200">{formatBytes(storageBreakdown.otherBytes)}</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 space-y-3">
@@ -2516,6 +2872,58 @@ function DriveDashboardContent() {
               >
                 Save Preferences
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Keyboard Shortcuts Modal */}
+      {shortcutsModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="animate-modal-pop w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 flex items-center justify-center">
+                  <Keyboard className="w-5 h-5" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Keyboard Shortcuts</h3>
+              </div>
+              <button
+                onClick={() => setShortcutsModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs text-slate-700 dark:text-slate-300">
+              <div className="py-2.5 flex items-center justify-between">
+                <span>Show keyboard shortcuts</span>
+                <kbd className="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[11px] font-bold">?</kbd>
+              </div>
+              <div className="py-2.5 flex items-center justify-between">
+                <span>Toggle Info / Details inspector</span>
+                <kbd className="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[11px] font-bold">I</kbd>
+              </div>
+              <div className="py-2.5 flex items-center justify-between">
+                <span>Close modal / context menu</span>
+                <kbd className="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[11px] font-bold">Esc</kbd>
+              </div>
+              <div className="py-2.5 flex items-center justify-between">
+                <span>Search files</span>
+                <kbd className="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[11px] font-bold">/</kbd>
+              </div>
+              <div className="py-2.5 flex items-center justify-between">
+                <span>Right click on file / folder / space</span>
+                <span className="text-[11px] text-slate-400 font-medium">Context menu</span>
+              </div>
+              <div className="py-2.5 flex items-center justify-between">
+                <span>Double click file</span>
+                <span className="text-[11px] text-slate-400 font-medium">Preview file</span>
+              </div>
+              <div className="py-2.5 flex items-center justify-between">
+                <span>Double click folder</span>
+                <span className="text-[11px] text-slate-400 font-medium">Open folder</span>
+              </div>
             </div>
           </div>
         </div>
