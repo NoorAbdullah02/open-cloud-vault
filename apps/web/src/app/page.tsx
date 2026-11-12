@@ -245,6 +245,12 @@ function DriveDashboardContent() {
   const [securityModalOpen, setSecurityModalOpen] = useState(false);
   const [appDownloadModalOpen, setAppDownloadModalOpen] = useState(false);
   const [apkSizeBytes, setApkSizeBytes] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    title: string;
+    description: string;
+    confirmText: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   // Share Modal State
   const [shareModal, setShareModal] = useState<{
@@ -1177,7 +1183,15 @@ function DriveDashboardContent() {
             </div>
             {view === 'trash' && (folders.length > 0 || files.length > 0) && (
               <button
-                onClick={handleEmptyTrash}
+                onClick={() =>
+                  setConfirmModal({
+                    title: 'Empty Trash?',
+                    description:
+                      'All files and folders in Trash will be permanently deleted from Neon DB and your Telegram vault.',
+                    confirmText: 'Empty Trash',
+                    onConfirm: handleEmptyTrash,
+                  })
+                }
                 className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold flex items-center gap-1.5 transition"
               >
                 <Trash2 className="w-3.5 h-3.5" /> Empty Trash
@@ -1332,7 +1346,12 @@ function DriveDashboardContent() {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handlePermanentDelete('folder', folder.id);
+                                  setConfirmModal({
+                                    title: `Delete "${folder.name}" forever?`,
+                                    description: 'This folder will be permanently deleted and cannot be recovered.',
+                                    confirmText: 'Delete Forever',
+                                    onConfirm: () => handlePermanentDelete('folder', folder.id),
+                                  });
                                 }}
                                 title="Delete Forever"
                                 className="p-1 rounded-lg hover:bg-rose-50 text-rose-600"
@@ -1344,7 +1363,12 @@ function DriveDashboardContent() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleTrash('folder', folder.id);
+                                setConfirmModal({
+                                  title: `Move "${folder.name}" to Trash?`,
+                                  description: 'You can restore this folder later from Trash.',
+                                  confirmText: 'Move to Trash',
+                                  onConfirm: () => handleTrash('folder', folder.id),
+                                });
                               }}
                               title="Move to Trash"
                               className="p-1 rounded-lg hover:bg-rose-50 text-rose-500"
@@ -1465,7 +1489,15 @@ function DriveDashboardContent() {
                                       <RotateCcw className="w-3.5 h-3.5" />
                                     </button>
                                     <button
-                                      onClick={() => handlePermanentDelete('file', file.id)}
+                                      onClick={() =>
+                                        setConfirmModal({
+                                          title: `Delete "${file.name}" forever?`,
+                                          description:
+                                            'This file will be permanently deleted from Neon DB and your Telegram vault.',
+                                          confirmText: 'Delete Forever',
+                                          onConfirm: () => handlePermanentDelete('file', file.id),
+                                        })
+                                      }
                                       title="Delete Forever"
                                       className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-600"
                                     >
@@ -1474,7 +1506,14 @@ function DriveDashboardContent() {
                                   </div>
                                 ) : (
                                   <button
-                                    onClick={() => handleTrash('file', file.id)}
+                                    onClick={() =>
+                                      setConfirmModal({
+                                        title: `Move "${file.name}" to Trash?`,
+                                        description: 'You can restore this file later from Trash.',
+                                        confirmText: 'Move to Trash',
+                                        onConfirm: () => handleTrash('file', file.id),
+                                      })
+                                    }
                                     title="Move to Trash"
                                     className="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-500/10 text-slate-400 hover:text-rose-600 transition"
                                   >
@@ -1573,7 +1612,15 @@ function DriveDashboardContent() {
                                         <RotateCcw className="w-4 h-4" />
                                       </button>
                                       <button
-                                        onClick={() => handlePermanentDelete('file', file.id)}
+                                        onClick={() =>
+                                          setConfirmModal({
+                                            title: `Delete "${file.name}" forever?`,
+                                            description:
+                                              'This file will be permanently deleted from Neon DB and your Telegram vault.',
+                                            confirmText: 'Delete Forever',
+                                            onConfirm: () => handlePermanentDelete('file', file.id),
+                                          })
+                                        }
                                         title="Delete Forever"
                                         className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-600"
                                       >
@@ -1582,7 +1629,14 @@ function DriveDashboardContent() {
                                     </>
                                   ) : (
                                     <button
-                                      onClick={() => handleTrash('file', file.id)}
+                                      onClick={() =>
+                                        setConfirmModal({
+                                          title: `Move "${file.name}" to Trash?`,
+                                          description: 'You can restore this file later from Trash.',
+                                          confirmText: 'Move to Trash',
+                                          onConfirm: () => handleTrash('file', file.id),
+                                        })
+                                      }
                                       title="Move to Trash"
                                       className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-500"
                                     >
@@ -1695,15 +1749,18 @@ function DriveDashboardContent() {
 
       {/* File Preview Modal */}
       {previewModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex flex-col p-4">
-          <div className="flex items-center justify-between text-white pb-4">
-            <span className="font-semibold truncate">{previewModal.file.name}</span>
-            <div className="flex items-center gap-2">
+        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col p-3 sm:p-5 h-[100dvh]">
+          <div className="flex items-center justify-between gap-3 text-white pb-3 shrink-0">
+            <span className="font-semibold text-sm sm:text-base truncate min-w-0 flex-1">
+              {previewModal.file.name}
+            </span>
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => handleDownload(previewModal.file)}
-                className="px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-sm font-medium flex items-center gap-1.5"
+                className="px-3 sm:px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-xs sm:text-sm font-medium flex items-center gap-1.5"
               >
-                <Download className="w-4 h-4" /> Download
+                <Download className="w-4 h-4" />
+                <span className="hidden sm:inline">Download</span>
               </button>
               <button
                 onClick={() => {
@@ -1716,7 +1773,7 @@ function DriveDashboardContent() {
               </button>
             </div>
           </div>
-          <div className="flex-1 flex items-center justify-center overflow-auto">
+          <div className="flex-1 min-h-0 flex items-center justify-center overflow-auto">
             {previewModal.loading || !previewModal.url ? (
               <div className="text-white text-center space-y-3">
                 <Loader2 className="w-10 h-10 animate-spin mx-auto text-sky-400" />
@@ -1726,34 +1783,58 @@ function DriveDashboardContent() {
               <img
                 src={previewModal.url}
                 alt={previewModal.file.name}
-                className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl"
+                className="max-h-[80dvh] max-w-full rounded-2xl object-contain shadow-2xl"
               />
             ) : previewModal.file.mimeType.startsWith('video/') ? (
-              <video src={previewModal.url} controls className="max-h-full max-w-full rounded-2xl" />
+              <video
+                src={previewModal.url}
+                controls
+                playsInline
+                className="max-h-[80dvh] max-w-full rounded-2xl"
+              />
             ) : previewModal.file.mimeType.startsWith('audio/') ? (
-              <audio src={previewModal.url} controls />
+              <audio src={previewModal.url} controls className="w-full max-w-md" />
             ) : previewModal.file.mimeType.includes('pdf') ? (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+              <>
                 <iframe
                   src={previewModal.url}
-                  className="w-full flex-1 rounded-2xl bg-white"
+                  className="hidden sm:block w-full h-full rounded-2xl bg-white"
                   title={previewModal.file.name}
                 />
-                <button
-                  onClick={() => handleDownload(previewModal.file)}
-                  className="sm:hidden px-5 py-2.5 rounded-xl bg-white text-zinc-900 text-xs font-semibold flex items-center gap-2 shadow-md"
-                >
-                  <Download className="w-4 h-4" /> Open PDF in Phone Viewer
-                </button>
-              </div>
+                <div className="sm:hidden bg-white rounded-3xl p-6 text-center max-w-xs w-full space-y-4 shadow-2xl">
+                  <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+                    <FileText className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-900 truncate">
+                      {previewModal.file.name}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {formatBytes(previewModal.file.sizeBytes)} • PDF Document
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleDownload(previewModal.file)}
+                    className="w-full py-3 rounded-xl bg-zinc-900 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-md"
+                  >
+                    <Download className="w-4 h-4" /> Open PDF on Phone
+                  </button>
+                </div>
+              </>
             ) : previewModal.textContent !== undefined ? (
-              <pre className="w-full max-w-4xl max-h-full overflow-auto p-6 rounded-2xl bg-white text-slate-900 text-xs font-mono shadow-2xl whitespace-pre-wrap">
+              <pre className="w-full max-w-4xl max-h-[80dvh] overflow-auto p-4 sm:p-6 rounded-2xl bg-white text-slate-900 text-xs font-mono shadow-2xl whitespace-pre-wrap break-words">
                 {previewModal.textContent}
               </pre>
             ) : (
-              <div className="text-white text-center">
-                <FileText className="w-12 h-12 mx-auto mb-3 text-slate-400" />
+              <div className="text-white text-center space-y-3">
+                <FileText className="w-12 h-12 mx-auto text-slate-400" />
                 <p className="text-sm text-slate-300">Preview not available for this file type.</p>
+                <button
+                  onClick={() => handleDownload(previewModal.file)}
+                  className="px-4 py-2 rounded-xl bg-white text-zinc-900 text-xs font-semibold"
+                >
+                  Download File
+                </button>
               </div>
             )}
           </div>
@@ -2140,6 +2221,43 @@ function DriveDashboardContent() {
 
             <div className="p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 text-xs text-slate-600 dark:text-slate-300">
               <strong>Instant Phone Install (PWA):</strong> You can also tap <strong>Add to Home Screen</strong> / <strong>Install App</strong> in your Android browser menu right now.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Trash / Delete Confirmation Modal */}
+      {confirmModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="animate-modal-pop w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[26px] p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white truncate">
+                  {confirmModal.title}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">{confirmModal.description}</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setConfirmModal(null)}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const fn = confirmModal.onConfirm;
+                  setConfirmModal(null);
+                  fn();
+                }}
+                className="px-4 py-2 rounded-xl text-sm bg-rose-600 hover:bg-rose-700 text-white font-semibold shadow-sm"
+              >
+                {confirmModal.confirmText}
+              </button>
             </div>
           </div>
         </div>
