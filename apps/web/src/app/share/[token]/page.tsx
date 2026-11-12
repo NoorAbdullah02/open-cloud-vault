@@ -17,6 +17,7 @@ import {
 
 import { getApiUrl } from '@/lib/api';
 import PdfViewer from '@/components/PdfViewer';
+import DocxViewer from '@/components/DocxViewer';
 
 const API_URL = getApiUrl();
 
@@ -239,6 +240,9 @@ export default function PublicSharePage() {
                 <div className="w-full h-[75vh] bg-zinc-900 rounded-2xl overflow-hidden">
                   <PdfViewer url={getDownloadLink(data.file.id, true)} />
                 </div>
+              ) : data.file.extension === 'docx' ||
+                data.file.mimeType.includes('wordprocessingml') ? (
+                <DocxViewer url={getDownloadLink(data.file.id, true)} />
               ) : previewText !== null ? (
                 <pre className="w-full max-h-[75vh] overflow-auto p-5 rounded-2xl bg-zinc-50 border border-zinc-200/70 text-zinc-800 text-xs font-mono whitespace-pre-wrap">
                   {previewText}

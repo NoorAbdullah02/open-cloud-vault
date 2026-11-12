@@ -10,6 +10,7 @@
   "dependencies": {
     "@noor-drive/shared-types": "*",
     "lucide-react": "^0.460.0",
+    "mammoth": "^1.13.0",
     "next": "^15.1.0",
     "pdfjs-dist": "^4.10.38",
     "react": "^19.0.0",
@@ -25,4 +26,3 @@
     "typescript": "^5.7.2"
   }
 }
-

@@ -52,6 +52,7 @@ import {
   UploadProgressInfo,
 } from '@/lib/api';
 import PdfViewer from '@/components/PdfViewer';
+import DocxViewer from '@/components/DocxViewer';
 
 type ViewMode = 'my-drive' | 'recent' | 'starred' | 'photos' | 'videos' | 'documents' | 'trash';
 
@@ -1894,6 +1895,9 @@ function DriveDashboardContent() {
               <audio src={previewModal.url} controls className="w-full max-w-md" />
             ) : previewModal.file.mimeType.includes('pdf') ? (
               <PdfViewer url={previewModal.url} />
+            ) : previewModal.file.extension === 'docx' ||
+              previewModal.file.mimeType.includes('wordprocessingml') ? (
+              <DocxViewer url={previewModal.url} />
             ) : previewModal.textContent !== undefined ? (
               <pre className="w-full max-w-4xl max-h-[80dvh] overflow-auto p-4 sm:p-6 rounded-2xl bg-white text-slate-900 text-xs font-mono shadow-2xl whitespace-pre-wrap break-words">
                 {previewModal.textContent}
