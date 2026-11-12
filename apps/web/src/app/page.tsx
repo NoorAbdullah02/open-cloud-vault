@@ -1491,7 +1491,7 @@ function DriveDashboardContent() {
                                 />
                               </button>
                               <span className="absolute bottom-2 left-2.5 px-2 py-0.5 rounded-md bg-white/90 dark:bg-slate-900/90 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                                {file.storageBackend === 'TELEGRAM_MTPROTO' ? 'Telegram' : 'Local'}
+                                NOOR DRIVE
                               </span>
                             </div>
 
