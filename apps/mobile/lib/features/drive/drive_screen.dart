@@ -419,6 +419,7 @@ class _DriveScreenState extends State<DriveScreen> {
 
   Future<void> _downloadAndOpen(dynamic file) async {
     try {
+      _showSnack('Downloading ${file['name']}...');
       final dir = await getTemporaryDirectory();
       final savePath = '${dir.path}/${file['name']}';
       await apiClient.dio.download('/drive/files/${file['id']}/download', savePath);
@@ -426,6 +427,42 @@ class _DriveScreenState extends State<DriveScreen> {
     } catch (e) {
       _showSnack('Download failed: $e', isError: true);
     }
+  }
+
+  Future<void> _downloadFolderZip(dynamic folder) async {
+    try {
+      _showSnack('Preparing ${folder['name']}.zip...');
+      final dir = await getTemporaryDirectory();
+      final savePath = '${dir.path}/${folder['name']}.zip';
+      await apiClient.dio.download('/drive/folders/${folder['id']}/download', savePath);
+      await OpenFilex.open(savePath);
+    } catch (e) {
+      _showSnack('Folder download failed: $e', isError: true);
+    }
+  }
+
+  Future<void> _confirmAction({
+    required String title,
+    required String message,
+    required String confirmText,
+    required Future<void> Function() onConfirm,
+  }) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE11D48), foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(confirmText),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await onConfirm();
   }
 
   Future<void> _openShareDialog(String type, String id, String name) async {
@@ -716,7 +753,12 @@ class _DriveScreenState extends State<DriveScreen> {
             if (_view == 'trash' && (_files.isNotEmpty || _folders.isNotEmpty))
               IconButton(
                 icon: const Icon(Icons.delete_sweep, color: Color(0xFFE11D48)),
-                onPressed: _emptyTrash,
+                onPressed: () => _confirmAction(
+                  title: 'Empty Trash?',
+                  message: 'All trashed items will be permanently deleted.',
+                  confirmText: 'Empty Trash',
+                  onConfirm: _emptyTrash,
+                ),
                 tooltip: 'Empty Trash',
               ),
             IconButton(
@@ -1090,12 +1132,27 @@ class _DriveScreenState extends State<DriveScreen> {
                                       },
                                       trailing: PopupMenuButton<String>(
                                         onSelected: (action) {
+                                          if (action == 'download') _downloadFolderZip(folder);
                                           if (action == 'share') _openShareDialog('folder', folder['id'], folder['name']);
                                           if (action == 'rename') _renameItem('folder', folder['id'], folder['name']);
                                           if (action == 'star') _toggleStar('folder', folder['id']);
-                                          if (action == 'trash') _trashItem('folder', folder['id']);
+                                          if (action == 'trash') {
+                                            _confirmAction(
+                                              title: 'Move to Trash?',
+                                              message: 'Move "${folder['name']}" to Trash?',
+                                              confirmText: 'Move to Trash',
+                                              onConfirm: () => _trashItem('folder', folder['id']),
+                                            );
+                                          }
                                           if (action == 'restore') _restoreItem('folder', folder['id']);
-                                          if (action == 'delete') _permanentDelete('folder', folder['id']);
+                                          if (action == 'delete') {
+                                            _confirmAction(
+                                              title: 'Delete Forever?',
+                                              message: 'Permanently delete "${folder['name']}"?',
+                                              confirmText: 'Delete',
+                                              onConfirm: () => _permanentDelete('folder', folder['id']),
+                                            );
+                                          }
                                         },
                                         itemBuilder: (_) => _view == 'trash'
                                             ? const [
@@ -1103,6 +1160,7 @@ class _DriveScreenState extends State<DriveScreen> {
                                                 PopupMenuItem(value: 'delete', child: Text('Delete Forever')),
                                               ]
                                             : const [
+                                                PopupMenuItem(value: 'download', child: Text('Download (.zip)')),
                                                 PopupMenuItem(value: 'share', child: Text('Share')),
                                                 PopupMenuItem(value: 'rename', child: Text('Rename')),
                                                 PopupMenuItem(value: 'star', child: Text('Star / Unstar')),
@@ -1130,9 +1188,23 @@ class _DriveScreenState extends State<DriveScreen> {
                                           if (action == 'share') _openShareDialog('file', file['id'], file['name']);
                                           if (action == 'rename') _renameItem('file', file['id'], file['name']);
                                           if (action == 'star') _toggleStar('file', file['id']);
-                                          if (action == 'trash') _trashItem('file', file['id']);
+                                          if (action == 'trash') {
+                                            _confirmAction(
+                                              title: 'Move to Trash?',
+                                              message: 'Move "${file['name']}" to Trash?',
+                                              confirmText: 'Move to Trash',
+                                              onConfirm: () => _trashItem('file', file['id']),
+                                            );
+                                          }
                                           if (action == 'restore') _restoreItem('file', file['id']);
-                                          if (action == 'delete') _permanentDelete('file', file['id']);
+                                          if (action == 'delete') {
+                                            _confirmAction(
+                                              title: 'Delete Forever?',
+                                              message: 'Permanently delete "${file['name']}"?',
+                                              confirmText: 'Delete',
+                                              onConfirm: () => _permanentDelete('file', file['id']),
+                                            );
+                                          }
                                         },
                                         itemBuilder: (_) => _view == 'trash'
                                             ? const [
