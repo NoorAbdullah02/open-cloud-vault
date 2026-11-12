@@ -19,9 +19,43 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser, AuthUser } from '../common/decorators/current-user.decorator';
 import { SharesService } from './shares.service';
 
+let cachedRelease: { version: string; sizeBytes: number; downloadUrl: string; fetchedAt: number } | null = null;
+
 @Controller('shares')
 export class SharesController {
   constructor(private readonly sharesService: SharesService) {}
+
+  @Get('app-release')
+  async getAppRelease() {
+    if (cachedRelease && Date.now() - cachedRelease.fetchedAt < 300_000) {
+      return cachedRelease;
+    }
+    try {
+      const res = await fetch(
+        'https://api.github.com/repos/NoorAbdullah02/open-cloud-vault/releases/latest',
+        { headers: { 'User-Agent': 'NoorDrive-API' } },
+      );
+      if (res.ok) {
+        const data: any = await res.json();
+        const apk = (data.assets || []).find((a: any) => String(a.name).endsWith('.apk'));
+        if (apk) {
+          cachedRelease = {
+            version: data.tag_name || 'latest',
+            sizeBytes: Number(apk.size || 0),
+            downloadUrl: apk.browser_download_url,
+            fetchedAt: Date.now(),
+          };
+          return cachedRelease;
+        }
+      }
+    } catch {}
+    return {
+      version: 'v1.0.7',
+      sizeBytes: 24734313,
+      downloadUrl:
+        'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.apk',
+    };
+  }
 
   // Authenticated Owner Endpoints
   @UseGuards(JwtAuthGuard)

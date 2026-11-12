@@ -279,6 +279,7 @@ function DriveDashboardContent() {
   const [securityModalOpen, setSecurityModalOpen] = useState(false);
   const [appDownloadModalOpen, setAppDownloadModalOpen] = useState(false);
   const [apkSizeBytes, setApkSizeBytes] = useState<string | null>(null);
+  const [apkVersion, setApkVersion] = useState<string | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
     title: string;
     description: string;
@@ -1028,15 +1029,13 @@ function DriveDashboardContent() {
             <button
               onClick={() => {
                 setAppDownloadModalOpen(true);
-                const apkUrl =
-                  process.env.NEXT_PUBLIC_ANDROID_APK_URL ||
-                  'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.apk';
-                fetch(apkUrl, { method: 'HEAD' })
-                  .then((r) => {
-                    const len = r.ok ? r.headers.get('content-length') : null;
-                    setApkSizeBytes(len);
+                fetch(`${getApiUrl()}/shares/app-release`)
+                  .then((r) => (r.ok ? r.json() : null))
+                  .then((d) => {
+                    if (d?.sizeBytes) setApkSizeBytes(String(d.sizeBytes));
+                    if (d?.version) setApkVersion(d.version);
                   })
-                  .catch(() => setApkSizeBytes(null));
+                  .catch(() => {});
               }}
               className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 transition"
             >
@@ -2299,8 +2298,8 @@ function DriveDashboardContent() {
                   </p>
                   <p className="text-xs text-slate-500 mt-0.5">
                     {apkSizeBytes
-                      ? `Size: ${formatBytes(apkSizeBytes)}`
-                      : 'Flutter Release APK • ~22 MB (GitHub Release)'}
+                      ? `${apkVersion || 'Latest'} • Size: ${formatBytes(apkSizeBytes)}`
+                      : 'Loading exact APK size...'}
                   </p>
                 </div>
                 <div className="px-3.5 py-2 rounded-xl bg-zinc-900 text-white text-xs font-semibold flex items-center gap-1.5">
