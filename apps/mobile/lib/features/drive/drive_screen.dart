@@ -776,13 +776,13 @@ class _DriveScreenState extends State<DriveScreen> {
                 child: ListView(
                   padding: EdgeInsets.zero,
                   children: [
-                    const DrawerHeader(
+                    DrawerHeader(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [Color(0xFF18181B), Color(0xFF2563EB)],
+                          colors: [_accentColor, const Color(0xFF2563EB)],
                         ),
                       ),
-                      child: Column(
+                      child: const Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
