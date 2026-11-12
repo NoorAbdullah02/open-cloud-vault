@@ -989,9 +989,11 @@ function DriveDashboardContent() {
       }
       if (collectedFiles.length > 0) {
         handleUploadFiles(collectedFiles);
+      } else if (emptyDirs.length === 0 && dataTransfer.files?.length) {
+        handleUploadFiles(Array.from(dataTransfer.files));
       }
     } else if (dataTransfer.files?.length) {
-      handleUploadFiles(dataTransfer.files);
+      handleUploadFiles(Array.from(dataTransfer.files));
     }
   };
 
@@ -1122,11 +1124,12 @@ function DriveDashboardContent() {
             ref={fileInputRef}
             type="file"
             multiple
-            className="hidden"
+            className="sr-only"
             onChange={(e) => {
-              if (e.target.files) {
-                handleUploadFiles(e.target.files);
-                e.target.value = '';
+              const picked = e.target.files ? Array.from(e.target.files) : [];
+              e.target.value = '';
+              if (picked.length > 0) {
+                handleUploadFiles(picked);
               }
             }}
           />
@@ -1140,11 +1143,12 @@ function DriveDashboardContent() {
             }}
             type="file"
             multiple
-            className="hidden"
+            className="sr-only"
             onChange={(e) => {
-              if (e.target.files) {
-                handleUploadFiles(e.target.files);
-                e.target.value = '';
+              const picked = e.target.files ? Array.from(e.target.files) : [];
+              e.target.value = '';
+              if (picked.length > 0) {
+                handleUploadFiles(picked);
               }
             }}
           />
