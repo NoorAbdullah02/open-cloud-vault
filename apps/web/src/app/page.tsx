@@ -1093,75 +1093,92 @@ function DriveDashboardContent() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Crisp White Top Header */}
-        <header className="h-16 px-4 md:px-8 border-b border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl flex items-center justify-between gap-4 sticky top-0 z-30">
-          <div className="flex items-center gap-3 flex-1 max-w-2xl">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search files, folders, extensions..."
-                className="w-full pl-11 pr-4 py-2.5 rounded-2xl bg-slate-100/80 dark:bg-slate-800/80 border border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-indigo-500/40 focus:shadow-sm text-sm focus:outline-none transition"
+        <header className="px-4 md:px-8 py-3 border-b border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl sticky top-0 z-30 space-y-2.5 sm:space-y-0">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 flex-1 max-w-2xl">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="md:hidden p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <span className="sm:hidden font-bold text-sm tracking-tight text-zinc-900 dark:text-white">
+                NOOR DRIVE
+              </span>
+              <div className="relative flex-1 hidden sm:block">
+                <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search files, folders, extensions..."
+                  className="w-full pl-11 pr-4 py-2.5 rounded-2xl bg-slate-100/80 dark:bg-slate-800/80 border border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-indigo-500/40 focus:shadow-sm text-sm focus:outline-none transition"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                <button
+                  onClick={() => setLayout('grid')}
+                  className={`p-1.5 rounded-lg transition ${
+                    layout === 'grid'
+                      ? 'bg-white dark:bg-slate-700 shadow-xs text-indigo-600'
+                      : 'text-slate-500'
+                  }`}
+                  title="Grid View"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setLayout('list')}
+                  className={`p-1.5 rounded-lg transition ${
+                    layout === 'list'
+                      ? 'bg-white dark:bg-slate-700 shadow-xs text-indigo-600'
+                      : 'text-slate-500'
+                  }`}
+                  title="List View"
+                >
+                  <List className="w-4 h-4" />
+                </button>
+              </div>
+
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200/70 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition"
+                title="Toggle Light/Dark Mode"
+              >
+                {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
+
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl bg-white hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-600 border border-slate-200/90 dark:border-slate-700 hover:border-rose-200 text-xs font-semibold shadow-xs transition"
+                title="Lock Drive"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Lock Vault</span>
+              </button>
+
+              <img
+                src="/owner.jpg"
+                alt="Noor Abdullah"
+                title="Noor Abdullah (Owner)"
+                onClick={openSecuritySettings}
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover object-top border-2 border-indigo-500/30 cursor-pointer hover:scale-105 transition shadow-xs"
               />
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-              <button
-                onClick={() => setLayout('grid')}
-                className={`p-1.5 rounded-lg transition ${
-                  layout === 'grid'
-                    ? 'bg-white dark:bg-slate-700 shadow-xs text-indigo-600'
-                    : 'text-slate-500'
-                }`}
-                title="Grid View"
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setLayout('list')}
-                className={`p-1.5 rounded-lg transition ${
-                  layout === 'list'
-                    ? 'bg-white dark:bg-slate-700 shadow-xs text-indigo-600'
-                    : 'text-slate-500'
-                }`}
-                title="List View"
-              >
-                <List className="w-4 h-4" />
-              </button>
-            </div>
-
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200/70 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition"
-              title="Toggle Light/Dark Mode"
-            >
-              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
-
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-600 border border-slate-200/90 dark:border-slate-700 hover:border-rose-200 text-xs font-semibold shadow-xs transition"
-              title="Lock Drive"
-            >
-              <Lock className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Lock Vault</span>
-            </button>
-
-            <img
-              src="/owner.jpg"
-              alt="Noor Abdullah"
-              title="Noor Abdullah (Owner)"
-              onClick={openSecuritySettings}
-              className="w-9 h-9 rounded-full object-cover object-top border-2 border-indigo-500/30 cursor-pointer hover:scale-105 transition shadow-xs"
+          {/* Full-width Search Bar on Mobile */}
+          <div className="relative sm:hidden">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search files & folders..."
+              className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-100/90 dark:bg-slate-800/80 border border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-indigo-500/40 text-sm focus:outline-none transition"
             />
           </div>
         </header>
@@ -1170,8 +1187,8 @@ function DriveDashboardContent() {
         <main className="flex-1 p-4 md:p-8 overflow-y-auto space-y-6">
           {/* Quick Overview Cards (Only on My Drive root) */}
           {view === 'my-drive' && !folderId && !search && (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.05)] flex items-center gap-3.5">
+            <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 overflow-x-auto pb-1 sm:pb-0">
+              <div className="min-w-[140px] sm:min-w-0 p-3 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.05)] flex items-center gap-3 shrink-0">
                 <div className="w-11 h-11 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 flex items-center justify-center shrink-0">
                   <FileText className="w-5 h-5" />
                 </div>
@@ -1181,7 +1198,7 @@ function DriveDashboardContent() {
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.05)] flex items-center gap-3.5">
+              <div className="min-w-[140px] sm:min-w-0 p-3 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.05)] flex items-center gap-3 shrink-0">
                 <div className="w-11 h-11 rounded-xl bg-amber-50 dark:bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
                   <FolderIcon className="w-5 h-5" />
                 </div>
@@ -1193,7 +1210,7 @@ function DriveDashboardContent() {
 
               <div
                 onClick={() => setStorageModalOpen(true)}
-                className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.05)] flex items-center gap-3.5 cursor-pointer hover:border-sky-300 transition"
+                className="min-w-[155px] sm:min-w-0 p-3 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.05)] flex items-center gap-3 cursor-pointer hover:border-sky-300 transition shrink-0"
               >
                 <div className="w-11 h-11 rounded-xl bg-sky-50 dark:bg-sky-500/10 text-sky-600 flex items-center justify-center shrink-0">
                   <Send className="w-5 h-5" />
@@ -1206,7 +1223,7 @@ function DriveDashboardContent() {
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.05)] flex items-center gap-3.5">
+              <div className="min-w-[140px] sm:min-w-0 p-3 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.05)] flex items-center gap-3 shrink-0">
                 <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
                   <Sparkles className="w-5 h-5" />
                 </div>

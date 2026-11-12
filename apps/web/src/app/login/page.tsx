@@ -10,6 +10,7 @@ import {
   ArrowRight,
   Loader2,
   Sparkles,
+  Cloud,
 } from 'lucide-react';
 import { apiFetch, setStoredTokens } from '@/lib/api';
 
@@ -53,36 +54,49 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f8fafc] p-4 relative overflow-hidden">
-      {/* Soft Pastel Ambient Blobs */}
-      <div className="absolute -top-48 -left-48 w-[500px] h-[500px] bg-indigo-200/50 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-48 -right-48 w-[500px] h-[500px] bg-sky-200/50 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-[100dvh] flex items-center justify-center bg-[#f6f7f9] p-4 relative overflow-hidden">
+      {/* Subtle Modern Ambient Glow */}
+      <div className="absolute -top-40 -left-40 w-[440px] h-[440px] bg-blue-100/70 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-40 -right-40 w-[440px] h-[440px] bg-indigo-100/70 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="w-full max-w-sm bg-white/95 backdrop-blur-xl border border-slate-200/80 rounded-[28px] shadow-[0_20px_60px_-15px_rgba(15,23,42,0.1)] p-8 sm:p-10 relative z-10">
-        <div className="flex flex-col items-center text-center mb-8">
-          <div className="relative mb-5">
+      <div className="w-full max-w-[390px] bg-white/95 backdrop-blur-xl border border-zinc-200/80 rounded-[32px] shadow-[0_24px_64px_-16px_rgba(15,23,42,0.12)] p-7 sm:p-9 relative z-10">
+        {/* Top Brand + Owner Pill */}
+        <div className="flex items-center justify-between mb-7">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-zinc-900 to-blue-600 flex items-center justify-center shadow-sm">
+              <Cloud className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-bold text-sm tracking-tight text-zinc-900">
+              NOOR DRIVE
+            </span>
+          </div>
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-wider">
+            <Sparkles className="w-3 h-3" /> Private
+          </span>
+        </div>
+
+        {/* Avatar & Welcome */}
+        <div className="flex flex-col items-center text-center mb-7">
+          <div className="relative mb-4">
             <img
               src="/owner.jpg"
               alt="Noor Abdullah"
-              className="w-20 h-20 rounded-full object-cover object-top border-4 border-white shadow-xl ring-2 ring-indigo-500/30"
+              className="w-20 h-20 rounded-full object-cover object-top border-4 border-white shadow-lg ring-1 ring-zinc-200"
             />
-            <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-gradient-to-br from-indigo-600 to-sky-500 flex items-center justify-center border-2 border-white shadow-md">
+            <div className="absolute -bottom-0.5 -right-0.5 w-7 h-7 rounded-full bg-zinc-900 flex items-center justify-center border-2 border-white shadow-sm">
               <HardDrive className="w-3.5 h-3.5 text-white" />
             </div>
           </div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-600 text-[11px] font-semibold uppercase tracking-wider mb-2.5">
-            <Sparkles className="w-3 h-3" /> Noor&apos;s Personal Vault
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            NOOR DRIVE
+          <h1 className="text-xl font-bold tracking-tight text-zinc-900">
+            Welcome back, Noor
           </h1>
-          <p className="text-sm text-slate-500 mt-1.5">
-            Enter your passcode to unlock
+          <p className="text-xs sm:text-sm text-zinc-500 mt-1">
+            Enter your personal passcode to unlock your cloud
           </p>
         </div>
 
         {error && (
-          <div className="mb-5 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 text-sm flex items-center gap-2.5">
+          <div className="mb-4 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-medium flex items-center gap-2">
             <Lock className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
@@ -91,11 +105,8 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {!requires2fa ? (
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2 text-center">
-                Passcode
-              </label>
               <div className="relative">
-                <KeyRound className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                <KeyRound className="w-4 h-4 text-zinc-400 absolute left-4 top-1/2 -translate-y-1/2" />
                 <input
                   type="password"
                   required
@@ -103,17 +114,17 @@ export default function LoginPage() {
                   value={passcode}
                   onChange={(e) => setPasscode(e.target.value)}
                   placeholder="•••••"
-                  className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-center tracking-[0.4em] text-lg font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition"
+                  className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-zinc-50 border border-zinc-200 text-zinc-900 text-center tracking-[0.45em] text-lg font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900/15 focus:border-zinc-900 transition"
                 />
               </div>
             </div>
           ) : (
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2 text-center">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2 text-center">
                 Two-Factor Code (6 Digits)
               </label>
               <div className="relative">
-                <ShieldCheck className="w-4 h-4 text-indigo-500 absolute left-4 top-1/2 -translate-y-1/2" />
+                <ShieldCheck className="w-4 h-4 text-blue-600 absolute left-4 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   required
@@ -122,7 +133,7 @@ export default function LoginPage() {
                   value={totpCode}
                   onChange={(e) => setTotpCode(e.target.value)}
                   placeholder="000000"
-                  className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-center tracking-widest text-lg font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition"
+                  className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-zinc-50 border border-zinc-200 text-zinc-900 text-center tracking-widest text-lg font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900/15 focus:border-zinc-900 transition"
                 />
               </div>
             </div>
@@ -131,21 +142,21 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-2 py-3.5 px-4 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-sm shadow-[0_8px_20px_-6px_rgba(24,24,27,0.45)] flex items-center justify-center gap-2 transition-all active:scale-[0.99] disabled:opacity-60"
+            className="w-full py-3.5 px-4 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-sm shadow-[0_10px_24px_-8px_rgba(24,24,27,0.5)] flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60"
           >
             {loading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <>
-                <span>{requires2fa ? 'Verify & Unlock' : 'Unlock Drive'}</span>
+                <span>{requires2fa ? 'Verify & Unlock' : 'Unlock Noor Cloud'}</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>
         </form>
 
-        <div className="mt-7 pt-5 border-t border-slate-100 text-center text-xs text-slate-400">
-          Private Personal Cloud • Protected by Argon2id
+        <div className="mt-6 pt-4 border-t border-zinc-100 text-center text-[11px] text-zinc-400">
+          NOOR DRIVE • Protected Personal Cloud
         </div>
       </div>
     </div>
