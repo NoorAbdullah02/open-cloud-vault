@@ -9,7 +9,8 @@
   "scripts": {
     "dev:api": "npm run dev --workspace=@noor-drive/api",
     "dev:web": "npm run dev --workspace=@noor-drive/web",
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build --workspace=@noor-drive/api && npm run build --workspace=@noor-drive/web",
+    "start": "node scripts/start-combined.js",
     "db:push": "npm run prisma:push --workspace=@noor-drive/api",
     "db:seed": "npm run seed --workspace=@noor-drive/api",
     "test": "npm run test --workspaces --if-present"

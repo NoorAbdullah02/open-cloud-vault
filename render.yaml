@@ -1,16 +1,20 @@
 services:
   - type: web
-    name: noor-cloud-api
+    name: noor-cloud
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build --workspace=@noor-drive/api
-    startCommand: npm run start --workspace=@noor-drive/api
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
         sync: false
-      - key: CORS_ORIGIN
+      - key: DRIVE_PASSCODE
+        sync: false
+      - key: SUPER_ADMIN_EMAIL
+        value: admin@noordrive.local
+      - key: SUPER_ADMIN_PASSWORD
         sync: false
       - key: JWT_ACCESS_SECRET
         generateValue: true
@@ -20,12 +24,6 @@ services:
         value: 15m
       - key: JWT_REFRESH_EXPIRES_IN
         value: 30d
-      - key: SUPER_ADMIN_EMAIL
-        value: admin@noordrive.local
-      - key: SUPER_ADMIN_PASSWORD
-        sync: false
-      - key: DRIVE_PASSCODE
-        sync: false
       - key: DEFAULT_STORAGE_PROVIDER
         value: TELEGRAM_MTPROTO
       - key: TELEGRAM_ENABLED
@@ -40,18 +38,5 @@ services:
         sync: false
       - key: TELEGRAM_TARGET_CHANNEL
         value: me
-
-  - type: web
-    name: noor-cloud
-    runtime: node
-    plan: free
-    buildCommand: npm install && npm run build --workspace=@noor-drive/web
-    startCommand: npm run start --workspace=@noor-drive/web
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: NEXT_PUBLIC_API_URL
-        sync: false
-      - key: NEXT_PUBLIC_WS_URL
-        sync: false
-
+      - key: CORS_ORIGIN
+        value: https://noor-cloud.onrender.com

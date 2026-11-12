@@ -4,6 +4,10 @@ export function getApiUrl(): string {
     return envUrl;
   }
   if (typeof window !== 'undefined') {
+    // In production combined mode (no port 3000), /api is served on the same origin
+    if (window.location.port !== '3000') {
+      return '/api';
+    }
     return `${window.location.protocol}//${window.location.hostname}:4000/api`;
   }
   return envUrl || 'http://localhost:4000/api';
