@@ -420,6 +420,14 @@ function DriveDashboardContent() {
   }, [loadDrive]);
 
   useEffect(() => {
+    if (folderInputRef.current) {
+      folderInputRef.current.setAttribute('webkitdirectory', '');
+      folderInputRef.current.setAttribute('directory', '');
+      folderInputRef.current.webkitdirectory = true;
+    }
+  }, []);
+
+  useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setPreviewModal(null);
@@ -1018,13 +1026,13 @@ function DriveDashboardContent() {
     <div
       className="min-h-screen flex bg-[#f6f7f9] dark:bg-[#0b0f17] text-zinc-900 dark:text-slate-100"
       onDragEnter={(e) => {
-        if (e.dataTransfer.types.includes('Files')) {
+        if (Array.from(e.dataTransfer.types || []).includes('Files')) {
           e.preventDefault();
           setIsDragging(true);
         }
       }}
       onDragOver={(e) => {
-        if (e.dataTransfer.types.includes('Files')) {
+        if (Array.from(e.dataTransfer.types || []).includes('Files')) {
           e.preventDefault();
           if (!isDragging) setIsDragging(true);
         }
@@ -1038,7 +1046,10 @@ function DriveDashboardContent() {
       onDrop={(e) => {
         setIsDragging(false);
         setDragTargetFolderId(null);
-        if (e.dataTransfer.types.includes('Files')) {
+        if (
+          Array.from(e.dataTransfer.types || []).includes('Files') ||
+          (e.dataTransfer.files && e.dataTransfer.files.length > 0)
+        ) {
           e.preventDefault();
           handleDropItems(e.dataTransfer);
         }
@@ -1097,15 +1108,16 @@ function DriveDashboardContent() {
         {/* Primary Action Buttons */}
         <div className="px-4 mb-5 space-y-2">
           <div className="flex gap-2">
-            <button
-              onClick={() => fileInputRef.current?.click()}
+            <label
+              htmlFor="noor-file-upload"
               style={{ backgroundColor: accentColor }}
-              className="flex-1 py-2.5 px-3 rounded-xl hover:opacity-90 text-white text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+              className="flex-1 py-2.5 px-3 rounded-xl hover:opacity-90 text-white text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer select-none"
             >
               <Upload className="w-4 h-4" />
               <span>Upload File</span>
-            </button>
+            </label>
             <button
+              type="button"
               onClick={() => setNewFolderOpen(true)}
               title="New Folder"
               className="p-2.5 rounded-xl bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition border border-slate-200/90 dark:border-slate-700 shadow-xs active:scale-[0.98]"
@@ -1113,18 +1125,19 @@ function DriveDashboardContent() {
               <FolderPlus className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
             </button>
           </div>
-          <button
-            onClick={() => folderInputRef.current?.click()}
-            className="w-full py-2 px-3 rounded-xl bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition border border-slate-200/90 dark:border-slate-700 shadow-xs active:scale-[0.98]"
+          <label
+            htmlFor="noor-folder-upload"
+            className="w-full py-2 px-3 rounded-xl bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition border border-slate-200/90 dark:border-slate-700 shadow-xs active:scale-[0.98] cursor-pointer select-none"
           >
             <FolderIcon className="w-3.5 h-3.5 text-amber-500" />
             <span>Upload Folder</span>
-          </button>
+          </label>
           <input
+            id="noor-file-upload"
             ref={fileInputRef}
             type="file"
             multiple
-            className="sr-only"
+            className="fixed -top-96 left-0 opacity-0 w-px h-px pointer-events-none"
             onChange={(e) => {
               const picked = e.target.files ? Array.from(e.target.files) : [];
               e.target.value = '';
@@ -1134,16 +1147,11 @@ function DriveDashboardContent() {
             }}
           />
           <input
-            ref={(el) => {
-              folderInputRef.current = el;
-              if (el) {
-                el.webkitdirectory = true;
-                (el as any).directory = true;
-              }
-            }}
+            id="noor-folder-upload"
+            ref={folderInputRef}
             type="file"
             multiple
-            className="sr-only"
+            className="fixed -top-96 left-0 opacity-0 w-px h-px pointer-events-none"
             onChange={(e) => {
               const picked = e.target.files ? Array.from(e.target.files) : [];
               e.target.value = '';
