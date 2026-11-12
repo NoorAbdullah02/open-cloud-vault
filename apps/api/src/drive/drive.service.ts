@@ -575,4 +575,35 @@ export class DriveService {
   getStorageProviders() {
     return this.storage.getProviderStatuses();
   }
+
+  async bulkAction(
+    userId: string,
+    action: 'trash' | 'restore' | 'delete' | 'move',
+    items: { type: 'file' | 'folder'; id: string }[],
+    targetFolderId: string | null = null,
+  ) {
+    let succeeded = 0;
+    let failed = 0;
+    for (const item of items) {
+      try {
+        if (action === 'trash') {
+          await this.trashItem(userId, item.type, item.id);
+        } else if (action === 'restore') {
+          await this.restoreItem(userId, item.type, item.id);
+        } else if (action === 'delete') {
+          if (item.type === 'file') {
+            await this.permanentlyDeleteFile(userId, item.id);
+          } else {
+            await this.permanentlyDeleteFolder(userId, item.id);
+          }
+        } else if (action === 'move') {
+          await this.moveItem(userId, item.type, item.id, targetFolderId);
+        }
+        succeeded++;
+      } catch {
+        failed++;
+      }
+    }
+    return { succeeded, failed };
+  }
 }

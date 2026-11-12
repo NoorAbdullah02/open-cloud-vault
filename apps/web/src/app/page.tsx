@@ -274,6 +274,7 @@ function DriveDashboardContent() {
   // Upload & Drag states
   const [isDragging, setIsDragging] = useState(false);
   const [dragTargetFolderId, setDragTargetFolderId] = useState<string | null>(null);
+  const [selectedItems, setSelectedItems] = useState<{ type: 'file' | 'folder'; id: string }[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState<
     { id: string; name: string; progress: UploadProgressInfo; controller: AbortController }[]
   >([]);
@@ -414,6 +415,7 @@ function DriveDashboardContent() {
   }, [loadUser]);
 
   useEffect(() => {
+    setSelectedItems([]);
     loadDrive();
   }, [loadDrive]);
 
@@ -819,6 +821,55 @@ function DriveDashboardContent() {
     } catch {}
     clearStoredTokens();
     router.push('/login');
+  };
+
+  const isItemSelected = (type: 'file' | 'folder', id: string) =>
+    selectedItems.some((s) => s.type === type && s.id === id);
+
+  const toggleItemSelection = (type: 'file' | 'folder', id: string) => {
+    setSelectedItems((prev) =>
+      prev.some((s) => s.type === type && s.id === id)
+        ? prev.filter((s) => !(s.type === type && s.id === id))
+        : [...prev, { type, id }],
+    );
+  };
+
+  const selectAllItems = () => {
+    const all: { type: 'file' | 'folder'; id: string }[] = [
+      ...folders.map((f) => ({ type: 'folder' as const, id: f.id })),
+      ...files.map((f) => ({ type: 'file' as const, id: f.id })),
+    ];
+    setSelectedItems(all);
+  };
+
+  const handleBulkAction = async (action: 'trash' | 'restore' | 'delete') => {
+    if (selectedItems.length === 0) return;
+    const targets = [...selectedItems];
+    const targetIds = new Set(targets.map((t) => `${t.type}:${t.id}`));
+
+    setFolders((prev) => prev.filter((f) => !targetIds.has(`folder:${f.id}`)));
+    setFiles((prev) => prev.filter((f) => !targetIds.has(`file:${f.id}`)));
+    setSelectedItems([]);
+
+    try {
+      const res = await apiFetch('/drive/bulk', {
+        method: 'POST',
+        body: JSON.stringify({ action, items: targets }),
+      });
+      const label =
+        action === 'restore'
+          ? 'Restored'
+          : action === 'delete'
+          ? 'Permanently deleted'
+          : 'Moved to Trash';
+      showToast(`${label} (${res.succeeded || targets.length} items)`);
+      driveViewCache.clear();
+      loadDrive(true);
+      if (action === 'delete') loadUser();
+    } catch (err: any) {
+      showToast(err.message || 'Bulk action failed', 'error');
+      loadDrive(true);
+    }
   };
 
   const handleMoveItem = async (
@@ -1345,6 +1396,83 @@ function DriveDashboardContent() {
             </div>
           )}
 
+          {selectedItems.length > 0 && (
+            <div className="p-3 rounded-2xl bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-bold text-indigo-700 dark:text-indigo-200">
+                  {selectedItems.length} selected
+                </span>
+                <button
+                  onClick={selectAllItems}
+                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-300 hover:underline"
+                >
+                  Select All ({folders.length + files.length})
+                </button>
+                <button
+                  onClick={() => setSelectedItems([])}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400"
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                {view === 'trash' ? (
+                  <>
+                    <button
+                      onClick={() => handleBulkAction('restore')}
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition"
+                    >
+                      Restore Selected
+                    </button>
+                    <button
+                      onClick={() =>
+                        setConfirmModal({
+                          title: `Delete ${selectedItems.length} items forever?`,
+                          description:
+                            'All selected items will be permanently deleted from NOOR DRIVE and cannot be recovered.',
+                          confirmText: 'Delete Forever',
+                          onConfirm: () => handleBulkAction('delete'),
+                        })
+                      }
+                      className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs transition"
+                    >
+                      Delete Forever
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        const selectedFileIds = new Set(
+                          selectedItems.filter((s) => s.type === 'file').map((s) => s.id),
+                        );
+                        files
+                          .filter((f) => selectedFileIds.has(f.id))
+                          .forEach((f) => handleDownload(f));
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 transition"
+                    >
+                      Download Files
+                    </button>
+                    <button
+                      onClick={() =>
+                        setConfirmModal({
+                          title: `Move ${selectedItems.length} items to Trash?`,
+                          description: 'You can restore selected items later from Trash.',
+                          confirmText: 'Move to Trash',
+                          onConfirm: () => handleBulkAction('trash'),
+                        })
+                      }
+                      className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs transition"
+                    >
+                      Move to Trash
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Breadcrumbs + In-App Back Button */}
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2 text-sm flex-wrap">
@@ -1572,10 +1700,24 @@ function DriveDashboardContent() {
                         className={`group p-3.5 rounded-2xl bg-white dark:bg-slate-900 border hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:shadow-md hover:-translate-y-0.5 flex items-center justify-between gap-2 cursor-pointer transition-all ${
                           dragTargetFolderId === folder.id
                             ? 'border-indigo-500 ring-2 ring-indigo-500 bg-indigo-50/60 dark:bg-indigo-500/10'
+                            : isItemSelected('folder', folder.id)
+                            ? 'border-indigo-500 ring-2 ring-indigo-500/60 bg-indigo-50/40 dark:bg-indigo-500/10'
                             : 'border-slate-200/80 dark:border-slate-800'
                         }`}
                         onDoubleClick={() => navigateDrive(view, folder.id)}
                       >
+                        <input
+                          type="checkbox"
+                          checked={isItemSelected('folder', folder.id)}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            toggleItemSelection('folder', folder.id);
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className={`w-4 h-4 rounded accent-indigo-600 shrink-0 cursor-pointer transition ${
+                            selectedItems.length > 0 ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'
+                          }`}
+                        />
                         <div
                           className="flex items-center gap-3 min-w-0 flex-1"
                           onClick={() => navigateDrive(view, folder.id)}
@@ -1705,13 +1847,29 @@ function DriveDashboardContent() {
                               );
                               e.dataTransfer.effectAllowed = 'move';
                             }}
-                            className="group rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:shadow-lg hover:-translate-y-0.5 overflow-hidden flex flex-col justify-between transition-all"
+                            className={`group rounded-2xl bg-white dark:bg-slate-900 border hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:shadow-lg hover:-translate-y-0.5 overflow-hidden flex flex-col justify-between transition-all ${
+                              isItemSelected('file', file.id)
+                                ? 'border-indigo-500 ring-2 ring-indigo-500/60'
+                                : 'border-slate-200/80 dark:border-slate-800'
+                            }`}
                           >
                             {/* Visual Preview Header */}
                             <div
                               onClick={() => handlePreview(file)}
                               className={`h-32 ${visual.bg} flex items-center justify-center relative cursor-pointer overflow-hidden`}
                             >
+                              <input
+                                type="checkbox"
+                                checked={isItemSelected('file', file.id)}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  toggleItemSelection('file', file.id);
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                className={`absolute top-2.5 left-2.5 z-10 w-4 h-4 rounded accent-indigo-600 cursor-pointer transition ${
+                                  selectedItems.length > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                }`}
+                              />
                               <FileThumbnail
                                 fileId={file.id}
                                 mimeType={file.mimeType}
@@ -1843,6 +2001,20 @@ function DriveDashboardContent() {
                       <table className="w-full text-left text-sm">
                         <thead className="bg-slate-50/80 dark:bg-slate-800/50 border-b border-slate-200/80 dark:border-slate-800 text-xs text-slate-500 uppercase">
                           <tr>
+                            <th className="py-3.5 px-3 w-10">
+                              <input
+                                type="checkbox"
+                                checked={
+                                  files.length > 0 &&
+                                  files.every((f) => isItemSelected('file', f.id))
+                                }
+                                onChange={(e) => {
+                                  if (e.target.checked) selectAllItems();
+                                  else setSelectedItems([]);
+                                }}
+                                className="w-4 h-4 rounded accent-indigo-600 cursor-pointer"
+                              />
+                            </th>
                             <th className="py-3.5 px-4 font-semibold">Name</th>
                             <th className="py-3.5 px-4 font-semibold">Size</th>
                             <th className="py-3.5 px-4 font-semibold">Uploaded</th>
@@ -1866,6 +2038,14 @@ function DriveDashboardContent() {
                                 }}
                                 className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition"
                               >
+                                <td className="py-3 px-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={isItemSelected('file', file.id)}
+                                    onChange={() => toggleItemSelection('file', file.id)}
+                                    className="w-4 h-4 rounded accent-indigo-600 cursor-pointer"
+                                  />
+                                </td>
                                 <td
                                   onClick={() => handlePreview(file)}
                                   className="py-3 px-4 flex items-center gap-3 font-medium cursor-pointer hover:text-indigo-600"

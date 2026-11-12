@@ -152,6 +152,24 @@ export class DriveController {
     return this.driveService.emptyTrash(user.id);
   }
 
+  @Post('bulk')
+  bulkAction(
+    @CurrentUser() user: AuthUser,
+    @Body()
+    body: {
+      action: 'trash' | 'restore' | 'delete' | 'move';
+      items: { type: 'file' | 'folder'; id: string }[];
+      targetFolderId?: string | null;
+    },
+  ) {
+    return this.driveService.bulkAction(
+      user.id,
+      body.action,
+      body.items || [],
+      body.targetFolderId ?? null,
+    );
+  }
+
   @Get('storage/providers')
   getStorageProviders() {
     return this.driveService.getStorageProviders();

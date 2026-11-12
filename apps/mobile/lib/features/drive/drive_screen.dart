@@ -43,6 +43,7 @@ class _DriveScreenState extends State<DriveScreen> {
   List<dynamic> _files = [];
   List<dynamic> _breadcrumbs = [];
   final Map<String, Map<String, List<dynamic>>> _driveCache = {};
+  final Set<String> _selectedKeys = {};
   Timer? _searchDebounce;
 
   @override
@@ -52,6 +53,59 @@ class _DriveScreenState extends State<DriveScreen> {
     _loadUser();
     _loadDrive();
     _checkForAppUpdate(silent: true);
+  }
+
+  void _toggleSelect(String type, String id) {
+    final key = '$type:$id';
+    setState(() {
+      if (_selectedKeys.contains(key)) {
+        _selectedKeys.remove(key);
+      } else {
+        _selectedKeys.add(key);
+      }
+    });
+  }
+
+  void _selectAll() {
+    setState(() {
+      for (final f in _folders) {
+        _selectedKeys.add('folder:${f['id']}');
+      }
+      for (final f in _files) {
+        _selectedKeys.add('file:${f['id']}');
+      }
+    });
+  }
+
+  Future<void> _bulkAction(String action) async {
+    if (_selectedKeys.isEmpty) return;
+    final items = _selectedKeys.map((k) {
+      final parts = k.split(':');
+      return {'type': parts[0], 'id': parts[1]};
+    }).toList();
+    final selectedCopy = Set<String>.from(_selectedKeys);
+
+    setState(() {
+      _folders = _folders.where((f) => !selectedCopy.contains('folder:${f['id']}')).toList();
+      _files = _files.where((f) => !selectedCopy.contains('file:${f['id']}')).toList();
+      _selectedKeys.clear();
+    });
+
+    try {
+      await apiClient.dio.post('/drive/bulk', data: {'action': action, 'items': items});
+      final label = action == 'restore'
+          ? 'Restored'
+          : action == 'delete'
+              ? 'Permanently deleted'
+              : 'Moved to Trash';
+      _showSnack('$label (${items.length} items)');
+      _driveCache.clear();
+      _loadDrive(silent: true);
+      if (action == 'delete') _loadUser();
+    } catch (e) {
+      _showSnack('Bulk action failed: $e', isError: true);
+      _loadDrive(silent: true);
+    }
   }
 
   Future<void> _loadAccentColor() async {
@@ -209,6 +263,7 @@ class _DriveScreenState extends State<DriveScreen> {
   }
 
   Future<void> _loadDrive({bool silent = false}) async {
+    if (!silent) _selectedKeys.clear();
     final cacheKey = '$_view:${_folderId ?? 'root'}:$_search';
     final cached = _driveCache[cacheKey];
     if (cached != null && !silent) {
@@ -1045,22 +1100,81 @@ class _DriveScreenState extends State<DriveScreen> {
               onPressed: _uploadFolder,
               tooltip: 'Upload Folder',
             ),
-            if (_view == 'trash' && (_files.isNotEmpty || _folders.isNotEmpty))
-              IconButton(
-                icon: const Icon(Icons.delete_sweep, color: Color(0xFFE11D48)),
-                onPressed: () => _confirmAction(
-                  title: 'Empty Trash?',
-                  message: 'All trashed items will be permanently deleted.',
-                  confirmText: 'Empty Trash',
-                  onConfirm: _emptyTrash,
+            if (_selectedKeys.isNotEmpty) ...[
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Text(
+                    '${_selectedKeys.length} selected',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF4F46E5),
+                    ),
+                  ),
                 ),
-                tooltip: 'Empty Trash',
               ),
-            IconButton(
-              icon: const Icon(Icons.lock_outline, color: Color(0xFF64748B)),
-              onPressed: _lockVault,
-              tooltip: 'Lock Vault',
-            ),
+              IconButton(
+                icon: const Icon(Icons.select_all, color: Color(0xFF4F46E5)),
+                onPressed: _selectAll,
+                tooltip: 'Select All',
+              ),
+              if (_view == 'trash') ...[
+                IconButton(
+                  icon: const Icon(Icons.restore_from_trash, color: Color(0xFF059669)),
+                  onPressed: () => _bulkAction('restore'),
+                  tooltip: 'Restore Selected',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_forever, color: Color(0xFFE11D48)),
+                  onPressed: () => _confirmAction(
+                    title: 'Delete ${_selectedKeys.length} items forever?',
+                    message: 'All selected items will be permanently deleted.',
+                    confirmText: 'Delete Forever',
+                    onConfirm: () => _bulkAction('delete'),
+                  ),
+                  tooltip: 'Delete Forever',
+                ),
+              ] else
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Color(0xFFE11D48)),
+                  onPressed: () => _confirmAction(
+                    title: 'Move ${_selectedKeys.length} items to Trash?',
+                    message: 'You can restore selected items later from Trash.',
+                    confirmText: 'Move to Trash',
+                    onConfirm: () => _bulkAction('trash'),
+                  ),
+                  tooltip: 'Move to Trash',
+                ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Color(0xFF64748B)),
+                onPressed: () => setState(() => _selectedKeys.clear()),
+                tooltip: 'Clear Selection',
+              ),
+            ] else ...[
+              if (_files.isNotEmpty || _folders.isNotEmpty)
+                IconButton(
+                  icon: const Icon(Icons.checklist, color: Color(0xFF64748B)),
+                  onPressed: _selectAll,
+                  tooltip: 'Select All',
+                ),
+              if (_view == 'trash' && (_files.isNotEmpty || _folders.isNotEmpty))
+                IconButton(
+                  icon: const Icon(Icons.delete_sweep, color: Color(0xFFE11D48)),
+                  onPressed: () => _confirmAction(
+                    title: 'Empty Trash?',
+                    message: 'All trashed items will be permanently deleted.',
+                    confirmText: 'Empty Trash',
+                    onConfirm: _emptyTrash,
+                  ),
+                  tooltip: 'Empty Trash',
+                ),
+              IconButton(
+                icon: const Icon(Icons.lock_outline, color: Color(0xFF64748B)),
+                onPressed: _lockVault,
+                tooltip: 'Lock Vault',
+              ),
+            ],
           ],
         ),
         drawer: Drawer(
@@ -1342,21 +1456,30 @@ class _DriveScreenState extends State<DriveScreen> {
                               itemBuilder: (context, index) {
                                 if (index < _folders.length) {
                                   final folder = _folders[index];
+                                  final isSelected = _selectedKeys.contains('folder:${folder['id']}');
                                   return Card(
-                                    color: Colors.white,
+                                    color: isSelected ? const Color(0xFFEEF2FF) : Colors.white,
                                     elevation: 0,
                                     clipBehavior: Clip.antiAlias,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(16),
-                                      side: const BorderSide(color: Color(0xFFE2E8F0)),
+                                      side: BorderSide(
+                                        color: isSelected ? const Color(0xFF4F46E5) : const Color(0xFFE2E8F0),
+                                        width: isSelected ? 2 : 1,
+                                      ),
                                     ),
                                     child: Stack(
                                       children: [
                                         InkWell(
                                           borderRadius: BorderRadius.circular(16),
+                                          onLongPress: () => _toggleSelect('folder', folder['id']),
                                           onTap: () {
-                                            setState(() => _folderId = folder['id']);
-                                            _loadDrive();
+                                            if (_selectedKeys.isNotEmpty) {
+                                              _toggleSelect('folder', folder['id']);
+                                            } else {
+                                              setState(() => _folderId = folder['id']);
+                                              _loadDrive();
+                                            }
                                           },
                                           child: Center(
                                             child: Padding(
@@ -1427,19 +1550,30 @@ class _DriveScreenState extends State<DriveScreen> {
                                   );
                                 }
                                 final file = _files[index - _folders.length];
+                                final isSelected = _selectedKeys.contains('file:${file['id']}');
                                 return Card(
-                                  color: Colors.white,
+                                  color: isSelected ? const Color(0xFFEEF2FF) : Colors.white,
                                   elevation: 0,
                                   clipBehavior: Clip.antiAlias,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(16),
-                                    side: const BorderSide(color: Color(0xFFE2E8F0)),
+                                    side: BorderSide(
+                                      color: isSelected ? const Color(0xFF4F46E5) : const Color(0xFFE2E8F0),
+                                      width: isSelected ? 2 : 1,
+                                    ),
                                   ),
                                   child: Stack(
                                     children: [
                                       InkWell(
                                         borderRadius: BorderRadius.circular(16),
-                                        onTap: () => _previewOrOpenFile(file),
+                                        onLongPress: () => _toggleSelect('file', file['id']),
+                                        onTap: () {
+                                          if (_selectedKeys.isNotEmpty) {
+                                            _toggleSelect('file', file['id']);
+                                          } else {
+                                            _previewOrOpenFile(file);
+                                          }
+                                        },
                                         child: Center(
                                           child: Padding(
                                             padding: const EdgeInsets.all(12),
@@ -1525,18 +1659,37 @@ class _DriveScreenState extends State<DriveScreen> {
                               children: [
                                 for (final folder in _folders)
                                   Card(
-                                    color: Colors.white,
+                                    color: _selectedKeys.contains('folder:${folder['id']}')
+                                        ? const Color(0xFFEEF2FF)
+                                        : Colors.white,
                                     elevation: 0,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(16),
-                                      side: const BorderSide(color: Color(0xFFE2E8F0)),
+                                      side: BorderSide(
+                                        color: _selectedKeys.contains('folder:${folder['id']}')
+                                            ? const Color(0xFF4F46E5)
+                                            : const Color(0xFFE2E8F0),
+                                        width: _selectedKeys.contains('folder:${folder['id']}') ? 2 : 1,
+                                      ),
                                     ),
                                     child: ListTile(
-                                      leading: const Icon(Icons.folder, color: Color(0xFFF59E0B)),
+                                      leading: Icon(
+                                        _selectedKeys.contains('folder:${folder['id']}')
+                                            ? Icons.check_circle
+                                            : Icons.folder,
+                                        color: _selectedKeys.contains('folder:${folder['id']}')
+                                            ? const Color(0xFF4F46E5)
+                                            : const Color(0xFFF59E0B),
+                                      ),
                                       title: Text(folder['name'], style: const TextStyle(fontWeight: FontWeight.w600)),
+                                      onLongPress: () => _toggleSelect('folder', folder['id']),
                                       onTap: () {
-                                        setState(() => _folderId = folder['id']);
-                                        _loadDrive();
+                                        if (_selectedKeys.isNotEmpty) {
+                                          _toggleSelect('folder', folder['id']);
+                                        } else {
+                                          setState(() => _folderId = folder['id']);
+                                          _loadDrive();
+                                        }
                                       },
                                       trailing: PopupMenuButton<String>(
                                         onSelected: (action) {
@@ -1579,21 +1732,40 @@ class _DriveScreenState extends State<DriveScreen> {
                                   ),
                                 for (final file in _files)
                                   Card(
-                                    color: Colors.white,
+                                    color: _selectedKeys.contains('file:${file['id']}')
+                                        ? const Color(0xFFEEF2FF)
+                                        : Colors.white,
                                     elevation: 0,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(16),
-                                      side: const BorderSide(color: Color(0xFFE2E8F0)),
+                                      side: BorderSide(
+                                        color: _selectedKeys.contains('file:${file['id']}')
+                                            ? const Color(0xFF4F46E5)
+                                            : const Color(0xFFE2E8F0),
+                                        width: _selectedKeys.contains('file:${file['id']}') ? 2 : 1,
+                                      ),
                                     ),
                                     child: ListTile(
-                                      leading: const Icon(Icons.insert_drive_file, color: Color(0xFF4F46E5)),
+                                      leading: Icon(
+                                        _selectedKeys.contains('file:${file['id']}')
+                                            ? Icons.check_circle
+                                            : Icons.insert_drive_file,
+                                        color: const Color(0xFF4F46E5),
+                                      ),
                                       title: Text(file['name'], maxLines: 1, overflow: TextOverflow.ellipsis),
                                       subtitle: Text(
                                         '${_formatBytes(file['sizeBytes'])}${file['createdAt'] != null ? ' • ${_formatDateTime(file['createdAt'])}' : ''}',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
-                                      onTap: () => _previewOrOpenFile(file),
+                                      onLongPress: () => _toggleSelect('file', file['id']),
+                                      onTap: () {
+                                        if (_selectedKeys.isNotEmpty) {
+                                          _toggleSelect('file', file['id']);
+                                        } else {
+                                          _previewOrOpenFile(file);
+                                        }
+                                      },
                                       trailing: PopupMenuButton<String>(
                                         onSelected: (action) {
                                           if (action == 'download') _downloadAndOpen(file);
