@@ -80,24 +80,62 @@ class _DriveScreenState extends State<DriveScreen> {
 
         showDialog(
           context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Update Available!'),
-            content: Text('A new version of NOOR DRIVE (Build #$remoteBuild) is ready.'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Later')),
-              ElevatedButton(
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  _showSnack('Downloading update...');
-                  final dir = await getTemporaryDirectory();
-                  final apkPath = '${dir.path}/noor-drive-update.apk';
-                  await Dio().download(downloadUrl, apkPath);
-                  await OpenFilex.open(apkPath);
-                },
-                child: const Text('Download & Install'),
+          barrierDismissible: false,
+          builder: (ctx) {
+            bool downloading = false;
+            double progress = 0;
+            return StatefulBuilder(
+              builder: (ctx, setModalState) => AlertDialog(
+                title: const Text('Update Available!'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('NOOR DRIVE Build #$remoteBuild is ready to install.'),
+                    if (downloading) ...[
+                      const SizedBox(height: 14),
+                      LinearProgressIndicator(value: progress > 0 ? progress : null),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Downloading update... ${(progress * 100).round()}%',
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                      ),
+                    ],
+                  ],
+                ),
+                actions: [
+                  if (!downloading)
+                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Later')),
+                  ElevatedButton(
+                    onPressed: downloading
+                        ? null
+                        : () async {
+                            setModalState(() => downloading = true);
+                            try {
+                              final dir = await getTemporaryDirectory();
+                              final apkPath = '${dir.path}/noor-drive-update.apk';
+                              await Dio().download(
+                                downloadUrl,
+                                apkPath,
+                                onReceiveProgress: (rec, total) {
+                                  if (total > 0) {
+                                    setModalState(() => progress = rec / total);
+                                  }
+                                },
+                              );
+                              if (ctx.mounted) Navigator.pop(ctx);
+                              await OpenFilex.open(apkPath);
+                            } catch (e) {
+                              setModalState(() => downloading = false);
+                              _showSnack('Update download failed: $e', isError: true);
+                            }
+                          },
+                    child: Text(downloading ? 'Downloading...' : 'Download & Update'),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       } else if (!silent && mounted) {
         _showSnack('You are on the latest version (Build #${ApiClient.buildNumber})');

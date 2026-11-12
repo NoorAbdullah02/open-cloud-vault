@@ -32,7 +32,7 @@ jobs:
         working-directory: apps/mobile
         run: |
           flutter create . --platforms=android --project-name noor_drive_app --org com.noordrive.app
-          sed -i 's/<application/<uses-permission android:name="android.permission.INTERNET" \/>\n    <application/' android/app/src/main/AndroidManifest.xml
+          sed -i 's/<application/<uses-permission android:name="android.permission.INTERNET" \/>\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" \/>\n    <application/' android/app/src/main/AndroidManifest.xml
           sed -i 's/android:label="noor_drive_app"/android:label="NOOR DRIVE"/' android/app/src/main/AndroidManifest.xml
 
       - name: Install dependencies, generate launcher icon & build APK
