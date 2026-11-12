@@ -124,6 +124,8 @@ function FileThumbnail({
 }) {
   const [src, setSrc] = useState<string | null>(thumbnailCache.get(fileId) || null);
   const [snippet, setSnippet] = useState<string | null>(textSnippetCache.get(fileId) || null);
+  const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [pdfReady, setPdfReady] = useState(false);
 
   const isText =
     mimeType.startsWith('text/') ||
@@ -160,6 +162,35 @@ function FileThumbnail({
     };
   }, [fileId, mimeType, isText, isPdf]);
 
+  useEffect(() => {
+    if (!isPdf || !src || !pdfCanvasRef.current) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const pdfjsLib = await import('pdfjs-dist');
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+        const buf = await (await fetch(src)).arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+        if (cancelled || !pdfCanvasRef.current) return;
+        const page = await pdf.getPage(1);
+        const vp1 = page.getViewport({ scale: 1 });
+        const scale = 320 / vp1.width;
+        const viewport = page.getViewport({ scale });
+        const canvas = pdfCanvasRef.current;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          if (!cancelled) setPdfReady(true);
+        }
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isPdf, src]);
+
   if (src && mimeType.startsWith('image/')) {
     return (
       <img
@@ -172,13 +203,12 @@ function FileThumbnail({
 
   if (src && isPdf) {
     return (
-      <div className="w-full h-full flex items-center justify-center">
-        <iframe
-          src={`${src}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
-          title="PDF Preview"
-          className="hidden sm:block w-full h-full bg-white pointer-events-none border-0"
+      <div className="w-full h-full flex items-center justify-center bg-white overflow-hidden">
+        <canvas
+          ref={pdfCanvasRef}
+          className={`w-full h-full object-cover object-top ${pdfReady ? 'block' : 'hidden'}`}
         />
-        <div className="sm:hidden">{fallbackIcon}</div>
+        {!pdfReady && fallbackIcon}
       </div>
     );
   }
