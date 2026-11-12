@@ -238,9 +238,11 @@ export default function PublicSharePage() {
               ) : data.file.mimeType.startsWith('audio/') ? (
                 <audio src={getDownloadLink(data.file.id, true)} controls className="w-full max-w-md" />
               ) : data.file.mimeType.includes('pdf') ? (
-                <div className="w-full h-[75vh] bg-zinc-900 rounded-2xl overflow-hidden">
-                  <PdfViewer url={getDownloadLink(data.file.id, true)} />
-                </div>
+                <PdfViewer
+                  url={getDownloadLink(data.file.id, true)}
+                  fileName={data.file.name}
+                  onDownload={() => window.open(getDownloadLink(data.file.id, false), '_blank')}
+                />
               ) : data.file.extension === 'docx' ||
                 data.file.mimeType.includes('wordprocessingml') ? (
                 <DocxViewer

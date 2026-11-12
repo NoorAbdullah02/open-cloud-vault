@@ -10,9 +10,12 @@ import {
   FileText,
   Printer,
   Sparkles,
-  Columns,
   Maximize2,
   Image as ImageIcon,
+  Sun,
+  Moon,
+  Globe,
+  Monitor,
 } from 'lucide-react';
 
 interface SlideItem {
@@ -51,19 +54,32 @@ function extractParagraphs(xml: string): string[] {
 export default function PptxViewer({
   url,
   fileName,
+  fileId,
+  accessToken,
   onDownloadOriginal,
 }: {
   url: string;
   fileName?: string;
+  fileId?: string;
+  accessToken?: string;
   onDownloadOriginal?: () => void;
 }) {
   const [slides, setSlides] = useState<SlideItem[]>([]);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
-  const [viewMode, setViewMode] = useState<'deck' | 'scroll'>('deck');
+  const [viewMode, setViewMode] = useState<'deck' | 'scroll' | 'google'>('deck');
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
-  const [coverThumbnail, setCoverThumbnail] = useState<string | null>(null);
+
+  // Compute public/token stream URL for Google Docs Viewer
+  const googleViewerUrl = (() => {
+    if (typeof window === 'undefined' || !fileId || !accessToken) return null;
+    const origin = window.location.origin;
+    // URL with token query param supported by backend
+    const streamUrl = `${origin}/api/drive/files/${fileId}/download?inline=true&token=${accessToken}`;
+    return `https://docs.google.com/viewer?url=${encodeURIComponent(streamUrl)}&embedded=true`;
+  })();
 
   useEffect(() => {
     let cancelled = false;
@@ -80,16 +96,6 @@ export default function PptxViewer({
         const JSZip = (await import('jszip')).default;
         const zip = await JSZip.loadAsync(buf);
 
-        // Check for embedded document thumbnail
-        const thumbFile = zip.file('docProps/thumbnail.jpeg') || zip.file('docProps/thumbnail.png');
-        if (thumbFile && !cancelled) {
-          const thumbBlob = await thumbFile.async('blob');
-          const thumbUrl = URL.createObjectURL(thumbBlob);
-          objectUrls.push(thumbUrl);
-          setCoverThumbnail(thumbUrl);
-        }
-
-        // Identify all slide XML paths
         const slideEntries = Object.keys(zip.files)
           .filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
           .map((name) => {
@@ -104,7 +110,7 @@ export default function PptxViewer({
           const xml = await zip.files[s.name].async('string');
           const lines = extractParagraphs(xml);
 
-          // Extract embedded images from slide relationship file
+          // Extract slide embedded diagram images
           const relsPath = `ppt/slides/_rels/slide${s.num}.xml.rels`;
           const slideImages: string[] = [];
 
@@ -157,7 +163,6 @@ export default function PptxViewer({
     };
   }, [url]);
 
-  // Keyboard navigation for deck mode
   useEffect(() => {
     if (viewMode !== 'deck') return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -176,7 +181,6 @@ export default function PptxViewer({
     setExportingPdf(true);
     try {
       const { jsPDF } = await import('jspdf');
-      // Create landscape presentation PDF (16:9 ratio, 842 x 474 pt)
       const pdf = new jsPDF({
         orientation: 'landscape',
         unit: 'pt',
@@ -187,7 +191,7 @@ export default function PptxViewer({
         const slide = slides[idx];
         if (idx > 0) pdf.addPage([842, 474], 'landscape');
 
-        // Dark modern slide background
+        // Clean modern slide background
         pdf.setFillColor(15, 23, 42); // slate-900
         pdf.rect(0, 0, 842, 474, 'F');
 
@@ -208,7 +212,7 @@ export default function PptxViewer({
 
         // Bullet points
         pdf.setFontSize(12);
-        pdf.setTextColor(226, 232, 240); // slate-200
+        pdf.setTextColor(226, 232, 240);
         let y = 130;
         for (const point of slide.points) {
           if (y > 420) break;
@@ -219,7 +223,7 @@ export default function PptxViewer({
 
         // Slide Footer brand
         pdf.setFontSize(9);
-        pdf.setTextColor(148, 163, 184); // slate-400
+        pdf.setTextColor(148, 163, 184);
         pdf.text('NOOR DRIVE Cloud Presentation', 40, 455);
         pdf.text(`Page ${idx + 1} of ${slides.length}`, 750, 455);
       }
@@ -236,47 +240,76 @@ export default function PptxViewer({
   const currentSlide = slides[currentSlideIndex];
 
   return (
-    <div className="w-full max-w-5xl h-[85dvh] flex flex-col bg-slate-950 rounded-3xl border border-white/10 shadow-2xl overflow-hidden">
-      {/* Top Slide Deck Bar */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900/90 border-b border-white/10 text-white shrink-0">
+    <div className="w-full max-w-5xl h-[85dvh] flex flex-col bg-slate-950 rounded-3xl border border-white/10 shadow-2xl overflow-hidden backdrop-blur-md">
+      {/* Top Header Toolbar */}
+      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900/90 border-b border-white/10 text-white shrink-0 flex-wrap gap-2">
         <div className="flex items-center gap-2 text-xs font-semibold">
           <div className="p-1.5 rounded-lg bg-orange-500/20 text-orange-400">
             <Presentation className="w-4 h-4" />
           </div>
-          <span className="truncate max-w-[180px] sm:max-w-xs">{fileName || 'Presentation'}</span>
-          {slides.length > 0 && (
+          <span className="truncate max-w-[160px] sm:max-w-xs">{fileName || 'Presentation'}</span>
+          {slides.length > 0 && viewMode !== 'google' && (
             <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 text-[10px] uppercase font-bold">
               {viewMode === 'deck'
-                ? `Slide ${currentSlideIndex + 1} of ${slides.length}`
+                ? `Slide ${currentSlideIndex + 1} / ${slides.length}`
                 : `${slides.length} Slides`}
             </span>
           )}
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* View mode toggle: Deck vs Scroll Pages */}
+          {/* Mode Switcher */}
           <div className="flex items-center bg-white/10 rounded-xl p-0.5 text-xs">
+            {googleViewerUrl && (
+              <button
+                onClick={() => setViewMode('google')}
+                className={`px-2.5 py-1 rounded-lg transition font-medium flex items-center gap-1 ${
+                  viewMode === 'google'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+                title="Google Slides HD Cloud Viewer"
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Google HD</span>
+              </button>
+            )}
             <button
               onClick={() => setViewMode('deck')}
               className={`px-2.5 py-1 rounded-lg transition font-medium flex items-center gap-1 ${
-                viewMode === 'deck' ? 'bg-orange-600 text-white shadow-xs' : 'text-slate-300 hover:text-white'
+                viewMode === 'deck'
+                  ? 'bg-orange-600 text-white shadow-xs'
+                  : 'text-slate-300 hover:text-white'
               }`}
-              title="16:9 Presentation Deck"
+              title="Interactive 16:9 Slide Presentation"
             >
-              <Presentation className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Deck</span>
+              <Monitor className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">16:9 Deck</span>
             </button>
             <button
               onClick={() => setViewMode('scroll')}
               className={`px-2.5 py-1 rounded-lg transition font-medium flex items-center gap-1 ${
-                viewMode === 'scroll' ? 'bg-orange-600 text-white shadow-xs' : 'text-slate-300 hover:text-white'
+                viewMode === 'scroll'
+                  ? 'bg-orange-600 text-white shadow-xs'
+                  : 'text-slate-300 hover:text-white'
               }`}
-              title="Continuous PDF Pages"
+              title="Continuous Multi-Page PDF Document"
             >
               <FileText className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">PDF Pages</span>
             </button>
           </div>
+
+          {/* Theme switcher in deck mode */}
+          {viewMode === 'deck' && (
+            <button
+              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+              title="Switch Canvas Theme"
+              className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition"
+            >
+              {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+            </button>
+          )}
 
           {/* Export Slides as PDF */}
           <button
@@ -307,11 +340,23 @@ export default function PptxViewer({
         </div>
       </div>
 
-      {/* Main Slide Deck Canvas */}
+      {/* Main Presentation Stage */}
       <div className="flex-1 min-h-0 flex flex-col md:flex-row bg-slate-950/95 overflow-hidden">
-        {/* Slide Thumbnail Strip (Deck Mode) */}
+        {/* Google Slides HD Mode */}
+        {viewMode === 'google' && googleViewerUrl && (
+          <div className="w-full h-full flex flex-col bg-white">
+            <iframe
+              src={googleViewerUrl}
+              className="w-full h-full border-0"
+              title="Google Docs Viewer"
+              allowFullScreen
+            />
+          </div>
+        )}
+
+        {/* Deck Mode: Left Slide Thumbnails */}
         {viewMode === 'deck' && slides.length > 1 && (
-          <div className="w-full md:w-60 bg-slate-900/60 border-r border-white/10 p-3 overflow-y-auto space-y-2.5 shrink-0 hidden md:block">
+          <div className="w-full md:w-64 bg-slate-900/70 border-r border-white/10 p-3 overflow-y-auto space-y-2 shrink-0 hidden md:block">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 mb-2">
               Slides ({slides.length})
             </p>
@@ -319,14 +364,14 @@ export default function PptxViewer({
               <button
                 key={s.number}
                 onClick={() => setCurrentSlideIndex(idx)}
-                className={`w-full p-2.5 rounded-xl text-left border transition flex flex-col gap-1 ${
+                className={`w-full p-2.5 rounded-2xl text-left border transition flex flex-col gap-1 ${
                   idx === currentSlideIndex
-                    ? 'bg-orange-500/15 border-orange-500 text-white shadow-md ring-1 ring-orange-500/50'
+                    ? 'bg-orange-500/20 border-orange-500 text-white shadow-md ring-1 ring-orange-500/60'
                     : 'bg-white/5 border-white/5 hover:bg-white/10 text-slate-300'
                 }`}
               >
                 <div className="flex items-center justify-between text-[10px] font-bold">
-                  <span className="text-orange-400">#{s.number}</span>
+                  <span className="text-orange-400">SLIDE {s.number}</span>
                   <span className="text-slate-400">
                     {s.images.length > 0 ? `${s.images.length} img • ` : ''}
                     {s.points.length} pts
@@ -338,13 +383,13 @@ export default function PptxViewer({
           </div>
         )}
 
-        {/* Deck Mode: Single Active Slide */}
+        {/* Deck Mode: Main Slide Canvas */}
         {viewMode === 'deck' && (
-          <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 min-h-0 overflow-auto">
+          <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-6 min-h-0 overflow-auto">
             {loading && (
               <div className="text-center text-white space-y-3 py-16">
                 <Loader2 className="w-10 h-10 animate-spin mx-auto text-orange-400" />
-                <p className="text-xs text-slate-300">Parsing PowerPoint slides and diagrams...</p>
+                <p className="text-xs text-slate-300">Loading PowerPoint slides...</p>
               </div>
             )}
 
@@ -364,72 +409,97 @@ export default function PptxViewer({
             )}
 
             {!loading && !error && currentSlide && (
-              <div className="w-full max-w-4xl aspect-[16/9] bg-gradient-to-br from-slate-900 via-slate-900/95 to-slate-800 rounded-3xl border border-white/15 p-6 sm:p-10 shadow-2xl flex flex-col justify-between relative overflow-hidden select-text">
+              <div
+                className={`w-full max-w-4xl aspect-[16/9] rounded-3xl border shadow-2xl p-6 sm:p-10 flex flex-col justify-between relative overflow-hidden select-text transition-colors duration-300 ${
+                  theme === 'dark'
+                    ? 'bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 text-white border-white/15'
+                    : 'bg-white text-slate-900 border-slate-200 shadow-slate-900/10'
+                }`}
+              >
                 {/* Slide Header */}
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse" />
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-orange-400">
-                        Slide {currentSlide.number}
-                      </span>
-                    </div>
+                    <span className="px-2.5 py-1 rounded-full bg-orange-500/15 text-orange-600 dark:text-orange-400 font-bold text-[10px] uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                      Slide {currentSlide.number}
+                    </span>
                     <span className="text-[11px] text-slate-400 font-mono">
                       {currentSlideIndex + 1} / {slides.length}
                     </span>
                   </div>
 
-                  <h2 className="text-lg sm:text-2xl font-bold text-white tracking-tight leading-snug">
+                  <h2
+                    className={`text-xl sm:text-2xl font-bold tracking-tight leading-snug ${
+                      theme === 'dark' ? 'text-white' : 'text-slate-900'
+                    }`}
+                  >
                     {currentSlide.title}
                   </h2>
                 </div>
 
-                {/* Slide Content Area with Points & Images */}
-                <div className="flex-1 my-3 sm:my-5 overflow-y-auto space-y-3 pr-2">
-                  {/* Embedded slide images */}
+                {/* Content Section: Text & Diagrams */}
+                <div className="flex-1 my-3 sm:my-5 overflow-y-auto pr-2 grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+                  {/* Points column */}
+                  <div
+                    className={`space-y-3 ${
+                      currentSlide.images.length > 0 ? 'md:col-span-7' : 'md:col-span-12'
+                    }`}
+                  >
+                    {currentSlide.points.length > 0 ? (
+                      currentSlide.points.map((pt, pIdx) => (
+                        <div
+                          key={pIdx}
+                          className={`p-3 rounded-2xl flex items-start gap-3 border transition ${
+                            theme === 'dark'
+                              ? 'bg-white/5 border-white/5 text-slate-200'
+                              : 'bg-slate-50 border-slate-200/80 text-slate-800'
+                          }`}
+                        >
+                          <span className="w-2 h-2 rounded-full bg-orange-500 mt-1.5 shrink-0" />
+                          <p className="text-xs sm:text-sm leading-relaxed font-normal">{pt}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-slate-400 italic pt-2">
+                        {currentSlide.images.length > 0 ? 'Diagram slide.' : 'Title / Section slide.'}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Diagrams / Images Column */}
                   {currentSlide.images.length > 0 && (
-                    <div className="flex flex-wrap gap-3 my-2">
+                    <div className="md:col-span-5 flex flex-col gap-2">
                       {currentSlide.images.map((imgSrc, iIdx) => (
                         <div
                           key={iIdx}
-                          className="max-h-48 rounded-xl overflow-hidden border border-white/10 bg-black/40 shadow-md"
+                          className="rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 bg-black/10 dark:bg-black/40 shadow-md p-1"
                         >
                           <img
                             src={imgSrc}
-                            alt={`Slide ${currentSlide.number} diagram ${iIdx + 1}`}
-                            className="max-h-48 max-w-full object-contain"
+                            alt={`Slide diagram`}
+                            className="max-h-52 w-full object-contain rounded-xl"
                           />
                         </div>
                       ))}
                     </div>
                   )}
-
-                  {/* Bullet points */}
-                  {currentSlide.points.length > 0 ? (
-                    currentSlide.points.map((pt, pIdx) => (
-                      <div key={pIdx} className="flex items-start gap-3">
-                        <span className="w-2 h-2 rounded-full bg-orange-400 mt-2 shrink-0" />
-                        <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-normal">
-                          {pt}
-                        </p>
-                      </div>
-                    ))
-                  ) : currentSlide.images.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic pt-2">
-                      Cover or graphic slide.
-                    </p>
-                  ) : null}
                 </div>
 
                 {/* Slide Footer */}
-                <div className="flex items-center justify-between pt-3 border-t border-white/10 text-[10px] text-slate-400">
-                  <span>NOOR DRIVE Cloud Presentation</span>
+                <div
+                  className={`flex items-center justify-between pt-3 border-t text-[10px] ${
+                    theme === 'dark'
+                      ? 'border-white/10 text-slate-400'
+                      : 'border-slate-100 text-slate-500'
+                  }`}
+                >
+                  <span className="font-semibold tracking-wider uppercase">NOOR DRIVE</span>
                   <span>Use &larr; &rarr; keys to switch slides</span>
                 </div>
               </div>
             )}
 
-            {/* Navigation Controls Bar */}
+            {/* Bottom Controls */}
             {!loading && !error && slides.length > 1 && (
               <div className="flex items-center gap-3 mt-4 text-white">
                 <button
@@ -458,16 +528,16 @@ export default function PptxViewer({
           </div>
         )}
 
-        {/* Scroll Mode: Stacked PDF-style Multi-Page Slide Document */}
+        {/* Scroll Mode: Stacked PDF Slide Pages */}
         {viewMode === 'scroll' && (
-          <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 flex flex-col items-center">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 flex flex-col items-center bg-slate-900/60">
             {slides.map((slide) => (
               <div
                 key={slide.number}
-                className="w-full max-w-4xl bg-white text-slate-900 rounded-3xl shadow-xl p-6 sm:p-10 border border-slate-200 space-y-4"
+                className="w-full max-w-4xl bg-white text-slate-900 rounded-3xl shadow-2xl p-6 sm:p-10 border border-slate-200 space-y-4"
               >
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <span className="px-2.5 py-1 rounded-md bg-orange-100 text-orange-700 text-xs font-bold uppercase tracking-wider">
+                  <span className="px-3 py-1 rounded-full bg-orange-100 text-orange-700 text-xs font-bold uppercase tracking-wider">
                     Slide {slide.number}
                   </span>
                   <span className="text-xs text-slate-400 font-mono">
@@ -475,36 +545,43 @@ export default function PptxViewer({
                   </span>
                 </div>
 
-                <h3 className="text-lg sm:text-xl font-bold text-slate-900 leading-snug">
+                <h3 className="text-lg sm:text-2xl font-bold text-slate-900 leading-snug">
                   {slide.title}
                 </h3>
 
-                {slide.images.length > 0 && (
-                  <div className="flex flex-wrap gap-3 my-2">
-                    {slide.images.map((imgSrc, iIdx) => (
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+                  <div
+                    className={`space-y-3 ${
+                      slide.images.length > 0 ? 'md:col-span-7' : 'md:col-span-12'
+                    }`}
+                  >
+                    {slide.points.map((pt, pIdx) => (
                       <div
-                        key={iIdx}
-                        className="max-h-60 rounded-xl overflow-hidden border border-slate-200 bg-slate-50"
+                        key={pIdx}
+                        className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-start gap-3"
                       >
-                        <img
-                          src={imgSrc}
-                          alt={`Slide ${slide.number} diagram`}
-                          className="max-h-60 max-w-full object-contain"
-                        />
+                        <span className="w-2 h-2 rounded-full bg-orange-500 mt-2 shrink-0" />
+                        <p className="text-xs sm:text-sm text-slate-800 leading-relaxed">{pt}</p>
                       </div>
                     ))}
                   </div>
-                )}
 
-                <div className="space-y-2.5">
-                  {slide.points.map((pt, pIdx) => (
-                    <div key={pIdx} className="flex items-start gap-3">
-                      <span className="w-2 h-2 rounded-full bg-orange-500 mt-2 shrink-0" />
-                      <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-normal">
-                        {pt}
-                      </p>
+                  {slide.images.length > 0 && (
+                    <div className="md:col-span-5 flex flex-col gap-2">
+                      {slide.images.map((imgSrc, iIdx) => (
+                        <div
+                          key={iIdx}
+                          className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 p-1"
+                        >
+                          <img
+                            src={imgSrc}
+                            alt="Slide diagram"
+                            className="max-h-56 w-full object-contain rounded-xl"
+                          />
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             ))}

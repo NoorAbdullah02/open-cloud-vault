@@ -3042,7 +3042,11 @@ function DriveDashboardContent() {
             ) : previewModal.file.mimeType.startsWith('audio/') ? (
               <audio src={previewModal.url} controls className="w-full max-w-md" />
             ) : previewModal.file.mimeType.includes('pdf') ? (
-              <PdfViewer url={previewModal.url} />
+              <PdfViewer
+                url={previewModal.url}
+                fileName={previewModal.file.name}
+                onDownload={() => handleDownload(previewModal.file)}
+              />
             ) : previewModal.file.extension === 'docx' ||
               previewModal.file.mimeType.includes('wordprocessingml') ? (
               <DocxViewer
@@ -3055,6 +3059,8 @@ function DriveDashboardContent() {
               <PptxViewer
                 url={previewModal.url}
                 fileName={previewModal.file.name}
+                fileId={previewModal.file.id}
+                accessToken={getStoredTokens()?.accessToken || undefined}
                 onDownloadOriginal={() => handleDownload(previewModal.file)}
               />
             ) : previewModal.textContent !== undefined ? (
