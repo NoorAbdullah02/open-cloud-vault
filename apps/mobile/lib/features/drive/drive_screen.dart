@@ -1059,21 +1059,69 @@ class _DriveScreenState extends State<DriveScreen> {
                                         borderRadius: BorderRadius.circular(16),
                                         side: const BorderSide(color: Color(0xFFE2E8F0)),
                                       ),
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(12),
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            const Icon(Icons.folder, size: 40, color: Color(0xFFF59E0B)),
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              folder['name'],
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(fontWeight: FontWeight.w600),
+                                      child: Stack(
+                                        children: [
+                                          Center(
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(12),
+                                              child: Column(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  const Icon(Icons.folder, size: 42, color: Color(0xFFF59E0B)),
+                                                  const SizedBox(height: 8),
+                                                  Text(
+                                                    folder['name'],
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                    style: const TextStyle(fontWeight: FontWeight.w600),
+                                                  ),
+                                                ],
+                                              ),
                                             ),
-                                          ],
-                                        ),
+                                          ),
+                                          Positioned(
+                                            top: 2,
+                                            right: 2,
+                                            child: PopupMenuButton<String>(
+                                              icon: const Icon(Icons.more_vert, size: 18, color: Color(0xFF64748B)),
+                                              onSelected: (action) {
+                                                if (action == 'download') _downloadFolderZip(folder);
+                                                if (action == 'share') _openShareDialog('folder', folder['id'], folder['name']);
+                                                if (action == 'rename') _renameItem('folder', folder['id'], folder['name']);
+                                                if (action == 'star') _toggleStar('folder', folder['id']);
+                                                if (action == 'trash') {
+                                                  _confirmAction(
+                                                    title: 'Move to Trash?',
+                                                    message: 'Move "${folder['name']}" to Trash?',
+                                                    confirmText: 'Move to Trash',
+                                                    onConfirm: () => _trashItem('folder', folder['id']),
+                                                  );
+                                                }
+                                                if (action == 'restore') _restoreItem('folder', folder['id']);
+                                                if (action == 'delete') {
+                                                  _confirmAction(
+                                                    title: 'Delete Forever?',
+                                                    message: 'Permanently delete "${folder['name']}"?',
+                                                    confirmText: 'Delete',
+                                                    onConfirm: () => _permanentDelete('folder', folder['id']),
+                                                  );
+                                                }
+                                              },
+                                              itemBuilder: (_) => _view == 'trash'
+                                                  ? const [
+                                                      PopupMenuItem(value: 'restore', child: Text('Restore')),
+                                                      PopupMenuItem(value: 'delete', child: Text('Delete Forever')),
+                                                    ]
+                                                  : const [
+                                                      PopupMenuItem(value: 'download', child: Text('Download (.zip)')),
+                                                      PopupMenuItem(value: 'share', child: Text('Share')),
+                                                      PopupMenuItem(value: 'rename', child: Text('Rename')),
+                                                      PopupMenuItem(value: 'star', child: Text('Star / Unstar')),
+                                                      PopupMenuItem(value: 'trash', child: Text('Move to Trash')),
+                                                    ],
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   );
@@ -1088,25 +1136,73 @@ class _DriveScreenState extends State<DriveScreen> {
                                       borderRadius: BorderRadius.circular(16),
                                       side: const BorderSide(color: Color(0xFFE2E8F0)),
                                     ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(12),
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          const Icon(Icons.insert_drive_file, size: 36, color: Color(0xFF4F46E5)),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            file['name'],
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                    child: Stack(
+                                      children: [
+                                        Center(
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(12),
+                                            child: Column(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Icon(Icons.insert_drive_file, size: 38, color: _accentColor),
+                                                const SizedBox(height: 8),
+                                                Text(
+                                                  file['name'],
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                                ),
+                                                Text(
+                                                  _formatBytes(file['sizeBytes']),
+                                                  style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                          Text(
-                                            _formatBytes(file['sizeBytes']),
-                                            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                                        ),
+                                        Positioned(
+                                          top: 2,
+                                          right: 2,
+                                          child: PopupMenuButton<String>(
+                                            icon: const Icon(Icons.more_vert, size: 18, color: Color(0xFF64748B)),
+                                            onSelected: (action) {
+                                              if (action == 'download') _downloadAndOpen(file);
+                                              if (action == 'share') _openShareDialog('file', file['id'], file['name']);
+                                              if (action == 'rename') _renameItem('file', file['id'], file['name']);
+                                              if (action == 'star') _toggleStar('file', file['id']);
+                                              if (action == 'trash') {
+                                                _confirmAction(
+                                                  title: 'Move to Trash?',
+                                                  message: 'Move "${file['name']}" to Trash?',
+                                                  confirmText: 'Move to Trash',
+                                                  onConfirm: () => _trashItem('file', file['id']),
+                                                );
+                                              }
+                                              if (action == 'restore') _restoreItem('file', file['id']);
+                                              if (action == 'delete') {
+                                                _confirmAction(
+                                                  title: 'Delete Forever?',
+                                                  message: 'Permanently delete "${file['name']}"?',
+                                                  confirmText: 'Delete',
+                                                  onConfirm: () => _permanentDelete('file', file['id']),
+                                                );
+                                              }
+                                            },
+                                            itemBuilder: (_) => _view == 'trash'
+                                                ? const [
+                                                    PopupMenuItem(value: 'restore', child: Text('Restore')),
+                                                    PopupMenuItem(value: 'delete', child: Text('Delete Forever')),
+                                                  ]
+                                                : const [
+                                                    PopupMenuItem(value: 'download', child: Text('Download & Open')),
+                                                    PopupMenuItem(value: 'share', child: Text('Share')),
+                                                    PopupMenuItem(value: 'rename', child: Text('Rename')),
+                                                    PopupMenuItem(value: 'star', child: Text('Star / Unstar')),
+                                                    PopupMenuItem(value: 'trash', child: Text('Move to Trash')),
+                                                  ],
                                           ),
-                                        ],
-                                      ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 );
