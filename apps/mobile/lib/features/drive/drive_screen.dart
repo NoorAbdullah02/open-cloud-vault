@@ -23,7 +23,7 @@ class DriveScreen extends StatefulWidget {
   State<DriveScreen> createState() => _DriveScreenState();
 }
 
-class _DriveScreenState extends State<DriveScreen> {
+class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
   String _view = 'my-drive';
   String? _folderId;
   String _search = '';
@@ -47,15 +47,31 @@ class _DriveScreenState extends State<DriveScreen> {
   final Map<String, Map<String, List<dynamic>>> _driveCache = {};
   final Set<String> _selectedKeys = {};
   Timer? _searchDebounce;
+  Timer? _realtimeSyncTimer;
   String? _authToken;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadAccentColor();
     _loadUser();
     _loadDrive();
     _checkForAppUpdate(silent: true);
+
+    // Real-Time Sync Engine: 4s background refresh
+    _realtimeSyncTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (mounted && _uploadingName == null) {
+        _loadDrive(silent: true);
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadDrive(silent: true);
+    }
   }
 
   void _toggleSelect(String type, String id) {
@@ -243,6 +259,8 @@ class _DriveScreenState extends State<DriveScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _realtimeSyncTimer?.cancel();
     _searchDebounce?.cancel();
     super.dispose();
   }
@@ -708,11 +726,14 @@ class _DriveScreenState extends State<DriveScreen> {
                 const Text('16:9 HD', style: TextStyle(fontSize: 8, color: Colors.white38, fontWeight: FontWeight.bold)),
               ],
             ),
-            Text(
-              title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white, height: 1.15),
+            SizedBox(
+              width: double.infinity,
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white, height: 1.15),
+              ),
             ),
             Row(
               children: [
@@ -771,11 +792,14 @@ class _DriveScreenState extends State<DriveScreen> {
                 const Text('Page 1', style: TextStyle(fontSize: 8, color: Color(0xFF94A3B8))),
               ],
             ),
-            Text(
-              title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF1E293B), height: 1.15),
+            SizedBox(
+              width: double.infinity,
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF1E293B), height: 1.15),
+              ),
             ),
             Column(
               children: [
@@ -827,11 +851,14 @@ class _DriveScreenState extends State<DriveScreen> {
                 const Text('Vector', style: TextStyle(fontSize: 8, color: Color(0xFF94A3B8))),
               ],
             ),
-            Text(
-              title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF881337), height: 1.15),
+            SizedBox(
+              width: double.infinity,
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF881337), height: 1.15),
+              ),
             ),
             Column(
               children: [
@@ -883,11 +910,14 @@ class _DriveScreenState extends State<DriveScreen> {
                 const Text('Grid', style: TextStyle(fontSize: 8, color: Color(0xFF94A3B8))),
               ],
             ),
-            Text(
-              title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF064E3B), height: 1.15),
+            SizedBox(
+              width: double.infinity,
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF064E3B), height: 1.15),
+              ),
             ),
             Row(
               children: [
@@ -1232,6 +1262,29 @@ class _DriveScreenState extends State<DriveScreen> {
       await OpenFilex.open(savePath);
     } catch (e) {
       _showSnack('Download failed: $e', isError: true);
+    }
+  }
+
+  Future<void> _printFile(dynamic file) async {
+    try {
+      _showSnack('Preparing "${file['name']}" for printing...');
+      final dir = await getTemporaryDirectory();
+      final savePath = '${dir.path}/${file['name']}';
+      final token = await apiClient.storage.read(key: 'access_token');
+      await apiClient.dio.download(
+        '/drive/files/${file['id']}/download',
+        savePath,
+        options: Options(
+          headers: token != null ? {'Authorization': 'Bearer $token'} : null,
+        ),
+      );
+      await Share.shareXFiles(
+        [XFile(savePath)],
+        subject: 'Print: ${file['name']}',
+        text: 'Print file: ${file['name']}',
+      );
+    } catch (e) {
+      _showSnack('Print preparation failed: $e', isError: true);
     }
   }
 
@@ -2055,11 +2108,15 @@ class _DriveScreenState extends State<DriveScreen> {
                                                 children: [
                                                   const Icon(Icons.folder, size: 42, color: Color(0xFFF59E0B)),
                                                   const SizedBox(height: 8),
-                                                  Text(
-                                                    folder['name'],
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
-                                                    style: const TextStyle(fontWeight: FontWeight.w600),
+                                                  SizedBox(
+                                                    width: double.infinity,
+                                                    child: Text(
+                                                      folder['name'],
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      textAlign: TextAlign.center,
+                                                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                                                    ),
                                                   ),
                                                 ],
                                               ),
@@ -2164,11 +2221,14 @@ class _DriveScreenState extends State<DriveScreen> {
                                                   crossAxisAlignment: CrossAxisAlignment.start,
                                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                   children: [
-                                                    Text(
-                                                      file['name'],
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
-                                                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                                                    SizedBox(
+                                                      width: double.infinity,
+                                                      child: Text(
+                                                        file['name'],
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                                                      ),
                                                     ),
                                                     Row(
                                                       children: [
@@ -2206,6 +2266,7 @@ class _DriveScreenState extends State<DriveScreen> {
                                             onSelected: (action) {
                                               if (action == 'download') _downloadAndOpen(file);
                                               if (action == 'share') _openShareDialog('file', file['id'], file['name']);
+                                              if (action == 'print') _printFile(file);
                                               if (action == 'rename') _renameItem('file', file['id'], file['name']);
                                               if (action == 'star') _toggleStar('file', file['id']);
                                               if (action == 'trash') {
@@ -2234,6 +2295,16 @@ class _DriveScreenState extends State<DriveScreen> {
                                                 : const [
                                                     PopupMenuItem(value: 'download', child: Text('Download & Open')),
                                                     PopupMenuItem(value: 'share', child: Text('Share')),
+                                                    PopupMenuItem(
+                                                      value: 'print',
+                                                      child: Row(
+                                                        children: const [
+                                                          Icon(Icons.print, size: 16, color: Color(0xFF64748B)),
+                                                          SizedBox(width: 8),
+                                                          Text('Print File'),
+                                                        ],
+                                                      ),
+                                                    ),
                                                     PopupMenuItem(value: 'rename', child: Text('Rename')),
                                                     PopupMenuItem(value: 'star', child: Text('Star / Unstar')),
                                                     PopupMenuItem(value: 'trash', child: Text('Move to Trash')),
@@ -2398,6 +2469,7 @@ class _DriveScreenState extends State<DriveScreen> {
                                         onSelected: (action) {
                                           if (action == 'download') _downloadAndOpen(file);
                                           if (action == 'share') _openShareDialog('file', file['id'], file['name']);
+                                          if (action == 'print') _printFile(file);
                                           if (action == 'rename') _renameItem('file', file['id'], file['name']);
                                           if (action == 'star') _toggleStar('file', file['id']);
                                           if (action == 'trash') {
@@ -2426,6 +2498,16 @@ class _DriveScreenState extends State<DriveScreen> {
                                             : const [
                                                 PopupMenuItem(value: 'download', child: Text('Download & Open')),
                                                 PopupMenuItem(value: 'share', child: Text('Share')),
+                                                PopupMenuItem(
+                                                  value: 'print',
+                                                  child: Row(
+                                                    children: const [
+                                                      Icon(Icons.print, size: 16, color: Color(0xFF64748B)),
+                                                      SizedBox(width: 8),
+                                                      Text('Print File'),
+                                                    ],
+                                                  ),
+                                                ),
                                                 PopupMenuItem(value: 'rename', child: Text('Rename')),
                                                 PopupMenuItem(value: 'star', child: Text('Star / Unstar')),
                                                 PopupMenuItem(value: 'trash', child: Text('Move to Trash')),

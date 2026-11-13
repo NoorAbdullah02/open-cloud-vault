@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { FileText, Download, ExternalLink, Loader2 } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { FileText, Download, ExternalLink, Loader2, Printer } from 'lucide-react';
 
 export default function PdfViewer({
   url,
@@ -13,6 +13,18 @@ export default function PdfViewer({
   onDownload?: () => void;
 }) {
   const [loading, setLoading] = useState(true);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const handlePrint = () => {
+    try {
+      if (iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.focus();
+        iframeRef.current.contentWindow.print();
+        return;
+      }
+    } catch {}
+    window.open(url, '_blank');
+  };
 
   return (
     <div className="w-full h-full flex flex-col bg-slate-950 overflow-hidden">
@@ -41,6 +53,14 @@ export default function PdfViewer({
             <ExternalLink className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">New Tab</span>
           </a>
+          <button
+            onClick={handlePrint}
+            className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition text-xs flex items-center gap-1.5"
+            title="Print PDF"
+          >
+            <Printer className="w-3.5 h-3.5 text-rose-300" />
+            <span className="hidden sm:inline">Print</span>
+          </button>
           {onDownload && (
             <button
               onClick={onDownload}
@@ -63,6 +83,7 @@ export default function PdfViewer({
           </div>
         )}
         <iframe
+          ref={iframeRef}
           src={`${url}#toolbar=1&navpanes=1`}
           className="w-full h-full border-none bg-white"
           onLoad={() => setLoading(false)}

@@ -54,6 +54,7 @@ import {
   Mail,
   Play,
   QrCode,
+  Printer,
 } from 'lucide-react';
 import {
   apiFetch,
@@ -419,8 +420,8 @@ function FileThumbnail({
           </span>
           <span className="text-[9px] text-slate-400 font-mono font-medium">16:9 HD</span>
         </div>
-        <div className="my-auto py-1">
-          <p className="text-xs font-bold text-white line-clamp-2 leading-tight">
+        <div className="my-auto py-1 min-w-0 w-full">
+          <p className="text-xs font-bold text-white truncate block w-full leading-tight">
             {title}
           </p>
           {docPreview?.snippet ? (
@@ -459,8 +460,8 @@ function FileThumbnail({
           </span>
           <span className="text-[9px] text-slate-400 font-mono">Page 1</span>
         </div>
-        <div className="my-auto py-1">
-          <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 leading-tight">
+        <div className="my-auto py-1 min-w-0 w-full">
+          <p className="text-xs font-bold text-slate-900 dark:text-white truncate block w-full leading-tight">
             {title}
           </p>
           {docPreview?.snippet ? (
@@ -494,8 +495,8 @@ function FileThumbnail({
           </span>
           <span className="text-[9px] text-slate-400 font-mono">Vector • A4</span>
         </div>
-        <div className="my-auto py-1">
-          <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 leading-tight">
+        <div className="my-auto py-1 min-w-0 w-full">
+          <p className="text-xs font-bold text-slate-900 dark:text-white truncate block w-full leading-tight">
             {title}
           </p>
           <div className="space-y-1.5 mt-1.5 opacity-60">
@@ -523,8 +524,8 @@ function FileThumbnail({
           </span>
           <span className="text-[9px] text-slate-400 font-mono">XLSX</span>
         </div>
-        <div className="my-auto py-1">
-          <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 leading-tight">
+        <div className="my-auto py-1 min-w-0 w-full">
+          <p className="text-xs font-bold text-slate-900 dark:text-white truncate block w-full leading-tight">
             {title}
           </p>
           <div className="grid grid-cols-3 gap-1 mt-1.5 opacity-65">
@@ -837,6 +838,46 @@ function DriveDashboardContent() {
   useEffect(() => {
     setSelectedItems([]);
     loadDrive();
+  }, [loadDrive]);
+
+  // Real-Time Sync Engine: 4s silent background polling + focus refresh + cross-tab BroadcastChannel
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadDrive(true);
+      }
+    }, 4000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadDrive(true);
+      }
+    };
+    const onFocus = () => {
+      loadDrive(true);
+    };
+
+    window.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', onFocus);
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        bc = new BroadcastChannel('noor_drive_sync');
+        bc.onmessage = (event) => {
+          if (event.data?.type === 'SYNC') {
+            loadDrive(true);
+          }
+        };
+      }
+    } catch {}
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', onFocus);
+      if (bc) bc.close();
+    };
   }, [loadDrive]);
 
   // Global Window Drag & Drop Listeners (Robust across all OS: Ubuntu, Linux, Windows, macOS)
@@ -1286,6 +1327,110 @@ function DriveDashboardContent() {
       URL.revokeObjectURL(url);
     } catch {
       showToast('Download failed', 'error');
+    }
+  };
+
+  const handlePrint = async (file: any, existingUrl?: string, textContent?: string) => {
+    try {
+      showToast(`Preparing "${file.name}" for print...`);
+      const url = existingUrl || (await fetchAuthorizedBlobUrl(file.id));
+      const mime = (file.mimeType || '').toLowerCase();
+      const ext = (file.extension || file.name.split('.').pop() || '').toLowerCase();
+
+      // 1. PDF printing via invisible iframe
+      if (mime.includes('pdf') || ext === 'pdf') {
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        iframe.src = url;
+        document.body.appendChild(iframe);
+        iframe.onload = () => {
+          try {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+          } catch {
+            window.open(url, '_blank');
+          }
+          setTimeout(() => {
+            try { document.body.removeChild(iframe); } catch {}
+          }, 60000);
+        };
+        return;
+      }
+
+      // 2. Image printing via dedicated print window
+      if (mime.startsWith('image/')) {
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+          printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>Print - ${file.name}</title>
+                <style>
+                  body { margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #fff; }
+                  img { max-width: 100%; max-height: 100vh; object-fit: contain; }
+                  @media print { body { margin: 0; } img { max-width: 100%; height: auto; } }
+                </style>
+              </head>
+              <body>
+                <img src="${url}" onload="window.focus(); window.print(); window.close();" />
+              </body>
+            </html>
+          `);
+          printWindow.document.close();
+        }
+        return;
+      }
+
+      // 3. Text / Code printing
+      if (textContent || mime.startsWith('text/') || ['txt', 'md', 'json', 'csv', 'log', 'ts', 'js', 'py', 'html', 'css'].includes(ext)) {
+        let content = textContent;
+        if (!content) {
+          try {
+            const res = await fetch(url);
+            if (res.ok) content = await res.text();
+          } catch {}
+        }
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+          printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>Print - ${file.name}</title>
+                <style>
+                  body { font-family: monospace; padding: 24px; font-size: 13px; line-height: 1.5; color: #1e293b; background: #fff; }
+                  h1 { font-family: sans-serif; font-size: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px; }
+                  pre { white-space: pre-wrap; word-break: break-word; font-family: inherit; }
+                  @media print { body { padding: 0; } }
+                </style>
+              </head>
+              <body>
+                <h1>${file.name}</h1>
+                <pre>${(content || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+                <script>window.onload = function() { window.focus(); window.print(); window.close(); };</script>
+              </body>
+            </html>
+          `);
+          printWindow.document.close();
+        }
+        return;
+      }
+
+      // 4. Fallback for other documents
+      const printWindow = window.open(url, '_blank');
+      if (printWindow) {
+        printWindow.onload = () => {
+          try { printWindow.print(); } catch {}
+        };
+      }
+    } catch {
+      showToast('Could not print file', 'error');
     }
   };
 
@@ -2612,11 +2757,11 @@ function DriveDashboardContent() {
                           <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center shrink-0">
                             <FolderIcon className="w-5 h-5 text-amber-500 fill-amber-500/20" />
                           </div>
-                          <span className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">
+                          <span className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate block min-w-0 flex-1">
                             {folder.name}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition">
+                        <div className="hidden sm:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -2759,7 +2904,7 @@ function DriveDashboardContent() {
                               );
                               e.dataTransfer.effectAllowed = 'move';
                             }}
-                            className={`group rounded-2xl bg-white dark:bg-slate-900 border hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:shadow-lg hover:-translate-y-0.5 overflow-hidden flex flex-col justify-between transition-all ${
+                            className={`group rounded-2xl bg-white dark:bg-slate-900 border hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:shadow-lg hover:-translate-y-0.5 overflow-hidden flex flex-col justify-between transition-all min-w-0 ${
                               isItemSelected('file', file.id)
                                 ? 'border-indigo-500 ring-2 ring-indigo-500/60'
                                 : 'border-slate-200/80 dark:border-slate-800'
@@ -2822,11 +2967,11 @@ function DriveDashboardContent() {
 
                             <div
                               onClick={() => handlePreview(file)}
-                              className="p-3.5 flex-1 flex flex-col justify-between cursor-pointer"
+                              className="p-3.5 flex-1 flex flex-col justify-between cursor-pointer min-w-0"
                             >
-                              <div className="mb-3">
+                              <div className="mb-3 min-w-0">
                                 <p
-                                  className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate"
+                                  className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate block w-full"
                                   title={file.name}
                                 >
                                   {file.name}
@@ -3176,6 +3321,12 @@ function DriveDashboardContent() {
                         >
                           <Download className="w-4 h-4" /> Download
                         </button>
+                        <button
+                          onClick={() => handlePrint(activeDetailItem.item)}
+                          className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold flex items-center justify-center gap-2 transition"
+                        >
+                          <Printer className="w-4 h-4 text-emerald-500" /> Print File
+                        </button>
                       </>
                     ) : (
                       <>
@@ -3360,6 +3511,16 @@ function DriveDashboardContent() {
               {previewModal.file.name}
             </span>
             <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() =>
+                  handlePrint(previewModal.file, previewModal.url, previewModal.textContent)
+                }
+                className="px-3 sm:px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-xs sm:text-sm font-medium flex items-center gap-1.5"
+                title="Print File"
+              >
+                <Printer className="w-4 h-4 text-emerald-400" />
+                <span className="hidden sm:inline">Print</span>
+              </button>
               <button
                 onClick={() => handleDownload(previewModal.file)}
                 className="px-3 sm:px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-xs sm:text-sm font-medium flex items-center gap-1.5"
@@ -4336,6 +4497,16 @@ function DriveDashboardContent() {
                 >
                   <Download className="w-4 h-4 text-sky-500" />
                   <span>Download</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setContextMenu(null);
+                    handlePrint(file);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
+                >
+                  <Printer className="w-4 h-4 text-emerald-500" />
+                  <span>Print</span>
                 </button>
                 <button
                   onClick={() => {
