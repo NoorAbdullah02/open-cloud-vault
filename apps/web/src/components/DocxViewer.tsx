@@ -188,7 +188,6 @@ export default function DocxViewer({
               onLoad={() => { setGoogleLoading(false); setGoogleError(false); }}
               onError={() => { setGoogleLoading(false); setGoogleError(true); }}
               title="Word Document Preview"
-              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
             />
           )}
         </div>

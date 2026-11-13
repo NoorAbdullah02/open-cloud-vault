@@ -266,7 +266,6 @@ export default function PptxViewer({
               onLoad={() => { setGoogleLoading(false); setGoogleError(false); }}
               onError={() => { setGoogleLoading(false); setGoogleError(true); }}
               title="PowerPoint Preview"
-              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
             />
           )}
         </div>
