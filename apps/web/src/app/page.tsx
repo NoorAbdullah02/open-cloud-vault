@@ -54,6 +54,7 @@ import {
   CheckSquare,
   MinusSquare,
   Square,
+  MoreVertical,
   MessageCircle,
   Mail,
   Play,
@@ -238,6 +239,58 @@ function cleanTitleFromFileName(name?: string): string {
     .split(' ')
     .map((w) => (w.length > 0 ? w[0].toUpperCase() + w.slice(1) : ''))
     .join(' ');
+}
+
+function playUploadSuccessChime() {
+  try {
+    if (typeof window === 'undefined') return;
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    const now = ctx.currentTime;
+
+    // Tone 1: C5 (523.25 Hz)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(523.25, now);
+    gain1.gain.setValueAtTime(0.12, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.3);
+
+    // Tone 2: G5 (783.99 Hz) for an uplifting completion chime
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(783.99, now + 0.09);
+    gain2.gain.setValueAtTime(0.14, now + 0.09);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.09);
+    osc2.stop(now + 0.45);
+  } catch {}
+}
+
+function notifyUploadComplete(fileName: string, isDeduplicated?: boolean) {
+  playUploadSuccessChime();
+  if (typeof window !== 'undefined' && 'Notification' in window) {
+    if (Notification.permission === 'granted') {
+      try {
+        new Notification('NOOR DRIVE', {
+          body: isDeduplicated
+            ? `⚡ Instant upload: "${fileName}" (deduplicated)!`
+            : `✅ Upload complete: "${fileName}" saved to NOOR DRIVE!`,
+          icon: '/favicon.ico',
+        });
+      } catch {}
+    } else if (Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }
 }
 
 function FileThumbnail({
@@ -1245,8 +1298,9 @@ function DriveDashboardContent() {
           if (uploadRes?.isDeduplicated) {
             showToast(`⚡ Instant 0ms upload: "${file.name}" deduplicated via SHA-256 (0 bytes transferred)!`);
           } else {
-            showToast(`Uploaded "${file.name}" to NOOR DRIVE`);
+            showToast(`✅ Upload complete: "${file.name}" saved to NOOR DRIVE`);
           }
+          notifyUploadComplete(file.name, uploadRes?.isDeduplicated);
         } catch (err: any) {
           console.error('[NOOR DRIVE] Upload error for file', file.name, err);
           if (err.message === 'Upload cancelled') {
@@ -1269,6 +1323,10 @@ function DriveDashboardContent() {
     async (fileList: FileList | File[]) => {
       const arr = Array.from(fileList);
       if (arr.length === 0) return;
+
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
 
       const hasFolder = arr.some(
         (f) => Boolean((f as any)._relativePath || (f as any).webkitRelativePath),
@@ -3052,7 +3110,7 @@ function DriveDashboardContent() {
                             } catch {}
                           }
                         }}
-                        className={`group p-3.5 rounded-2xl bg-white dark:bg-slate-900 border hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:shadow-md hover:-translate-y-0.5 flex items-center justify-between gap-2 cursor-pointer transition-all ${
+                        className={`group p-3 rounded-2xl bg-white dark:bg-slate-900 border hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:shadow-md hover:-translate-y-0.5 flex items-center justify-between gap-2.5 cursor-pointer transition-all min-w-0 ${
                           dragTargetFolderId === folder.id
                             ? 'border-indigo-500 ring-2 ring-indigo-500 bg-indigo-50/60 dark:bg-indigo-500/10'
                             : isItemSelected('folder', folder.id)
@@ -3085,106 +3143,57 @@ function DriveDashboardContent() {
                           }`}
                         />
                         <div
-                          className="flex items-center gap-3 min-w-0 flex-1"
+                          className="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden"
                           onClick={() => navigateDrive(view, folder.id)}
                         >
-                          <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center shrink-0">
-                            <FolderIcon className="w-5 h-5 text-amber-500 fill-amber-500/20" />
+                          <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center shrink-0 relative">
+                            <FolderIcon className="w-4.5 h-4.5 text-amber-500 fill-amber-500/20" />
+                            {folder.isStarred && (
+                              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full" />
+                            )}
                           </div>
-                          <span className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate block min-w-0 flex-1">
+                          <span
+                            className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 truncate block min-w-0 flex-1"
+                            title={folder.name}
+                          >
                             {folder.name}
                           </span>
                         </div>
-                        <div className="hidden sm:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                        <div className="flex items-center gap-0.5 shrink-0">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleStar('folder', folder.id);
                             }}
-                            title="Star"
-                            className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                            title={folder.isStarred ? 'Unstar' : 'Star'}
+                            className={`p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition ${
+                              folder.isStarred
+                                ? 'text-amber-400 opacity-100'
+                                : 'text-slate-400 opacity-0 group-hover:opacity-100 hover:text-amber-500'
+                            }`}
                           >
                             <Star
                               className={`w-3.5 h-3.5 ${
-                                folder.isStarred ? 'text-amber-400 fill-amber-400' : 'text-slate-400'
+                                folder.isStarred ? 'text-amber-400 fill-amber-400' : ''
                               }`}
                             />
                           </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDownloadFolder(folder);
+                              setActiveDetailItem({ type: 'folder', item: folder });
+                              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                              setContextMenu({
+                                x: Math.min(rect.left, typeof window !== 'undefined' ? window.innerWidth - 240 : 500),
+                                y: Math.min(rect.bottom + 4, typeof window !== 'undefined' ? window.innerHeight - 300 : 500),
+                                target: { type: 'folder', item: folder },
+                              });
                             }}
-                            title="Download Folder (.zip)"
-                            className="p-1 rounded-lg hover:bg-sky-50 dark:hover:bg-slate-800 text-slate-400 hover:text-sky-600"
+                            title="More actions"
+                            className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition opacity-0 group-hover:opacity-100"
                           >
-                            <Download className="w-3.5 h-3.5" />
+                            <MoreVertical className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openShareModal('folder', folder.id, folder.name);
-                            }}
-                            title="Share Folder"
-                            className="p-1 rounded-lg hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-400 hover:text-indigo-600"
-                          >
-                            <Share2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setRenameModal({ type: 'folder', id: folder.id, name: folder.name });
-                            }}
-                            title="Rename"
-                            className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          {view === 'trash' ? (
-                            <>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRestore('folder', folder.id);
-                                }}
-                                title="Restore"
-                                className="p-1 rounded-lg hover:bg-emerald-50 text-emerald-600"
-                              >
-                                <RotateCcw className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setConfirmModal({
-                                    title: `Delete "${folder.name}" forever?`,
-                                    description: 'This folder will be permanently deleted and cannot be recovered.',
-                                    confirmText: 'Delete Forever',
-                                    onConfirm: () => handlePermanentDelete('folder', folder.id),
-                                  });
-                                }}
-                                title="Delete Forever"
-                                className="p-1 rounded-lg hover:bg-rose-50 text-rose-600"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setConfirmModal({
-                                  title: `Move "${folder.name}" to Trash?`,
-                                  description: 'You can restore this folder later from Trash.',
-                                  confirmText: 'Move to Trash',
-                                  onConfirm: () => handleTrash('folder', folder.id),
-                                });
-                              }}
-                              title="Move to Trash"
-                              className="p-1 rounded-lg hover:bg-rose-50 text-rose-500"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
                         </div>
                       </div>
                     ))}

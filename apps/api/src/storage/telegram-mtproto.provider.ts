@@ -48,10 +48,27 @@ export class TelegramMtprotoProvider implements IStorageProvider {
     const sessionString = process.env.TELEGRAM_SESSION_STRING || '';
 
     const client = new TelegramClient(new StringSession(sessionString), apiId, apiHash, {
-      connectionRetries: 5,
+      connectionRetries: 3,
+      timeout: 15,
+      useWSS: false,
     });
 
-    await client.connect();
+    // 15-second connect timeout to prevent indefinite hangs
+    const connectPromise = client.connect();
+    let connectTimer: NodeJS.Timeout;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      connectTimer = setTimeout(
+        () => reject(new Error('Telegram MTProto connect timed out after 15s')),
+        15000,
+      );
+    });
+
+    try {
+      await Promise.race([connectPromise, timeoutPromise]);
+    } finally {
+      clearTimeout(connectTimer!);
+    }
+
     this.client = client;
     return client;
   }
@@ -59,6 +76,9 @@ export class TelegramMtprotoProvider implements IStorageProvider {
   async putObject(input: PutObjectInput): Promise<StoredObjectResult> {
     const client = await this.getClient();
     const target = input.targetChatId || process.env.TELEGRAM_TARGET_CHANNEL || 'me';
+
+    // Timeout based on file size (minimum 35 seconds, or ~1MB/sec rate limit buffer)
+    const timeoutMs = Math.max(35000, Math.ceil(input.sizeBytes / 25000) * 1000);
 
     // 1. Single Part Upload (if file is <= 1.8 GB)
     if (input.sizeBytes <= TELEGRAM_SINGLE_PART_BYTES) {
@@ -68,10 +88,21 @@ export class TelegramMtprotoProvider implements IStorageProvider {
         ? new CustomFile(input.fileName, input.sizeBytes, '', input.buffer)
         : input.tempFilePath!;
 
-      const sentMessage = await client.sendFile(target, {
+      let sendTimer: NodeJS.Timeout;
+      const sendPromise = client.sendFile(target, {
         file: filePayload,
         forceDocument: true,
         caption: `NoorDrive | ${input.fileName} | sha256:${input.checksumSha256.slice(0, 16)}`,
+      });
+      const timeoutSend = new Promise<never>((_, reject) => {
+        sendTimer = setTimeout(
+          () => reject(new Error(`Telegram sendFile timed out after ${Math.round(timeoutMs / 1000)}s`)),
+          timeoutMs,
+        );
+      });
+
+      const sentMessage: any = await Promise.race([sendPromise, timeoutSend]).finally(() => {
+        clearTimeout(sendTimer!);
       });
 
       const msgId = sentMessage.id;

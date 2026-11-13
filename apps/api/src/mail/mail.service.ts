@@ -443,6 +443,54 @@ export class MailService {
   }
 
   /**
+   * Send instant notification when a file upload is completed
+   */
+  async sendUploadAlert(meta: {
+    email?: string;
+    fileName: string;
+    sizeBytes: number | bigint;
+    backend: string;
+    folderName?: string;
+    isDeduplicated?: boolean;
+    ipAddress?: string;
+  }) {
+    setImmediate(async () => {
+      const b = typeof meta.sizeBytes === 'bigint' ? Number(meta.sizeBytes) : meta.sizeBytes;
+      let sizeStr = '0 B';
+      if (b && b > 0) {
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(b) / Math.log(k));
+        sizeStr = `${(b / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
+      }
+
+      const isTg = meta.backend === 'TELEGRAM_MTPROTO';
+      const backendLabel = isTg ? 'Telegram MTProto Cloud Vault' : 'Local Vault Disk';
+      const subject = meta.isDeduplicated
+        ? `⚡ Instant Upload: "${meta.fileName}" saved to NOOR DRIVE`
+        : `☁️ File Uploaded: "${meta.fileName}" (${sizeStr}) to NOOR DRIVE`;
+
+      await this.sendMail({
+        to: meta.email,
+        subject,
+        title: 'File Upload Completed',
+        message: meta.isDeduplicated
+          ? `File "${meta.fileName}" was instantly matched via SHA-256 deduplication and added to your NOOR DRIVE vault.`
+          : `A new file "${meta.fileName}" was successfully uploaded and saved into your NOOR DRIVE vault.`,
+        metadata: {
+          FileName: meta.fileName,
+          FileSize: sizeStr,
+          StorageBackend: backendLabel,
+          Folder: meta.folderName || 'Root / Home',
+          Deduplicated: meta.isDeduplicated ? 'Yes (0 ms transfer)' : 'No (Fresh upload)',
+          IPAddress: meta.ipAddress || 'Authorized User Session',
+          Time: new Date().toLocaleString(),
+        },
+      });
+    });
+  }
+
+  /**
    * Send a security alert for suspicious activity (e.g. repeated invalid passcodes)
    */
   async sendSecurityAlert(meta: {

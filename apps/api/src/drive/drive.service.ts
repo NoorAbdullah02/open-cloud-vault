@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
@@ -17,6 +18,8 @@ import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class DriveService {
+  private readonly logger = new Logger(DriveService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
@@ -290,16 +293,37 @@ export class DriveService {
       if (existingStorageObject) {
         storageObjectId = existingStorageObject.id;
       } else {
-        const stored = await this.storage.storeFile(backend, {
-          tempFilePath: file.path,
-          buffer: file.buffer,
-          fileName: file.originalname,
-          mimeType: file.mimetype,
-          sizeBytes: file.size,
-          checksumSha256,
-          targetChatId: user.telegramChatTarget || undefined,
-        });
-        storageObjectId = stored.storageObjectId;
+        try {
+          const stored = await this.storage.storeFile(backend, {
+            tempFilePath: file.path,
+            buffer: file.buffer,
+            fileName: file.originalname,
+            mimeType: file.mimetype,
+            sizeBytes: file.size,
+            checksumSha256,
+            targetChatId: user.telegramChatTarget || undefined,
+          });
+          storageObjectId = stored.storageObjectId;
+        } catch (storeErr: any) {
+          // If Telegram upload times out or fails, automatically fallback to LOCAL_DISK
+          if (backend === StorageBackend.TELEGRAM_MTPROTO) {
+            this.logger.warn(
+              `Telegram upload failed for "${file.originalname}" (${storeErr.message}). Automatically falling back to LOCAL_DISK.`,
+            );
+            backend = StorageBackend.LOCAL_DISK;
+            const fallbackStored = await this.storage.storeFile(backend, {
+              tempFilePath: file.path,
+              buffer: file.buffer,
+              fileName: file.originalname,
+              mimeType: file.mimetype,
+              sizeBytes: file.size,
+              checksumSha256,
+            });
+            storageObjectId = fallbackStored.storageObjectId;
+          } else {
+            throw storeErr;
+          }
+        }
       }
 
       const createdFile = await this.prisma.file.create({
@@ -341,6 +365,24 @@ export class DriveService {
           details: { fileName: createdFile.name, backend },
         },
       });
+
+      // Send email alert to admin notification recipient
+      const notifyEmail = process.env.ADMIN_NOTIFY_EMAIL || process.env.SUPER_ADMIN_EMAIL || user.email;
+      if (notifyEmail) {
+        const folderName = folderId
+          ? (await this.prisma.folder.findUnique({ where: { id: folderId }, select: { name: true } }))?.name
+          : undefined;
+        this.mail
+          .sendUploadAlert({
+            email: notifyEmail,
+            fileName: createdFile.name,
+            sizeBytes: createdFile.sizeBytes,
+            backend,
+            folderName,
+            isDeduplicated: !!existingStorageObject,
+          })
+          .catch((err) => this.logger.warn(`Failed to dispatch upload alert email: ${err.message}`));
+      }
 
       return {
         ...this.serializeFile(createdFile),
