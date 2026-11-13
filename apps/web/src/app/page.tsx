@@ -3074,130 +3074,262 @@ function DriveDashboardContent() {
                       </span>
                     </button>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
-                    {sortedFolders.map((folder) => (
-                      <div
-                        key={folder.id}
-                        draggable={view !== 'trash'}
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData(
-                            'application/x-noor-item',
-                            JSON.stringify({ type: 'folder', id: folder.id }),
-                          );
-                          e.dataTransfer.effectAllowed = 'move';
-                        }}
-                        onDragOver={(e) => {
-                          if (e.dataTransfer.types.includes('application/x-noor-item')) {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (dragTargetFolderId !== folder.id) {
-                              setDragTargetFolderId(folder.id);
-                            }
-                          }
-                        }}
-                        onDragLeave={() =>
-                          setDragTargetFolderId((prev) => (prev === folder.id ? null : prev))
-                        }
-                        onDrop={(e) => {
-                          const raw = e.dataTransfer.getData('application/x-noor-item');
-                          if (raw) {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setDragTargetFolderId(null);
-                            try {
-                              const item = JSON.parse(raw);
-                              handleMoveItem(item.type, item.id, folder.id);
-                            } catch {}
-                          }
-                        }}
-                        className={`group p-3 rounded-2xl bg-white dark:bg-slate-900 border hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:shadow-md hover:-translate-y-0.5 flex items-center justify-between gap-2.5 cursor-pointer transition-all min-w-0 ${
-                          dragTargetFolderId === folder.id
-                            ? 'border-indigo-500 ring-2 ring-indigo-500 bg-indigo-50/60 dark:bg-indigo-500/10'
-                            : isItemSelected('folder', folder.id)
-                            ? 'border-indigo-500 ring-2 ring-indigo-500/60 bg-indigo-50/40 dark:bg-indigo-500/10'
-                            : 'border-slate-200/80 dark:border-slate-800'
-                        }`}
-                        onDoubleClick={() => navigateDrive(view, folder.id)}
-                        onClick={() => setActiveDetailItem({ type: 'folder', item: folder })}
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setActiveDetailItem({ type: 'folder', item: folder });
-                          setContextMenu({
-                            x: Math.min(e.clientX, typeof window !== 'undefined' ? window.innerWidth - 240 : 500),
-                            y: Math.min(e.clientY, typeof window !== 'undefined' ? window.innerHeight - 300 : 500),
-                            target: { type: 'folder', item: folder },
-                          });
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isItemSelected('folder', folder.id)}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            toggleItemSelection('folder', folder.id);
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          className={`w-4 h-4 rounded accent-indigo-600 shrink-0 cursor-pointer transition ${
-                            selectedItems.length > 0 ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'
-                          }`}
-                        />
+                  {layout === 'list' ? (
+                    <div className="space-y-1.5">
+                      {sortedFolders.map((folder) => (
                         <div
-                          className="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden"
-                          onClick={() => navigateDrive(view, folder.id)}
-                        >
-                          <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center shrink-0 relative">
-                            <FolderIcon className="w-4.5 h-4.5 text-amber-500 fill-amber-500/20" />
-                            {folder.isStarred && (
-                              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full" />
-                            )}
-                          </div>
-                          <span
-                            className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 truncate block min-w-0 flex-1"
-                            title={folder.name}
-                          >
-                            {folder.name}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-0.5 shrink-0">
-                          <button
-                            onClick={(e) => {
+                          key={folder.id}
+                          draggable={view !== 'trash'}
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData(
+                              'application/x-noor-item',
+                              JSON.stringify({ type: 'folder', id: folder.id }),
+                            );
+                            e.dataTransfer.effectAllowed = 'move';
+                          }}
+                          onDragOver={(e) => {
+                            if (e.dataTransfer.types.includes('application/x-noor-item')) {
+                              e.preventDefault();
                               e.stopPropagation();
-                              handleStar('folder', folder.id);
-                            }}
-                            title={folder.isStarred ? 'Unstar' : 'Star'}
-                            className={`p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition ${
-                              folder.isStarred
-                                ? 'text-amber-400 opacity-100'
-                                : 'text-slate-400 opacity-0 group-hover:opacity-100 hover:text-amber-500'
-                            }`}
-                          >
-                            <Star
-                              className={`w-3.5 h-3.5 ${
-                                folder.isStarred ? 'text-amber-400 fill-amber-400' : ''
+                              if (dragTargetFolderId !== folder.id) {
+                                setDragTargetFolderId(folder.id);
+                              }
+                            }
+                          }}
+                          onDragLeave={() =>
+                            setDragTargetFolderId((prev) => (prev === folder.id ? null : prev))
+                          }
+                          onDrop={(e) => {
+                            const raw = e.dataTransfer.getData('application/x-noor-item');
+                            if (raw) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setDragTargetFolderId(null);
+                              try {
+                                const item = JSON.parse(raw);
+                                handleMoveItem(item.type, item.id, folder.id);
+                              } catch {}
+                            }
+                          }}
+                          className={`group px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:shadow-xs flex items-center justify-between gap-3 cursor-pointer transition-all ${
+                            dragTargetFolderId === folder.id
+                              ? 'border-indigo-500 ring-2 ring-indigo-500 bg-indigo-50/60 dark:bg-indigo-500/10'
+                              : isItemSelected('folder', folder.id)
+                              ? 'border-indigo-500 ring-2 ring-indigo-500/60 bg-indigo-50/40 dark:bg-indigo-500/10'
+                              : 'border-slate-200/80 dark:border-slate-800'
+                          }`}
+                          onDoubleClick={() => navigateDrive(view, folder.id)}
+                          onClick={() => setActiveDetailItem({ type: 'folder', item: folder })}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setActiveDetailItem({ type: 'folder', item: folder });
+                            setContextMenu({
+                              x: Math.min(e.clientX, typeof window !== 'undefined' ? window.innerWidth - 240 : 500),
+                              y: Math.min(e.clientY, typeof window !== 'undefined' ? window.innerHeight - 300 : 500),
+                              target: { type: 'folder', item: folder },
+                            });
+                          }}
+                        >
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <input
+                              type="checkbox"
+                              checked={isItemSelected('folder', folder.id)}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                toggleItemSelection('folder', folder.id);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className={`w-4 h-4 rounded accent-indigo-600 shrink-0 cursor-pointer transition ${
+                                selectedItems.length > 0 ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'
                               }`}
                             />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveDetailItem({ type: 'folder', item: folder });
-                              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                              setContextMenu({
-                                x: Math.min(rect.left, typeof window !== 'undefined' ? window.innerWidth - 240 : 500),
-                                y: Math.min(rect.bottom + 4, typeof window !== 'undefined' ? window.innerHeight - 300 : 500),
-                                target: { type: 'folder', item: folder },
-                              });
-                            }}
-                            title="More actions"
-                            className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition opacity-0 group-hover:opacity-100"
-                          >
-                            <MoreVertical className="w-4 h-4" />
-                          </button>
+                            <div
+                              className="flex items-center gap-3 min-w-0 flex-1"
+                              onClick={() => navigateDrive(view, folder.id)}
+                            >
+                              <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center shrink-0">
+                                <FolderIcon className="w-4.5 h-4.5 text-amber-500 fill-amber-500/20" />
+                              </div>
+                              <span
+                                className="text-sm font-semibold text-slate-800 dark:text-slate-100 break-words flex-1 min-w-0"
+                                title={folder.name}
+                              >
+                                {folder.name}
+                              </span>
+                              <span className="text-xs text-slate-400 hidden sm:inline shrink-0">Folder</span>
+                              <span className="text-xs text-slate-400 hidden md:inline shrink-0">
+                                {formatDateTime(folder.createdAt)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStar('folder', folder.id);
+                              }}
+                              title={folder.isStarred ? 'Unstar' : 'Star'}
+                              className={`p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition ${
+                                folder.isStarred
+                                  ? 'text-amber-400 opacity-100'
+                                  : 'text-slate-400 opacity-0 group-hover:opacity-100 hover:text-amber-500'
+                              }`}
+                            >
+                              <Star
+                                className={`w-3.5 h-3.5 ${
+                                  folder.isStarred ? 'text-amber-400 fill-amber-400' : ''
+                                }`}
+                              />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveDetailItem({ type: 'folder', item: folder });
+                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                setContextMenu({
+                                  x: Math.min(rect.left, typeof window !== 'undefined' ? window.innerWidth - 240 : 500),
+                                  y: Math.min(rect.bottom + 4, typeof window !== 'undefined' ? window.innerHeight - 300 : 500),
+                                  target: { type: 'folder', item: folder },
+                                });
+                              }}
+                              title="Folder Actions"
+                              className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition opacity-0 group-hover:opacity-100"
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+                      {sortedFolders.map((folder) => (
+                        <div
+                          key={folder.id}
+                          draggable={view !== 'trash'}
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData(
+                              'application/x-noor-item',
+                              JSON.stringify({ type: 'folder', id: folder.id }),
+                            );
+                            e.dataTransfer.effectAllowed = 'move';
+                          }}
+                          onDragOver={(e) => {
+                            if (e.dataTransfer.types.includes('application/x-noor-item')) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (dragTargetFolderId !== folder.id) {
+                                setDragTargetFolderId(folder.id);
+                              }
+                            }
+                          }}
+                          onDragLeave={() =>
+                            setDragTargetFolderId((prev) => (prev === folder.id ? null : prev))
+                          }
+                          onDrop={(e) => {
+                            const raw = e.dataTransfer.getData('application/x-noor-item');
+                            if (raw) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setDragTargetFolderId(null);
+                              try {
+                                const item = JSON.parse(raw);
+                                handleMoveItem(item.type, item.id, folder.id);
+                              } catch {}
+                            }
+                          }}
+                          className={`group p-3 rounded-2xl bg-white dark:bg-slate-900 border hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:shadow-md hover:-translate-y-0.5 flex items-center justify-between gap-2.5 cursor-pointer transition-all min-w-0 ${
+                            dragTargetFolderId === folder.id
+                              ? 'border-indigo-500 ring-2 ring-indigo-500 bg-indigo-50/60 dark:bg-indigo-500/10'
+                              : isItemSelected('folder', folder.id)
+                              ? 'border-indigo-500 ring-2 ring-indigo-500/60 bg-indigo-50/40 dark:bg-indigo-500/10'
+                              : 'border-slate-200/80 dark:border-slate-800'
+                          }`}
+                          onDoubleClick={() => navigateDrive(view, folder.id)}
+                          onClick={() => setActiveDetailItem({ type: 'folder', item: folder })}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setActiveDetailItem({ type: 'folder', item: folder });
+                            setContextMenu({
+                              x: Math.min(e.clientX, typeof window !== 'undefined' ? window.innerWidth - 240 : 500),
+                              y: Math.min(e.clientY, typeof window !== 'undefined' ? window.innerHeight - 300 : 500),
+                              target: { type: 'folder', item: folder },
+                            });
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isItemSelected('folder', folder.id)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleItemSelection('folder', folder.id);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className={`w-4 h-4 rounded accent-indigo-600 shrink-0 cursor-pointer transition ${
+                              selectedItems.length > 0 ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'
+                            }`}
+                          />
+                          <div
+                            className="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden"
+                            onClick={() => navigateDrive(view, folder.id)}
+                          >
+                            <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center shrink-0 relative">
+                              <FolderIcon className="w-5 h-5 text-amber-500 fill-amber-500/20" />
+                              {folder.isStarred && (
+                                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <span
+                                className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 line-clamp-2 break-words break-all leading-snug block"
+                                title={folder.name}
+                              >
+                                {folder.name}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStar('folder', folder.id);
+                              }}
+                              title={folder.isStarred ? 'Unstar' : 'Star'}
+                              className={`p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition ${
+                                folder.isStarred
+                                  ? 'text-amber-400 opacity-100'
+                                  : 'text-slate-400 opacity-0 group-hover:opacity-100 hover:text-amber-500'
+                              }`}
+                            >
+                              <Star
+                                className={`w-3.5 h-3.5 ${
+                                  folder.isStarred ? 'text-amber-400 fill-amber-400' : ''
+                                }`}
+                              />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveDetailItem({ type: 'folder', item: folder });
+                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                setContextMenu({
+                                  x: Math.min(rect.left, typeof window !== 'undefined' ? window.innerWidth - 240 : 500),
+                                  y: Math.min(rect.bottom + 4, typeof window !== 'undefined' ? window.innerHeight - 300 : 500),
+                                  target: { type: 'folder', item: folder },
+                                });
+                              }}
+                              title="More actions"
+                              className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition opacity-0 group-hover:opacity-100"
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </section>
               )}
 
