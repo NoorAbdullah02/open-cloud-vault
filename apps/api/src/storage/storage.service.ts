@@ -81,6 +81,16 @@ export class StorageService {
   }
 
   async deleteStoredObject(storageObjectId: string): Promise<void> {
+    const referencingFilesCount = await this.prisma.file.count({
+      where: { storageObjectId },
+    });
+    const referencingVersionsCount = await this.prisma.fileVersion.count({
+      where: { storageObjectId },
+    });
+    if (referencingFilesCount > 0 || referencingVersionsCount > 0) {
+      return;
+    }
+
     const obj = await this.prisma.storageObject.findUnique({
       where: { id: storageObjectId },
     });

@@ -223,15 +223,29 @@ export class DriveService {
     const ext = path.extname(file.originalname).replace('.', '').toLowerCase() || 'bin';
 
     try {
-      const { storageObjectId } = await this.storage.storeFile(backend, {
-        tempFilePath: file.path,
-        buffer: file.buffer,
-        fileName: file.originalname,
-        mimeType: file.mimetype,
-        sizeBytes: file.size,
-        checksumSha256,
-        targetChatId: user.telegramChatTarget || undefined,
+      let storageObjectId: string;
+
+      const existingStorageObject = await this.prisma.storageObject.findFirst({
+        where: {
+          checksumSha256,
+          backend,
+        },
       });
+
+      if (existingStorageObject) {
+        storageObjectId = existingStorageObject.id;
+      } else {
+        const stored = await this.storage.storeFile(backend, {
+          tempFilePath: file.path,
+          buffer: file.buffer,
+          fileName: file.originalname,
+          mimeType: file.mimetype,
+          sizeBytes: file.size,
+          checksumSha256,
+          targetChatId: user.telegramChatTarget || undefined,
+        });
+        storageObjectId = stored.storageObjectId;
+      }
 
       const createdFile = await this.prisma.file.create({
         data: {

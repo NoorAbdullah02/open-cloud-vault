@@ -55,6 +55,7 @@ import {
   Play,
   QrCode,
   Printer,
+  Music2,
 } from 'lucide-react';
 import {
   apiFetch,
@@ -69,6 +70,8 @@ import PdfViewer from '@/components/PdfViewer';
 import DocxViewer from '@/components/DocxViewer';
 import PptxViewer from '@/components/PptxViewer';
 import ZoomableImage from '@/components/ZoomableImage';
+import CustomVideoPlayer from '@/components/CustomVideoPlayer';
+import AudioPlayerBar, { AudioTrack } from '@/components/AudioPlayerBar';
 
 type ViewMode = 'my-drive' | 'recent' | 'starred' | 'photos' | 'videos' | 'documents' | 'trash';
 
@@ -680,6 +683,7 @@ function DriveDashboardContent() {
     textContent?: string;
     loading?: boolean;
   } | null>(null);
+  const [activeAudioTrack, setActiveAudioTrack] = useState<AudioTrack | null>(null);
   const [storageModalOpen, setStorageModalOpen] = useState(false);
   const [securityModalOpen, setSecurityModalOpen] = useState(false);
   const [appDownloadModalOpen, setAppDownloadModalOpen] = useState(false);
@@ -3569,14 +3573,31 @@ function DriveDashboardContent() {
                 />
               </div>
             ) : previewModal.file.mimeType.startsWith('video/') ? (
-              <video
-                src={previewModal.url}
-                controls
-                playsInline
-                className="max-h-[80dvh] max-w-full rounded-2xl"
-              />
+              <div className="w-full max-w-4xl max-h-[82dvh]">
+                <CustomVideoPlayer src={previewModal.url} autoPlay />
+              </div>
             ) : previewModal.file.mimeType.startsWith('audio/') ? (
-              <audio src={previewModal.url} controls className="w-full max-w-md" />
+              <div className="flex flex-col items-center justify-center p-8 bg-zinc-900/90 rounded-3xl border border-white/10 text-white space-y-4 max-w-md w-full shadow-2xl">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-sky-500 flex items-center justify-center shadow-lg animate-pulse">
+                  <Music2 className="w-8 h-8 text-white" />
+                </div>
+                <div className="text-center">
+                  <h3 className="font-bold text-base truncate max-w-[280px]">{previewModal.file.name}</h3>
+                  <p className="text-xs text-zinc-400 mt-1">{formatBytes(previewModal.file.sizeBytes)}</p>
+                </div>
+                <audio src={previewModal.url} controls autoPlay className="w-full" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveAudioTrack({ url: previewModal.url!, title: previewModal.file.name });
+                    setPreviewModal(null);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold flex items-center gap-2 transition"
+                >
+                  <Music2 className="w-4 h-4 text-sky-400" />
+                  <span>Play in Background Mini-Player</span>
+                </button>
+              </div>
             ) : previewModal.file.mimeType.includes('pdf') ||
               (previewModal.file.extension || '').toLowerCase().replace(/^\./, '') === 'pdf' ||
               (previewModal.file.name || '').toLowerCase().endsWith('.pdf') ? (
@@ -4715,6 +4736,12 @@ function DriveDashboardContent() {
           })()}
         </div>
       )}
+
+      {/* Global Background Audio Player */}
+      <AudioPlayerBar
+        track={activeAudioTrack}
+        onClose={() => setActiveAudioTrack(null)}
+      />
 
       {/* Toast Notification */}
       {toast && (

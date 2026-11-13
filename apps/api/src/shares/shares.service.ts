@@ -11,6 +11,8 @@ import { SharePermission, StorageBackend } from '@prisma/client';
 import * as crypto from 'crypto';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as archiver from 'archiver';
+import { Response } from 'express';
 
 @Injectable()
 export class SharesService {
@@ -268,15 +270,28 @@ export class SharesService {
 
       const backend = owner.preferredStorageBackend || StorageBackend.TELEGRAM_MTPROTO;
 
-      const { storageObjectId } = await this.storage.storeFile(backend, {
-        tempFilePath: file.path,
-        buffer: file.buffer,
-        fileName: file.originalname,
-        mimeType: file.mimetype,
-        sizeBytes: file.size,
-        checksumSha256,
-        targetChatId: owner.telegramChatTarget || 'me',
+      let storageObjectId: string;
+      const existingStorageObject = await this.prisma.storageObject.findFirst({
+        where: {
+          checksumSha256,
+          backend,
+        },
       });
+
+      if (existingStorageObject) {
+        storageObjectId = existingStorageObject.id;
+      } else {
+        const stored = await this.storage.storeFile(backend, {
+          tempFilePath: file.path,
+          buffer: file.buffer,
+          fileName: file.originalname,
+          mimeType: file.mimetype,
+          sizeBytes: file.size,
+          checksumSha256,
+          targetChatId: owner.telegramChatTarget || 'me',
+        });
+        storageObjectId = stored.storageObjectId;
+      }
 
       const created = await this.prisma.file.create({
         data: {
@@ -334,6 +349,65 @@ export class SharesService {
         await fs.promises.unlink(file.path).catch(() => {});
       }
     }
+  }
+
+  async streamSharedFolderAsZip(
+    token: string,
+    subFolderId: string | undefined,
+    res: Response,
+  ) {
+    const share = await this.validateShareToken(token);
+    if (!share.folderId) {
+      throw new BadRequestException('This share link is not a folder');
+    }
+
+    const targetFolderId = subFolderId || share.folderId;
+    const allowed = await this.isFolderDescendant(share.folderId, targetFolderId);
+    if (!allowed) {
+      throw new ForbiddenException('Target folder is outside the shared folder');
+    }
+
+    const folder = await this.prisma.folder.findUnique({
+      where: { id: targetFolderId },
+    });
+    if (!folder) throw new NotFoundException('Folder not found');
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${encodeURIComponent(folder.name)}.zip"`,
+    );
+
+    const archive = archiver('zip', { zlib: { level: 5 } });
+    archive.on('error', (err: any) => {
+      throw err;
+    });
+    archive.pipe(res);
+
+    const appendFolder = async (currentFolderId: string, prefix: string) => {
+      const [files, subFolders] = await Promise.all([
+        this.prisma.file.findMany({
+          where: { folderId: currentFolderId, isTrash: false },
+        }),
+        this.prisma.folder.findMany({
+          where: { parentId: currentFolderId, isTrash: false },
+        }),
+      ]);
+
+      for (const f of files) {
+        try {
+          const stream = await this.storage.readFileStream(f.storageObjectId);
+          archive.append(stream as any, { name: `${prefix}${f.name}` });
+        } catch {}
+      }
+
+      for (const sf of subFolders) {
+        await appendFolder(sf.id, `${prefix}${sf.name}/`);
+      }
+    };
+
+    await appendFolder(folder.id, '');
+    await archive.finalize();
   }
 }
 

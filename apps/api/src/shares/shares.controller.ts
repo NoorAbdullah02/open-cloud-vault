@@ -136,5 +136,14 @@ export class SharesController {
   ) {
     return this.sharesService.uploadToSharedFolder(token, file, folderId);
   }
+
+  @Get('public/:token/download-zip')
+  async downloadSharedFolderZip(
+    @Param('token') token: string,
+    @Query('folderId') folderId: string | undefined,
+    @Res() res: Response,
+  ) {
+    return this.sharesService.streamSharedFolderAsZip(token, folderId, res);
+  }
 }
 

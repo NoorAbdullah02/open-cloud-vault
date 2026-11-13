@@ -23,6 +23,7 @@ import PdfViewer from '@/components/PdfViewer';
 import DocxViewer from '@/components/DocxViewer';
 import PptxViewer from '@/components/PptxViewer';
 import ZoomableImage from '@/components/ZoomableImage';
+import CustomVideoPlayer from '@/components/CustomVideoPlayer';
 
 const API_URL = getApiUrl();
 
@@ -162,6 +163,13 @@ export default function PublicSharePage() {
 
   const getDownloadLink = (fileId: string, inline = false) =>
     `${API_URL}/shares/public/${token}/download/${fileId}?inline=${inline}`;
+
+  const handleDownloadFolderZip = () => {
+    const url = `${API_URL}/shares/public/${token}/download-zip${
+      subFolderId ? `?folderId=${subFolderId}` : ''
+    }`;
+    window.open(url, '_blank');
+  };
 
   const handlePrintShareFile = async (file: any) => {
     const inlineUrl = getDownloadLink(file.id, true);
@@ -401,11 +409,9 @@ export default function PublicSharePage() {
                   />
                 </div>
               ) : data.file.mimeType.startsWith('video/') ? (
-                <video
-                  src={getDownloadLink(data.file.id, true)}
-                  controls
-                  className="max-h-[75vh] max-w-full rounded-2xl"
-                />
+                <div className="w-full max-w-4xl">
+                  <CustomVideoPlayer src={getDownloadLink(data.file.id, true)} autoPlay />
+                </div>
               ) : data.file.mimeType.startsWith('audio/') ? (
                 <audio src={getDownloadLink(data.file.id, true)} controls className="w-full max-w-md" />
               ) : data.file.mimeType.includes('pdf') ? (
@@ -466,21 +472,33 @@ export default function PublicSharePage() {
                 </div>
               </div>
 
-              {data.permission === 'EDITOR' && (
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs flex items-center gap-2 transition shrink-0"
+                  onClick={handleDownloadFolderZip}
+                  className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold shadow-xs flex items-center gap-1.5 transition shrink-0 border border-slate-200"
+                  title="Download entire folder as ZIP"
                 >
-                  {uploading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Upload className="w-4 h-4" />
-                  )}
-                  <span className="hidden sm:inline">{uploading ? 'Uploading...' : 'Upload Files'}</span>
+                  <Download className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Download ZIP</span>
                 </button>
-              )}
+
+                {data.permission === 'EDITOR' && (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs flex items-center gap-2 transition shrink-0"
+                  >
+                    {uploading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Upload className="w-4 h-4" />
+                    )}
+                    <span className="hidden sm:inline">{uploading ? 'Uploading...' : 'Upload Files'}</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Public Upload Dropzone for EDITOR Folders */}
@@ -650,11 +668,9 @@ export default function PublicSharePage() {
                 />
               </div>
             ) : previewFile.mimeType.startsWith('video/') ? (
-              <video
-                src={getDownloadLink(previewFile.id, true)}
-                controls
-                className="max-h-full max-w-full rounded-2xl"
-              />
+              <div className="w-full max-w-4xl max-h-[85vh]">
+                <CustomVideoPlayer src={getDownloadLink(previewFile.id, true)} autoPlay />
+              </div>
             ) : previewFile.mimeType.startsWith('audio/') ? (
               <audio src={getDownloadLink(previewFile.id, true)} controls />
             ) : previewFile.mimeType.includes('pdf') ? (

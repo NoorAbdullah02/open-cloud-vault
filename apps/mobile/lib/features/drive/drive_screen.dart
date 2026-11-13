@@ -1283,10 +1283,18 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
 
   Future<void> _downloadFolderZip(dynamic folder) async {
     try {
-      _showSnack('Preparing ${folder['name']}.zip...');
+      _showSnack('Preparing "${folder['name']}.zip"...');
       final dir = await getTemporaryDirectory();
       final savePath = '${dir.path}/${folder['name']}.zip';
-      await apiClient.dio.download('/drive/folders/${folder['id']}/download', savePath);
+      final token = await apiClient.storage.read(key: 'access_token');
+      await apiClient.dio.download(
+        '/drive/folders/${folder['id']}/download',
+        savePath,
+        options: Options(
+          headers: token != null ? {'Authorization': 'Bearer $token'} : null,
+        ),
+      );
+      _showSnack('Downloaded "${folder['name']}.zip"');
       await OpenFilex.open(savePath);
     } catch (e) {
       _showSnack('Folder download failed: $e', isError: true);
