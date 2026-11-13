@@ -85,23 +85,24 @@ function formatDateTime(iso?: string) {
   });
 }
 
-function getFileVisual(mime: string, extension?: string) {
-  const ext = (extension || '').toLowerCase();
-  if (mime.startsWith('image/')) {
+function getFileVisual(mime: string, extension?: string, name?: string) {
+  const ext = (extension || name?.split('.').pop() || '').toLowerCase().replace(/^\./, '').trim();
+  const m = (mime || '').toLowerCase();
+  if (m.startsWith('image/')) {
     return {
       icon: <ImageIcon className="w-6 h-6 text-sky-600 dark:text-sky-400" />,
       bg: 'bg-sky-50 dark:bg-sky-500/10',
       badge: 'Image',
     };
   }
-  if (mime.startsWith('video/')) {
+  if (m.startsWith('video/')) {
     return {
       icon: <Video className="w-6 h-6 text-purple-600 dark:text-purple-400" />,
       bg: 'bg-purple-50 dark:bg-purple-500/10',
       badge: 'Video',
     };
   }
-  if (mime.startsWith('audio/')) {
+  if (m.startsWith('audio/')) {
     return {
       icon: <Music className="w-6 h-6 text-pink-600 dark:text-pink-400" />,
       bg: 'bg-pink-50 dark:bg-pink-500/10',
@@ -109,8 +110,8 @@ function getFileVisual(mime: string, extension?: string) {
     };
   }
   if (
-    mime.includes('presentation') ||
-    mime.includes('powerpoint') ||
+    m.includes('presentation') ||
+    m.includes('powerpoint') ||
     ext === 'pptx' ||
     ext === 'ppt'
   ) {
@@ -121,8 +122,8 @@ function getFileVisual(mime: string, extension?: string) {
     };
   }
   if (
-    mime.includes('word') ||
-    mime.includes('wordprocessingml') ||
+    m.includes('word') ||
+    m.includes('wordprocessingml') ||
     ext === 'docx' ||
     ext === 'doc'
   ) {
@@ -133,8 +134,8 @@ function getFileVisual(mime: string, extension?: string) {
     };
   }
   if (
-    mime.includes('spreadsheet') ||
-    mime.includes('excel') ||
+    m.includes('spreadsheet') ||
+    m.includes('excel') ||
     ext === 'xlsx' ||
     ext === 'xls' ||
     ext === 'csv'
@@ -146,12 +147,14 @@ function getFileVisual(mime: string, extension?: string) {
     };
   }
   if (
-    mime.includes('zip') ||
-    mime.includes('tar') ||
-    mime.includes('rar') ||
-    mime.includes('7z') ||
+    m.includes('zip') ||
+    m.includes('tar') ||
+    m.includes('rar') ||
+    m.includes('7z') ||
     ext === 'zip' ||
-    ext === 'rar'
+    ext === 'rar' ||
+    ext === 'tar' ||
+    ext === 'gz'
   ) {
     return {
       icon: <Archive className="w-6 h-6 text-amber-600 dark:text-amber-400" />,
@@ -159,7 +162,7 @@ function getFileVisual(mime: string, extension?: string) {
       badge: 'Archive',
     };
   }
-  if (mime.includes('pdf') || ext === 'pdf') {
+  if (m.includes('pdf') || ext === 'pdf') {
     return {
       icon: <FileText className="w-6 h-6 text-rose-600 dark:text-rose-400" />,
       bg: 'bg-rose-50 dark:bg-rose-500/10',
@@ -215,11 +218,13 @@ function FileThumbnail({
   fileId,
   mimeType,
   extension,
+  fileName,
   fallbackIcon,
 }: {
   fileId: string;
   mimeType: string;
   extension?: string;
+  fileName?: string;
   fallbackIcon: React.ReactNode;
 }) {
   const [src, setSrc] = useState<string | null>(thumbnailCache.get(fileId) || null);
@@ -230,19 +235,20 @@ function FileThumbnail({
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
   const [pdfReady, setPdfReady] = useState(false);
 
-  const ext = (extension || '').toLowerCase();
+  const ext = (extension || fileName?.split('.').pop() || '').toLowerCase().replace(/^\./, '').trim();
+  const m = (mimeType || '').toLowerCase();
   const isText =
-    mimeType.startsWith('text/') ||
-    ['md', 'txt', 'json', 'csv', 'log', 'ts', 'js', 'py'].includes(ext);
-  const isPdf = mimeType.includes('pdf') || ext === 'pdf';
+    m.startsWith('text/') ||
+    ['md', 'txt', 'json', 'csv', 'log', 'ts', 'js', 'py', 'html', 'css'].includes(ext);
+  const isPdf = m.includes('pdf') || ext === 'pdf';
   const isPptx =
-    mimeType.includes('presentation') ||
-    mimeType.includes('powerpoint') ||
+    m.includes('presentation') ||
+    m.includes('powerpoint') ||
     ext === 'pptx' ||
     ext === 'ppt';
   const isDocx =
-    mimeType.includes('word') ||
-    mimeType.includes('wordprocessingml') ||
+    m.includes('word') ||
+    m.includes('wordprocessingml') ||
     ext === 'docx' ||
     ext === 'doc';
 
@@ -1345,6 +1351,26 @@ function DriveDashboardContent() {
           );
         });
       } else if (entry.isDirectory) {
+        const lowerName = (entry.name || '').toLowerCase();
+        if (
+          [
+            'node_modules',
+            '.git',
+            '.next',
+            '.cache',
+            'dist',
+            'build',
+            '.venv',
+            'venv',
+            '__pycache__',
+            '.dart_tool',
+            '.idea',
+            '.vscode',
+          ].includes(lowerName)
+        ) {
+          // Skip massive system/dependency folders during drag & drop traversal
+          return;
+        }
         hasDirectories = true;
         const reader = entry.createReader();
         const entries: any[] = await new Promise((resolve) => {
@@ -2404,7 +2430,7 @@ function DriveDashboardContent() {
                   {layout === 'grid' ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                       {sortedFiles.map((file) => {
-                        const visual = getFileVisual(file.mimeType, file.extension);
+                        const visual = getFileVisual(file.mimeType, file.extension, file.name);
                         return (
                           <div
                             key={file.id}
@@ -2454,6 +2480,7 @@ function DriveDashboardContent() {
                                 fileId={file.id}
                                 mimeType={file.mimeType}
                                 extension={file.extension}
+                                fileName={file.name}
                                 fallbackIcon={visual.icon}
                               />
                               <button
@@ -2604,7 +2631,7 @@ function DriveDashboardContent() {
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                           {sortedFiles.map((file) => {
-                            const visual = getFileVisual(file.mimeType, file.extension);
+                            const visual = getFileVisual(file.mimeType, file.extension, file.name);
                             return (
                               <tr
                                 key={file.id}
@@ -2774,7 +2801,7 @@ function DriveDashboardContent() {
                       <FolderIcon className="w-16 h-16 text-amber-500 mb-2 fill-amber-500/20" />
                     ) : (
                       <div className="w-16 h-16 flex items-center justify-center mb-2">
-                        {getFileVisual(activeDetailItem.item.mimeType, activeDetailItem.item.extension).icon}
+                        {getFileVisual(activeDetailItem.item.mimeType, activeDetailItem.item.extension, activeDetailItem.item.name).icon}
                       </div>
                     )}
                     <p className="font-bold text-sm text-slate-900 dark:text-white break-words max-w-full">
@@ -3020,9 +3047,24 @@ function DriveDashboardContent() {
               </button>
             </div>
           </div>
-          <div className="flex-1 min-h-0 flex items-center justify-center overflow-auto">
+          <div className={`flex-1 min-h-0 overflow-hidden ${
+            previewModal.file.mimeType.includes('pdf') ||
+            (previewModal.file.extension || '').toLowerCase().replace(/^\./, '') === 'pdf' ||
+            (previewModal.file.name || '').toLowerCase().endsWith('.pdf') ||
+            previewModal.file.mimeType.includes('word') ||
+            ['docx', 'doc'].includes((previewModal.file.extension || '').toLowerCase().replace(/^\./, '')) ||
+            (previewModal.file.name || '').toLowerCase().endsWith('.docx') ||
+            (previewModal.file.name || '').toLowerCase().endsWith('.doc') ||
+            previewModal.file.mimeType.includes('presentation') ||
+            previewModal.file.mimeType.includes('powerpoint') ||
+            ['pptx', 'ppt'].includes((previewModal.file.extension || '').toLowerCase().replace(/^\./, '')) ||
+            (previewModal.file.name || '').toLowerCase().endsWith('.pptx') ||
+            (previewModal.file.name || '').toLowerCase().endsWith('.ppt')
+              ? 'flex flex-col'
+              : 'flex items-center justify-center overflow-auto'
+          }`}>
             {previewModal.loading || !previewModal.url ? (
-              <div className="text-white text-center space-y-3">
+              <div className="text-white text-center space-y-3 m-auto">
                 <Loader2 className="w-10 h-10 animate-spin mx-auto text-sky-400" />
                 <p className="text-sm text-slate-300">Loading preview from NOOR DRIVE...</p>
               </div>
@@ -3041,21 +3083,30 @@ function DriveDashboardContent() {
               />
             ) : previewModal.file.mimeType.startsWith('audio/') ? (
               <audio src={previewModal.url} controls className="w-full max-w-md" />
-            ) : previewModal.file.mimeType.includes('pdf') ? (
+            ) : previewModal.file.mimeType.includes('pdf') ||
+              (previewModal.file.extension || '').toLowerCase().replace(/^\./, '') === 'pdf' ||
+              (previewModal.file.name || '').toLowerCase().endsWith('.pdf') ? (
               <PdfViewer
                 url={previewModal.url}
                 fileName={previewModal.file.name}
                 onDownload={() => handleDownload(previewModal.file)}
               />
-            ) : previewModal.file.extension === 'docx' ||
-              previewModal.file.mimeType.includes('wordprocessingml') ? (
+            ) : previewModal.file.mimeType.includes('word') ||
+              ['docx', 'doc'].includes((previewModal.file.extension || '').toLowerCase().replace(/^\./, '')) ||
+              (previewModal.file.name || '').toLowerCase().endsWith('.docx') ||
+              (previewModal.file.name || '').toLowerCase().endsWith('.doc') ? (
               <DocxViewer
                 url={previewModal.url}
                 fileName={previewModal.file.name}
+                fileId={previewModal.file.id}
+                accessToken={getStoredTokens()?.accessToken || undefined}
                 onDownloadOriginal={() => handleDownload(previewModal.file)}
               />
-            ) : previewModal.file.extension === 'pptx' ||
-              previewModal.file.mimeType.includes('presentationml') ? (
+            ) : previewModal.file.mimeType.includes('presentation') ||
+              previewModal.file.mimeType.includes('powerpoint') ||
+              ['pptx', 'ppt'].includes((previewModal.file.extension || '').toLowerCase().replace(/^\./, '')) ||
+              (previewModal.file.name || '').toLowerCase().endsWith('.pptx') ||
+              (previewModal.file.name || '').toLowerCase().endsWith('.ppt') ? (
               <PptxViewer
                 url={previewModal.url}
                 fileName={previewModal.file.name}

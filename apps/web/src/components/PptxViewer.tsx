@@ -1,21 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   Loader2,
   Presentation,
   Download,
   ChevronLeft,
   ChevronRight,
-  FileText,
-  Printer,
-  Sparkles,
-  Maximize2,
-  Image as ImageIcon,
-  Sun,
-  Moon,
   Globe,
-  Monitor,
+  Layers,
+  RefreshCw,
+  AlertCircle,
 } from 'lucide-react';
 
 interface SlideItem {
@@ -66,22 +61,27 @@ export default function PptxViewer({
 }) {
   const [slides, setSlides] = useState<SlideItem[]>([]);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
-  const [viewMode, setViewMode] = useState<'deck' | 'scroll' | 'google'>('deck');
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [viewMode, setViewMode] = useState<'google' | 'deck'>('google');
   const [loading, setLoading] = useState(true);
+  const [googleLoading, setGoogleLoading] = useState(true);
+  const [googleError, setGoogleError] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [exportingPdf, setExportingPdf] = useState(false);
+  const [googleRefreshKey, setGoogleRefreshKey] = useState(0);
 
-  // Compute public/token stream URL for Google Docs Viewer
+  // Build Google Docs Viewer URL
   const googleViewerUrl = (() => {
-    if (typeof window === 'undefined' || !fileId || !accessToken) return null;
+    if (typeof window === 'undefined') return null;
     const origin = window.location.origin;
-    // URL with token query param supported by backend
-    const streamUrl = `${origin}/api/drive/files/${fileId}/download?inline=true&token=${accessToken}`;
+    // Pass access token as query param (backend supports fromUrlQueryParameter)
+    const streamUrl = fileId && accessToken
+      ? `${origin}/api/drive/files/${fileId}/download?inline=true&token=${encodeURIComponent(accessToken)}`
+      : url;
     return `https://docs.google.com/viewer?url=${encodeURIComponent(streamUrl)}&embedded=true`;
   })();
 
+  // Parse PPTX for text deck fallback
   useEffect(() => {
+    if (viewMode !== 'deck') return;
     let cancelled = false;
     const objectUrls: string[] = [];
 
@@ -110,7 +110,6 @@ export default function PptxViewer({
           const xml = await zip.files[s.name].async('string');
           const lines = extractParagraphs(xml);
 
-          // Extract slide embedded diagram images
           const relsPath = `ppt/slides/_rels/slide${s.num}.xml.rels`;
           const slideImages: string[] = [];
 
@@ -136,12 +135,7 @@ export default function PptxViewer({
           const title = lines.length > 0 ? lines[0] : `Slide ${s.num}`;
           const points = lines.length > 1 ? lines.slice(1) : [];
 
-          parsedSlides.push({
-            number: s.num,
-            title,
-            points,
-            images: slideImages,
-          });
+          parsedSlides.push({ number: s.num, title, points, images: slideImages });
         }
 
         if (!cancelled) {
@@ -155,439 +149,278 @@ export default function PptxViewer({
       }
     }
 
-    loadPptx();
+    if (slides.length === 0) loadPptx();
+    else setLoading(false);
 
     return () => {
       cancelled = true;
       objectUrls.forEach((u) => URL.revokeObjectURL(u));
     };
-  }, [url]);
+  }, [viewMode, url]);
 
+  // Keyboard navigation
   useEffect(() => {
-    if (viewMode !== 'deck') return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
-        setCurrentSlideIndex((idx) => Math.min(slides.length - 1, idx + 1));
-      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-        setCurrentSlideIndex((idx) => Math.max(0, idx - 1));
-      }
+    const handleKey = (e: KeyboardEvent) => {
+      if (viewMode !== 'deck') return;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown')
+        setCurrentSlideIndex((i) => Math.min(slides.length - 1, i + 1));
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp')
+        setCurrentSlideIndex((i) => Math.max(0, i - 1));
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [slides.length, viewMode]);
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [viewMode, slides.length]);
 
-  const handleExportPdf = async () => {
-    if (slides.length === 0) return;
-    setExportingPdf(true);
-    try {
-      const { jsPDF } = await import('jspdf');
-      const pdf = new jsPDF({
-        orientation: 'landscape',
-        unit: 'pt',
-        format: [842, 474],
-      });
-
-      for (let idx = 0; idx < slides.length; idx++) {
-        const slide = slides[idx];
-        if (idx > 0) pdf.addPage([842, 474], 'landscape');
-
-        // Clean modern slide background
-        pdf.setFillColor(15, 23, 42); // slate-900
-        pdf.rect(0, 0, 842, 474, 'F');
-
-        // Top accent orange header bar
-        pdf.setFillColor(249, 115, 22); // orange-500
-        pdf.rect(40, 32, 100, 4, 'F');
-
-        // Slide number
-        pdf.setFontSize(10);
-        pdf.setTextColor(249, 115, 22);
-        pdf.text(`SLIDE ${slide.number} OF ${slides.length}`, 40, 52);
-
-        // Slide Title
-        pdf.setFontSize(20);
-        pdf.setTextColor(255, 255, 255);
-        const splitTitle = pdf.splitTextToSize(slide.title, 760);
-        pdf.text(splitTitle, 40, 85);
-
-        // Bullet points
-        pdf.setFontSize(12);
-        pdf.setTextColor(226, 232, 240);
-        let y = 130;
-        for (const point of slide.points) {
-          if (y > 420) break;
-          const wrapped = pdf.splitTextToSize(`•  ${point}`, 740);
-          pdf.text(wrapped, 40, y);
-          y += wrapped.length * 18 + 6;
-        }
-
-        // Slide Footer brand
-        pdf.setFontSize(9);
-        pdf.setTextColor(148, 163, 184);
-        pdf.text('NOOR DRIVE Cloud Presentation', 40, 455);
-        pdf.text(`Page ${idx + 1} of ${slides.length}`, 750, 455);
-      }
-
-      const base = (fileName || 'presentation').replace(/\.[^/.]+$/, '');
-      pdf.save(`${base}.pdf`);
-    } catch (err) {
-      console.error('[PptxViewer] Export PDF error:', err);
-    } finally {
-      setExportingPdf(false);
-    }
-  };
-
-  const currentSlide = slides[currentSlideIndex];
+  const slide = slides[currentSlideIndex];
 
   return (
-    <div className="w-full max-w-5xl h-[85dvh] flex flex-col bg-slate-950 rounded-3xl border border-white/10 shadow-2xl overflow-hidden backdrop-blur-md">
-      {/* Top Header Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900/90 border-b border-white/10 text-white shrink-0 flex-wrap gap-2">
-        <div className="flex items-center gap-2 text-xs font-semibold">
-          <div className="p-1.5 rounded-lg bg-orange-500/20 text-orange-400">
-            <Presentation className="w-4 h-4" />
+    <div className="w-full h-full flex flex-col bg-slate-950 overflow-hidden">
+      {/* Minimal top bar */}
+      <div className="flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-white/10 shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 rounded-lg bg-orange-500/20">
+            <Presentation className="w-4 h-4 text-orange-400" />
           </div>
-          <span className="truncate max-w-[160px] sm:max-w-xs">{fileName || 'Presentation'}</span>
-          {slides.length > 0 && viewMode !== 'google' && (
-            <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 text-[10px] uppercase font-bold">
-              {viewMode === 'deck'
-                ? `Slide ${currentSlideIndex + 1} / ${slides.length}`
-                : `${slides.length} Slides`}
-            </span>
-          )}
+          <span className="text-white text-xs font-semibold truncate max-w-[180px] sm:max-w-xs">
+            {fileName || 'Presentation'}
+          </span>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Mode Switcher */}
+        <div className="flex items-center gap-2">
+          {/* Mode toggle */}
           <div className="flex items-center bg-white/10 rounded-xl p-0.5 text-xs">
-            {googleViewerUrl && (
-              <button
-                onClick={() => setViewMode('google')}
-                className={`px-2.5 py-1 rounded-lg transition font-medium flex items-center gap-1 ${
-                  viewMode === 'google'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'text-slate-300 hover:text-white'
-                }`}
-                title="Google Slides HD Cloud Viewer"
-              >
-                <Globe className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Google HD</span>
-              </button>
-            )}
             <button
-              onClick={() => setViewMode('deck')}
-              className={`px-2.5 py-1 rounded-lg transition font-medium flex items-center gap-1 ${
-                viewMode === 'deck'
-                  ? 'bg-orange-600 text-white shadow-xs'
-                  : 'text-slate-300 hover:text-white'
+              onClick={() => { setViewMode('google'); setGoogleLoading(true); setGoogleError(false); }}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition text-xs font-semibold ${
+                viewMode === 'google' ? 'bg-orange-500 text-white shadow' : 'text-slate-300 hover:text-white'
               }`}
-              title="Interactive 16:9 Slide Presentation"
             >
-              <Monitor className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">16:9 Deck</span>
+              <Globe className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Google View</span>
             </button>
             <button
-              onClick={() => setViewMode('scroll')}
-              className={`px-2.5 py-1 rounded-lg transition font-medium flex items-center gap-1 ${
-                viewMode === 'scroll'
-                  ? 'bg-orange-600 text-white shadow-xs'
-                  : 'text-slate-300 hover:text-white'
+              onClick={() => setViewMode('deck')}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition text-xs font-semibold ${
+                viewMode === 'deck' ? 'bg-orange-500 text-white shadow' : 'text-slate-300 hover:text-white'
               }`}
-              title="Continuous Multi-Page PDF Document"
             >
-              <FileText className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">PDF Pages</span>
+              <Layers className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Slide Deck</span>
             </button>
           </div>
 
-          {/* Theme switcher in deck mode */}
-          {viewMode === 'deck' && (
-            <button
-              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-              title="Switch Canvas Theme"
-              className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition"
-            >
-              {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-            </button>
-          )}
-
-          {/* Export Slides as PDF */}
-          <button
-            onClick={handleExportPdf}
-            disabled={loading || exportingPdf || slides.length === 0}
-            className="px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition"
-            title="Convert and Download as PDF"
-          >
-            {exportingPdf ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Printer className="w-3.5 h-3.5" />
-            )}
-            <span className="hidden sm:inline">Export PDF</span>
-          </button>
-
-          {/* Download Original PPTX */}
           {onDownloadOriginal && (
             <button
               onClick={onDownloadOriginal}
-              className="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-semibold flex items-center gap-1.5 transition"
-              title="Download original .pptx presentation file"
+              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition"
+              title="Download PPTX"
             >
-              <Download className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Original PPTX</span>
+              <Download className="w-4 h-4" />
             </button>
           )}
         </div>
       </div>
 
-      {/* Main Presentation Stage */}
-      <div className="flex-1 min-h-0 flex flex-col md:flex-row bg-slate-950/95 overflow-hidden">
-        {/* Google Slides HD Mode */}
-        {viewMode === 'google' && googleViewerUrl && (
-          <div className="w-full h-full flex flex-col bg-white">
-            <iframe
-              src={googleViewerUrl}
-              className="w-full h-full border-0"
-              title="Google Docs Viewer"
-              allowFullScreen
-            />
-          </div>
-        )}
-
-        {/* Deck Mode: Left Slide Thumbnails */}
-        {viewMode === 'deck' && slides.length > 1 && (
-          <div className="w-full md:w-64 bg-slate-900/70 border-r border-white/10 p-3 overflow-y-auto space-y-2 shrink-0 hidden md:block">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 mb-2">
-              Slides ({slides.length})
-            </p>
-            {slides.map((s, idx) => (
-              <button
-                key={s.number}
-                onClick={() => setCurrentSlideIndex(idx)}
-                className={`w-full p-2.5 rounded-2xl text-left border transition flex flex-col gap-1 ${
-                  idx === currentSlideIndex
-                    ? 'bg-orange-500/20 border-orange-500 text-white shadow-md ring-1 ring-orange-500/60'
-                    : 'bg-white/5 border-white/5 hover:bg-white/10 text-slate-300'
-                }`}
-              >
-                <div className="flex items-center justify-between text-[10px] font-bold">
-                  <span className="text-orange-400">SLIDE {s.number}</span>
-                  <span className="text-slate-400">
-                    {s.images.length > 0 ? `${s.images.length} img • ` : ''}
-                    {s.points.length} pts
-                  </span>
-                </div>
-                <p className="text-xs font-medium truncate text-white">{s.title}</p>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Deck Mode: Main Slide Canvas */}
-        {viewMode === 'deck' && (
-          <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-6 min-h-0 overflow-auto">
-            {loading && (
-              <div className="text-center text-white space-y-3 py-16">
-                <Loader2 className="w-10 h-10 animate-spin mx-auto text-orange-400" />
-                <p className="text-xs text-slate-300">Loading PowerPoint slides...</p>
+      {/* Google Docs Viewer Mode */}
+      {viewMode === 'google' && (
+        <div className="flex-1 relative overflow-hidden">
+          {googleLoading && !googleError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 z-10 gap-3">
+              <Loader2 className="w-10 h-10 animate-spin text-orange-400" />
+              <p className="text-slate-300 text-sm">Loading presentation viewer…</p>
+              <p className="text-slate-500 text-xs">Google Docs Viewer is rendering your slides</p>
+            </div>
+          )}
+          {googleError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 z-10 gap-4 p-6">
+              <div className="p-4 rounded-2xl bg-orange-500/10 border border-orange-500/30">
+                <AlertCircle className="w-10 h-10 text-orange-400 mx-auto" />
               </div>
-            )}
-
-            {error && (
-              <div className="m-auto p-5 rounded-2xl bg-rose-500/20 border border-rose-500/30 text-rose-200 text-xs text-center max-w-md">
-                <p className="font-semibold mb-1">Preview Notice</p>
-                <p>{error}</p>
-                {onDownloadOriginal && (
-                  <button
-                    onClick={onDownloadOriginal}
-                    className="mt-3 px-4 py-2 rounded-xl bg-white text-slate-900 font-bold text-xs"
-                  >
-                    Download Presentation File Instead
-                  </button>
-                )}
+              <div className="text-center space-y-1">
+                <p className="text-white font-semibold">Google Viewer unavailable</p>
+                <p className="text-slate-400 text-xs max-w-xs">
+                  Google Docs Viewer couldn't load. Try the Slide Deck view, or download the file.
+                </p>
               </div>
-            )}
-
-            {!loading && !error && currentSlide && (
-              <div
-                className={`w-full max-w-4xl aspect-[16/9] rounded-3xl border shadow-2xl p-6 sm:p-10 flex flex-col justify-between relative overflow-hidden select-text transition-colors duration-300 ${
-                  theme === 'dark'
-                    ? 'bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 text-white border-white/15'
-                    : 'bg-white text-slate-900 border-slate-200 shadow-slate-900/10'
-                }`}
-              >
-                {/* Slide Header */}
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="px-2.5 py-1 rounded-full bg-orange-500/15 text-orange-600 dark:text-orange-400 font-bold text-[10px] uppercase tracking-wider flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                      Slide {currentSlide.number}
-                    </span>
-                    <span className="text-[11px] text-slate-400 font-mono">
-                      {currentSlideIndex + 1} / {slides.length}
-                    </span>
-                  </div>
-
-                  <h2
-                    className={`text-xl sm:text-2xl font-bold tracking-tight leading-snug ${
-                      theme === 'dark' ? 'text-white' : 'text-slate-900'
-                    }`}
-                  >
-                    {currentSlide.title}
-                  </h2>
-                </div>
-
-                {/* Content Section: Text & Diagrams */}
-                <div className="flex-1 my-3 sm:my-5 overflow-y-auto pr-2 grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
-                  {/* Points column */}
-                  <div
-                    className={`space-y-3 ${
-                      currentSlide.images.length > 0 ? 'md:col-span-7' : 'md:col-span-12'
-                    }`}
-                  >
-                    {currentSlide.points.length > 0 ? (
-                      currentSlide.points.map((pt, pIdx) => (
-                        <div
-                          key={pIdx}
-                          className={`p-3 rounded-2xl flex items-start gap-3 border transition ${
-                            theme === 'dark'
-                              ? 'bg-white/5 border-white/5 text-slate-200'
-                              : 'bg-slate-50 border-slate-200/80 text-slate-800'
-                          }`}
-                        >
-                          <span className="w-2 h-2 rounded-full bg-orange-500 mt-1.5 shrink-0" />
-                          <p className="text-xs sm:text-sm leading-relaxed font-normal">{pt}</p>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-xs text-slate-400 italic pt-2">
-                        {currentSlide.images.length > 0 ? 'Diagram slide.' : 'Title / Section slide.'}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Diagrams / Images Column */}
-                  {currentSlide.images.length > 0 && (
-                    <div className="md:col-span-5 flex flex-col gap-2">
-                      {currentSlide.images.map((imgSrc, iIdx) => (
-                        <div
-                          key={iIdx}
-                          className="rounded-2xl overflow-hidden border border-slate-200 dark:border-white/10 bg-black/10 dark:bg-black/40 shadow-md p-1"
-                        >
-                          <img
-                            src={imgSrc}
-                            alt={`Slide diagram`}
-                            className="max-h-52 w-full object-contain rounded-xl"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Slide Footer */}
-                <div
-                  className={`flex items-center justify-between pt-3 border-t text-[10px] ${
-                    theme === 'dark'
-                      ? 'border-white/10 text-slate-400'
-                      : 'border-slate-100 text-slate-500'
-                  }`}
-                >
-                  <span className="font-semibold tracking-wider uppercase">NOOR DRIVE</span>
-                  <span>Use &larr; &rarr; keys to switch slides</span>
-                </div>
-              </div>
-            )}
-
-            {/* Bottom Controls */}
-            {!loading && !error && slides.length > 1 && (
-              <div className="flex items-center gap-3 mt-4 text-white">
+              <div className="flex gap-3">
                 <button
-                  onClick={() => setCurrentSlideIndex((idx) => Math.max(0, idx - 1))}
+                  onClick={() => { setGoogleError(false); setGoogleLoading(true); setGoogleRefreshKey(k => k + 1); }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-400 text-white text-xs font-semibold transition"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Retry
+                </button>
+                <button
+                  onClick={() => setViewMode('deck')}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition"
+                >
+                  <Layers className="w-3.5 h-3.5" /> Slide Deck View
+                </button>
+              </div>
+            </div>
+          )}
+          {googleViewerUrl && (
+            <iframe
+              key={googleRefreshKey}
+              src={googleViewerUrl}
+              className={`w-full h-full border-none ${googleError ? 'hidden' : 'block'}`}
+              onLoad={() => { setGoogleLoading(false); setGoogleError(false); }}
+              onError={() => { setGoogleLoading(false); setGoogleError(true); }}
+              title="PowerPoint Preview"
+              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+            />
+          )}
+        </div>
+      )}
+
+      {/* Slide Deck Mode */}
+      {viewMode === 'deck' && (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Loading */}
+          {loading && (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3">
+              <Loader2 className="w-10 h-10 animate-spin text-orange-400" />
+              <p className="text-slate-300 text-sm">Parsing slides…</p>
+            </div>
+          )}
+
+          {/* Error */}
+          {error && !loading && (
+            <div className="flex-1 flex items-center justify-center p-6">
+              <div className="max-w-sm text-center space-y-3">
+                <AlertCircle className="w-10 h-10 text-rose-400 mx-auto" />
+                <p className="text-white font-semibold">Could not parse slides</p>
+                <p className="text-slate-400 text-xs">{error}</p>
+                <button
+                  onClick={() => setViewMode('google')}
+                  className="px-4 py-2 rounded-xl bg-orange-500 text-white text-xs font-semibold"
+                >Try Google View</button>
+              </div>
+            </div>
+          )}
+
+          {/* Slide Content */}
+          {!loading && !error && slides.length > 0 && slide && (
+            <>
+              {/* Main Slide Area */}
+              <div className="flex-1 overflow-y-auto flex items-start justify-center p-4 sm:p-8">
+                <div className="w-full max-w-3xl">
+                  {/* Slide Card */}
+                  <div className="relative bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-white/10 overflow-hidden min-h-[300px] sm:min-h-[400px] p-6 sm:p-10 flex flex-col">
+                    {/* Slide number badge */}
+                    <div className="absolute top-4 right-4 flex items-center gap-2">
+                      <span className="px-2.5 py-1 rounded-full bg-orange-500/20 text-orange-300 text-[10px] font-bold uppercase tracking-wider border border-orange-500/30">
+                        Slide {slide.number} / {slides.length}
+                      </span>
+                    </div>
+
+                    {/* Title */}
+                    <h2 className="text-xl sm:text-3xl font-bold text-white leading-tight mb-6 pr-20">
+                      {slide.title}
+                    </h2>
+
+                    {/* Content grid: text + images */}
+                    <div className={`flex-1 grid gap-5 ${slide.images.length > 0 ? 'grid-cols-1 md:grid-cols-5' : 'grid-cols-1'}`}>
+                      {/* Bullet points */}
+                      {slide.points.length > 0 && (
+                        <div className={`space-y-2.5 ${slide.images.length > 0 ? 'md:col-span-3' : ''}`}>
+                          {slide.points.map((pt, i) => (
+                            <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-white/5 border border-white/8">
+                              <span className="w-1.5 h-1.5 rounded-full bg-orange-400 mt-2 shrink-0" />
+                              <p className="text-sm text-slate-200 leading-relaxed">{pt}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Images */}
+                      {slide.images.length > 0 && (
+                        <div className="md:col-span-2 flex flex-col gap-3">
+                          {slide.images.map((imgSrc, i) => (
+                            <div key={i} className="rounded-xl overflow-hidden border border-white/10 bg-slate-700/40">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={imgSrc}
+                                alt={`Slide ${slide.number} image ${i + 1}`}
+                                className="w-full object-contain max-h-56"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Empty slide */}
+                      {slide.points.length === 0 && slide.images.length === 0 && (
+                        <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">
+                          <span>Slide contains only design elements (shapes/graphics)</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Slide footer */}
+                    <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-between text-[10px] text-slate-500">
+                      <span className="font-semibold tracking-wider uppercase text-orange-400/70">NOOR DRIVE</span>
+                      <span>Use ← → keys to navigate</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Navigation bar */}
+              <div className="shrink-0 flex items-center justify-center gap-4 py-3 px-4 bg-slate-900/60 border-t border-white/10">
+                <button
+                  onClick={() => setCurrentSlideIndex((i) => Math.max(0, i - 1))}
                   disabled={currentSlideIndex === 0}
-                  className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-30 transition"
-                  title="Previous Slide (Left Arrow)"
+                  className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-30 transition text-white"
+                  title="Previous (←)"
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
 
-                <span className="text-xs font-semibold font-mono px-3">
-                  {currentSlideIndex + 1} of {slides.length}
-                </span>
+                {/* Slide dots */}
+                <div className="flex items-center gap-1.5 max-w-[200px] overflow-x-auto">
+                  {slides.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setCurrentSlideIndex(i)}
+                      className={`shrink-0 rounded-full transition-all ${
+                        i === currentSlideIndex
+                          ? 'w-6 h-2 bg-orange-400'
+                          : 'w-2 h-2 bg-white/30 hover:bg-white/60'
+                      }`}
+                    />
+                  ))}
+                </div>
 
                 <button
-                  onClick={() => setCurrentSlideIndex((idx) => Math.min(slides.length - 1, idx + 1))}
+                  onClick={() => setCurrentSlideIndex((i) => Math.min(slides.length - 1, i + 1))}
                   disabled={currentSlideIndex === slides.length - 1}
-                  className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-30 transition"
-                  title="Next Slide (Right Arrow)"
+                  className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-30 transition text-white"
+                  title="Next (→)"
                 >
                   <ChevronRight className="w-5 h-5" />
                 </button>
               </div>
-            )}
-          </div>
-        )}
+            </>
+          )}
 
-        {/* Scroll Mode: Stacked PDF Slide Pages */}
-        {viewMode === 'scroll' && (
-          <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 flex flex-col items-center bg-slate-900/60">
-            {slides.map((slide) => (
-              <div
-                key={slide.number}
-                className="w-full max-w-4xl bg-white text-slate-900 rounded-3xl shadow-2xl p-6 sm:p-10 border border-slate-200 space-y-4"
-              >
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <span className="px-3 py-1 rounded-full bg-orange-100 text-orange-700 text-xs font-bold uppercase tracking-wider">
-                    Slide {slide.number}
-                  </span>
-                  <span className="text-xs text-slate-400 font-mono">
-                    Page {slide.number} of {slides.length}
-                  </span>
-                </div>
-
-                <h3 className="text-lg sm:text-2xl font-bold text-slate-900 leading-snug">
-                  {slide.title}
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
-                  <div
-                    className={`space-y-3 ${
-                      slide.images.length > 0 ? 'md:col-span-7' : 'md:col-span-12'
-                    }`}
-                  >
-                    {slide.points.map((pt, pIdx) => (
-                      <div
-                        key={pIdx}
-                        className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-start gap-3"
-                      >
-                        <span className="w-2 h-2 rounded-full bg-orange-500 mt-2 shrink-0" />
-                        <p className="text-xs sm:text-sm text-slate-800 leading-relaxed">{pt}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {slide.images.length > 0 && (
-                    <div className="md:col-span-5 flex flex-col gap-2">
-                      {slide.images.map((imgSrc, iIdx) => (
-                        <div
-                          key={iIdx}
-                          className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 p-1"
-                        >
-                          <img
-                            src={imgSrc}
-                            alt="Slide diagram"
-                            className="max-h-56 w-full object-contain rounded-xl"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+          {/* No slides parsed */}
+          {!loading && !error && slides.length === 0 && (
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
+              <Presentation className="w-12 h-12 text-orange-400/50" />
+              <div>
+                <p className="text-white font-semibold">No slide text found</p>
+                <p className="text-slate-400 text-xs mt-1">This presentation may use image-only slides.</p>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+              <button
+                onClick={() => setViewMode('google')}
+                className="px-5 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-400 text-white text-sm font-semibold transition"
+              >
+                Try Google View instead
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

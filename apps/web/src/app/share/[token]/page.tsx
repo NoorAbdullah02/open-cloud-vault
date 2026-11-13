@@ -222,7 +222,15 @@ export default function PublicSharePage() {
             </div>
 
             {/* Direct Inline Preview */}
-            <div className="bg-white rounded-3xl border border-zinc-200/80 p-4 sm:p-6 shadow-xs flex items-center justify-center min-h-[420px]">
+            <div className={`rounded-3xl border border-zinc-200/80 shadow-xs overflow-hidden ${
+              data.file.mimeType.includes('pdf') ||
+              data.file.extension === 'docx' ||
+              data.file.mimeType.includes('wordprocessingml') ||
+              data.file.extension === 'pptx' ||
+              data.file.mimeType.includes('presentationml')
+                ? 'h-[80dvh] flex flex-col'
+                : 'bg-white p-4 sm:p-6 flex items-center justify-center min-h-[420px]'
+            }`}>
               {data.file.mimeType.startsWith('image/') ? (
                 <img
                   src={getDownloadLink(data.file.id, true)}
