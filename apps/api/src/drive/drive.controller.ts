@@ -71,8 +71,18 @@ export class DriveController {
     @Query('folderId') folderId?: string,
     @Query('view') view?: any,
     @Query('search') search?: string,
+    @Query('filterType') filterType?: any,
+    @Query('sizeMin') sizeMin?: string,
+    @Query('dateFilter') dateFilter?: any,
   ) {
-    return this.driveService.listDrive(user.id, { folderId, view, search });
+    return this.driveService.listDrive(user.id, {
+      folderId,
+      view,
+      search,
+      filterType,
+      sizeMin,
+      dateFilter,
+    });
   }
 
   @Post('folders')
@@ -205,6 +215,46 @@ export class DriveController {
   @Delete('folders/:id')
   permanentlyDeleteFolder(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.driveService.permanentlyDeleteFolder(user.id, id);
+  }
+
+  @Get('files/:id/versions')
+  getFileVersions(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    return this.driveService.getFileVersions(user.id, id);
+  }
+
+  @Post('files/:id/versions/:versionNumber/restore')
+  restoreFileVersion(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('versionNumber') versionNumber: string,
+  ) {
+    return this.driveService.restoreFileVersion(user.id, id, parseInt(versionNumber, 10));
+  }
+
+  @Post('vault/move-in')
+  moveToVault(
+    @CurrentUser() user: AuthUser,
+    @Body('type') type: 'file' | 'folder',
+    @Body('id') id: string,
+  ) {
+    return this.driveService.moveToVault(user.id, type, id);
+  }
+
+  @Post('vault/move-out')
+  moveFromVault(
+    @CurrentUser() user: AuthUser,
+    @Body('type') type: 'file' | 'folder',
+    @Body('id') id: string,
+  ) {
+    return this.driveService.moveFromVault(user.id, type, id);
+  }
+
+  @Delete('trash/purge-expired')
+  purgeExpiredTrash(@CurrentUser() user: AuthUser) {
+    return this.driveService.purgeExpiredTrash(user.id);
   }
 
   @Delete('trash/empty')

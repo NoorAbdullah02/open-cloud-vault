@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -27,6 +28,8 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
   String _view = 'my-drive';
   String? _folderId;
   String _search = '';
+  String _filterType = 'all';
+  bool _vaultUnlocked = false;
   final TextEditingController _searchController = TextEditingController();
   bool _isGrid = false;
   bool _loading = true;
@@ -325,7 +328,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
       return;
     }
 
-    final cacheKey = '$_view:${_folderId ?? 'root'}:$_search';
+    final cacheKey = '$_view:${_folderId ?? 'root'}:$_search:$_filterType';
     final cached = _driveCache[cacheKey];
     if (cached != null && !silent) {
       setState(() {
@@ -345,6 +348,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
           'view': _view,
           if (_folderId != null) 'folderId': _folderId,
           if (_search.isNotEmpty) 'search': _search,
+          if (_filterType != 'all') 'filterType': _filterType,
         },
       );
       final folders = List<dynamic>.from(res.data['folders'] ?? []);
@@ -2528,6 +2532,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                     ),
                     for (final item in [
                       ('my-drive', 'My Drive', Icons.folder_outlined),
+                      ('vault', 'Secret Vault', Icons.lock_outline),
                       ('offline', 'Offline Files', Icons.offline_pin_outlined),
                       ('recent', 'Recent', Icons.access_time),
                       ('starred', 'Starred', Icons.star_outline),
@@ -2540,12 +2545,16 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                         leading: Icon(item.$3, color: _view == item.$1 ? const Color(0xFF2563EB) : null),
                         title: Text(item.$2),
                         selected: _view == item.$1,
-                        onTap: () {
+                        onTap: () async {
+                          Navigator.pop(context);
+                          if (item.$1 == 'vault') {
+                            final ok = await _authenticateVault();
+                            if (!ok) return;
+                          }
                           setState(() {
                             _view = item.$1;
                             _folderId = null;
                           });
-                          Navigator.pop(context);
                           _loadDrive();
                         },
                       ),
@@ -2698,6 +2707,81 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                 },
               ),
             ),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(left: 12, right: 12, bottom: 6),
+              child: Row(
+                children: [
+                  for (final chip in [
+                    ('all', 'All Files'),
+                    ('pdf', 'PDFs'),
+                    ('image', 'Photos'),
+                    ('video', 'Videos'),
+                    ('audio', 'Audio'),
+                    ('document', 'Docs'),
+                    ('archive', 'Archives'),
+                  ])
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: FilterChip(
+                        selected: _filterType == chip.$1,
+                        label: Text(chip.$2),
+                        labelStyle: TextStyle(
+                          fontSize: 12,
+                          fontWeight: _filterType == chip.$1 ? FontWeight.bold : FontWeight.normal,
+                          color: _filterType == chip.$1 ? Colors.white : const Color(0xFF334155),
+                        ),
+                        selectedColor: _accentColor,
+                        backgroundColor: Colors.white,
+                        showCheckmark: false,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(
+                            color: _filterType == chip.$1 ? _accentColor : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        onSelected: (val) {
+                          setState(() => _filterType = chip.$1);
+                          _loadDrive();
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (_view == 'trash')
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFFDE68A)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: Color(0xFFB45309), size: 18),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Items in Trash auto-purge after 30 days.',
+                        style: TextStyle(color: Color(0xFF92400E), fontSize: 11, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: _purgeExpiredTrash,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFDE68A),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text('Purge Expired', style: TextStyle(color: Color(0xFF92400E), fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (_uploadingName != null)
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -3068,6 +3152,38 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                                   ]
                                                 : [
                                                     PopupMenuItem(
+                                                      value: 'version',
+                                                      child: Row(
+                                                        children: const [
+                                                          Icon(Icons.history, size: 16, color: Color(0xFF7C3AED)),
+                                                          SizedBox(width: 8),
+                                                          Text('Version History'),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    if (_view != 'vault')
+                                                      PopupMenuItem(
+                                                        value: 'vault_in',
+                                                        child: Row(
+                                                          children: const [
+                                                            Icon(Icons.lock_outline, size: 16, color: Color(0xFFD97706)),
+                                                            SizedBox(width: 8),
+                                                            Text('Move to Secret Vault'),
+                                                          ],
+                                                        ),
+                                                      )
+                                                    else
+                                                      PopupMenuItem(
+                                                        value: 'vault_out',
+                                                        child: Row(
+                                                          children: const [
+                                                            Icon(Icons.lock_open, size: 16, color: Color(0xFF059669)),
+                                                            SizedBox(width: 8),
+                                                            Text('Move to My Drive'),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    PopupMenuItem(
                                                       value: 'offline',
                                                       child: Row(
                                                         children: [
@@ -3255,6 +3371,9 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                       },
                                       trailing: PopupMenuButton<String>(
                                         onSelected: (action) {
+                                          if (action == 'version') _showVersionHistory(file);
+                                          if (action == 'vault_in') _moveToVault('file', file['id']);
+                                          if (action == 'vault_out') _moveFromVault('file', file['id']);
                                           if (action == 'offline') _toggleOfflineFile(file);
                                           if (action == 'download') _downloadAndOpen(file);
                                           if (action == 'share') _openShareDialog('file', file['id'], file['name']);
@@ -3285,6 +3404,38 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                                 PopupMenuItem(value: 'delete', child: Text('Delete Forever')),
                                               ]
                                             : [
+                                                PopupMenuItem(
+                                                  value: 'version',
+                                                  child: Row(
+                                                    children: const [
+                                                      Icon(Icons.history, size: 16, color: Color(0xFF7C3AED)),
+                                                      SizedBox(width: 8),
+                                                      Text('Version History'),
+                                                    ],
+                                                  ),
+                                                ),
+                                                if (_view != 'vault')
+                                                  PopupMenuItem(
+                                                    value: 'vault_in',
+                                                    child: Row(
+                                                      children: const [
+                                                        Icon(Icons.lock_outline, size: 16, color: Color(0xFFD97706)),
+                                                        SizedBox(width: 8),
+                                                        Text('Move to Secret Vault'),
+                                                      ],
+                                                    ),
+                                                  )
+                                                else
+                                                  PopupMenuItem(
+                                                    value: 'vault_out',
+                                                    child: Row(
+                                                      children: const [
+                                                        Icon(Icons.lock_open, size: 16, color: Color(0xFF059669)),
+                                                        SizedBox(width: 8),
+                                                        Text('Move to My Drive'),
+                                                      ],
+                                                    ),
+                                                  ),
                                                 PopupMenuItem(
                                                   value: 'offline',
                                                   child: Row(

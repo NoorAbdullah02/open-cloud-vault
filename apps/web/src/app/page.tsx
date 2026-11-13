@@ -37,6 +37,8 @@ import {
   Cloud,
   Sparkles,
   Lock,
+  Unlock,
+  History,
   Share2,
   Copy,
   Link2,
@@ -75,7 +77,7 @@ import ZoomableImage from '@/components/ZoomableImage';
 import CustomVideoPlayer from '@/components/CustomVideoPlayer';
 import AudioPlayerBar, { AudioTrack } from '@/components/AudioPlayerBar';
 
-type ViewMode = 'my-drive' | 'recent' | 'starred' | 'photos' | 'videos' | 'documents' | 'trash';
+type ViewMode = 'my-drive' | 'recent' | 'starred' | 'photos' | 'videos' | 'documents' | 'trash' | 'vault';
 
 function formatBytes(bytesStr: string | number) {
   const bytes = Number(bytesStr || 0);
@@ -723,6 +725,70 @@ function DriveDashboardContent() {
     }
   };
 
+  // Smart Search Filters
+  const [filterType, setFilterType] = useState<string>('all');
+
+  // Secret Vault
+  const [isVaultUnlocked, setIsVaultUnlocked] = useState(false);
+  const [vaultPinModalOpen, setVaultPinModalOpen] = useState(false);
+  const [vaultPinInput, setVaultPinInput] = useState('');
+  const [vaultPinError, setVaultPinError] = useState('');
+
+  // File Version History
+  const [versionModal, setVersionModal] = useState<{
+    file: any;
+    loading: boolean;
+    versions: any[];
+  } | null>(null);
+
+  const openVersionHistory = async (file: any) => {
+    setVersionModal({ file, loading: true, versions: [] });
+    try {
+      const data = await apiFetch(`/drive/files/${file.id}/versions`);
+      setVersionModal({ file, loading: false, versions: data.versions || [] });
+    } catch (err: any) {
+      showToast(err.message || 'Failed to fetch version history', 'error');
+      setVersionModal(null);
+    }
+  };
+
+  const handleRestoreVersion = async (fileId: string, versionNumber: number) => {
+    try {
+      await apiFetch(`/drive/files/${fileId}/versions/${versionNumber}/restore`, { method: 'POST' });
+      showToast(`Restored to Version ${versionNumber}`, 'success');
+      setVersionModal(null);
+      loadDrive(true);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to restore version', 'error');
+    }
+  };
+
+  const handleMoveToVault = async (type: 'file' | 'folder', id: string) => {
+    try {
+      await apiFetch('/drive/vault/move-in', {
+        method: 'POST',
+        body: JSON.stringify({ type, id }),
+      });
+      showToast(`Moved ${type} to Secret Vault 🔒`, 'success');
+      loadDrive(true);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to move to vault', 'error');
+    }
+  };
+
+  const handleMoveFromVault = async (type: 'file' | 'folder', id: string) => {
+    try {
+      await apiFetch('/drive/vault/move-out', {
+        method: 'POST',
+        body: JSON.stringify({ type, id }),
+      });
+      showToast(`Moved ${type} back to My Drive 🔓`, 'success');
+      loadDrive(true);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to move from vault', 'error');
+    }
+  };
+
   // Google Drive Style Right-Click Context Menu State
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -850,7 +916,7 @@ function DriveDashboardContent() {
         return;
       }
 
-      const cacheKey = `${view}:${folderId || 'root'}:${debouncedSearch}`;
+      const cacheKey = `${view}:${folderId || 'root'}:${debouncedSearch}:${filterType}`;
       const cached = driveViewCache.get(cacheKey);
       if (cached && !silent) {
         setFolders(cached.folders);
@@ -861,10 +927,11 @@ function DriveDashboardContent() {
 
       try {
         if (!silent && !cached) setLoading(true);
+        const filterParam = filterType !== 'all' ? `&filterType=${filterType}` : '';
         const driveData = await apiFetch(
           `/drive?view=${view}${folderId ? `&folderId=${folderId}` : ''}${
             debouncedSearch ? `&search=${encodeURIComponent(debouncedSearch)}` : ''
-          }`,
+          }${filterParam}`,
         );
         const normalized = {
           folders: driveData.folders || [],
@@ -885,7 +952,7 @@ function DriveDashboardContent() {
         setLoading(false);
       }
     },
-    [view, folderId, debouncedSearch, router],
+    [view, folderId, debouncedSearch, filterType, router],
   );
 
   useEffect(() => {
@@ -1954,6 +2021,7 @@ function DriveDashboardContent() {
 
   const navItems: { id: ViewMode; label: string; icon: any }[] = [
     { id: 'my-drive', label: 'My Drive', icon: HardDrive },
+    { id: 'vault', label: 'Secret Vault', icon: isVaultUnlocked ? Unlock : Lock },
     { id: 'recent', label: 'Recent', icon: Clock },
     { id: 'starred', label: 'Starred', icon: Star },
     { id: 'photos', label: 'Photos', icon: ImageIcon },
@@ -2090,17 +2158,31 @@ function DriveDashboardContent() {
               <button
                 key={item.id}
                 onClick={() => {
+                  if (item.id === 'vault' && !isVaultUnlocked) {
+                    setVaultPinModalOpen(true);
+                    setSidebarOpen(false);
+                    return;
+                  }
                   navigateDrive(item.id, null);
                   setSidebarOpen(false);
                 }}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition ${
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition ${
                   active
                     ? 'bg-zinc-100 text-zinc-950 font-semibold dark:bg-zinc-800 dark:text-white'
                     : 'text-zinc-600 dark:text-slate-400 hover:bg-zinc-100/70 dark:hover:bg-slate-800/60 hover:text-zinc-900'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${active ? 'text-blue-600 dark:text-blue-400' : ''}`} />
-                <span>{item.label}</span>
+                <div className="flex items-center gap-3">
+                  <Icon className={`w-4 h-4 ${active ? 'text-blue-600 dark:text-blue-400' : ''}`} />
+                  <span>{item.label}</span>
+                </div>
+                {item.id === 'vault' && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider ${
+                    isVaultUnlocked ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                  }`}>
+                    {isVaultUnlocked ? 'Unlocked' : 'PIN'}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -2551,6 +2633,94 @@ function DriveDashboardContent() {
             </div>
           )}
 
+          {/* Smart Search Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+            {[
+              { id: 'all', label: 'All Files' },
+              { id: 'pdf', label: 'PDFs' },
+              { id: 'image', label: 'Photos & Images' },
+              { id: 'video', label: 'Videos' },
+              { id: 'audio', label: 'Audio' },
+              { id: 'document', label: 'Documents' },
+              { id: 'archive', label: 'Archives (Zip)' },
+            ].map((pill) => (
+              <button
+                key={pill.id}
+                onClick={() => setFilterType(pill.id)}
+                className={`px-3 py-1.5 rounded-full font-medium transition shrink-0 ${
+                  filterType === pill.id
+                    ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-xs font-semibold'
+                    : 'bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+              >
+                {pill.label}
+              </button>
+            ))}
+          </div>
+
+          {/* 30-Day Trash Auto-Purge Alert Banner */}
+          {view === 'trash' && (
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm">
+              <div className="flex items-center gap-2.5">
+                <Clock className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>
+                  <strong>30-Day Auto Purge:</strong> Items in Trash are automatically deleted forever after 30 days.
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={async () => {
+                    try {
+                      await apiFetch('/drive/trash/purge-expired', { method: 'DELETE' });
+                      showToast('Purged expired items (>30 days old)', 'success');
+                      loadDrive(true);
+                    } catch (e: any) {
+                      showToast(e.message || 'Purge failed', 'error');
+                    }
+                  }}
+                  className="px-2.5 py-1 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-900 dark:text-amber-200 font-semibold text-xs transition"
+                >
+                  Purge Expired Now
+                </button>
+                <button
+                  onClick={() => {
+                    setConfirmModal({
+                      title: 'Empty Trash completely?',
+                      description: 'All items currently in Trash will be permanently deleted and cannot be recovered.',
+                      confirmText: 'Empty Trash',
+                      onConfirm: () => handleEmptyTrash(),
+                    });
+                  }}
+                  className="px-2.5 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs transition"
+                >
+                  Empty Trash
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Secret Vault Protected Header */}
+          {view === 'vault' && isVaultUnlocked && (
+            <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-900 dark:text-indigo-200 flex items-center justify-between gap-3 text-xs sm:text-sm">
+              <div className="flex items-center gap-2.5">
+                <Lock className="w-4 h-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
+                <span>
+                  <strong>Secret Vault Unlocked:</strong> Hidden from standard My Drive view. Protected by your PIN.
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  setIsVaultUnlocked(false);
+                  navigateDrive('my-drive', null);
+                  showToast('Secret Vault locked 🔒', 'success');
+                }}
+                className="px-2.5 py-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-xs transition shrink-0"
+              >
+                Lock Vault Now
+              </button>
+            </div>
+          )}
+
           {/* Breadcrumbs + In-App Back Button */}
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2 text-sm flex-wrap">
@@ -2704,7 +2874,25 @@ function DriveDashboardContent() {
             </div>
           )}
 
-          {loading ? (
+          {view === 'vault' && !isVaultUnlocked ? (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl flex flex-col items-center justify-center py-20 text-center shadow-xs">
+              <div className="w-20 h-20 rounded-3xl bg-amber-500/10 text-amber-500 flex items-center justify-center mb-4 shadow-inner">
+                <Lock className="w-10 h-10" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+                Secret Vault is Locked
+              </h3>
+              <p className="text-sm text-slate-500 max-w-sm mt-1.5 mb-6">
+                Enter your 6-digit Secret PIN to view and manage your private files and documents.
+              </p>
+              <button
+                onClick={() => setVaultPinModalOpen(true)}
+                className="px-6 py-2.5 rounded-2xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-bold text-sm shadow-md hover:scale-105 active:scale-95 transition"
+              >
+                Unlock Secret Vault 🔒
+              </button>
+            </div>
+          ) : loading ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
               {[1, 2, 3, 4, 5].map((i) => (
                 <div
@@ -5020,6 +5208,184 @@ function DriveDashboardContent() {
                     <div className="py-12 text-center text-slate-500 text-xs">No files found.</div>
                   )}
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Secret Vault PIN Modal */}
+      {vaultPinModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="animate-modal-pop w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                    Secret Vault
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {typeof window !== 'undefined' && localStorage.getItem('noor_vault_pin') ? 'Enter PIN to unlock' : 'Create 6-digit PIN'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setVaultPinModalOpen(false);
+                  setVaultPinInput('');
+                  setVaultPinError('');
+                }}
+                className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const savedPin = localStorage.getItem('noor_vault_pin');
+                if (!savedPin) {
+                  if (vaultPinInput.length < 4) {
+                    setVaultPinError('Please enter at least 4 digits');
+                    return;
+                  }
+                  localStorage.setItem('noor_vault_pin', vaultPinInput);
+                  setIsVaultUnlocked(true);
+                  setVaultPinModalOpen(false);
+                  setVaultPinInput('');
+                  navigateDrive('vault', null);
+                  showToast('Secret Vault PIN set & unlocked! 🔒', 'success');
+                } else {
+                  if (vaultPinInput === savedPin) {
+                    setIsVaultUnlocked(true);
+                    setVaultPinModalOpen(false);
+                    setVaultPinInput('');
+                    navigateDrive('vault', null);
+                    showToast('Secret Vault unlocked! 🔓', 'success');
+                  } else {
+                    setVaultPinError('Incorrect PIN. Please try again.');
+                  }
+                }
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <input
+                  type="password"
+                  maxLength={6}
+                  autoFocus
+                  value={vaultPinInput}
+                  onChange={(e) => {
+                    setVaultPinInput(e.target.value.replace(/\D/g, ''));
+                    setVaultPinError('');
+                  }}
+                  placeholder="••••••"
+                  className="w-full text-center tracking-[1em] text-2xl font-mono py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                {vaultPinError && (
+                  <p className="text-xs text-rose-500 text-center mt-2 font-medium">
+                    {vaultPinError}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVaultPinModalOpen(false);
+                    setVaultPinInput('');
+                    setVaultPinError('');
+                  }}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:text-zinc-900 dark:hover:bg-slate-100 text-xs font-semibold transition shadow-xs"
+                >
+                  {typeof window !== 'undefined' && localStorage.getItem('noor_vault_pin') ? 'Unlock Vault' : 'Set PIN'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* File Version History Modal */}
+      {versionModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="animate-modal-pop w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                  <History className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-base text-slate-900 dark:text-white truncate">
+                    Version History
+                  </h3>
+                  <p className="text-xs text-slate-500 truncate">{versionModal.file.name}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setVersionModal(null)}
+                className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="max-h-72 overflow-y-auto space-y-2">
+              {versionModal.loading ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-2">
+                  <Loader2 className="w-6 h-6 animate-spin text-purple-600" />
+                  <span className="text-xs text-slate-500">Loading version timeline...</span>
+                </div>
+              ) : versionModal.versions.length === 0 ? (
+                <div className="p-4 text-center text-xs text-slate-500">
+                  This file is at initial Version 1. Previous versions will appear here when updated.
+                </div>
+              ) : (
+                versionModal.versions.map((ver: any) => (
+                  <div
+                    key={ver.id}
+                    className={`p-3 rounded-2xl border flex items-center justify-between text-xs gap-3 ${
+                      ver.isCurrent
+                        ? 'bg-purple-50/60 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800/80'
+                        : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-800'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 dark:text-white">
+                          Version {ver.versionNumber}
+                        </span>
+                        {ver.isCurrent && (
+                          <span className="px-2 py-0.5 rounded-md bg-purple-600 text-white text-[10px] font-bold">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-500 block mt-0.5">
+                        {formatBytes(ver.sizeBytes)} • {formatDateTime(ver.createdAt)}
+                      </span>
+                    </div>
+                    {!ver.isCurrent && (
+                      <button
+                        onClick={() => handleRestoreVersion(versionModal.file.id, ver.versionNumber)}
+                        className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-700 hover:bg-purple-50 text-purple-600 dark:text-purple-300 font-semibold text-xs border border-purple-200 dark:border-purple-800 transition"
+                      >
+                        Restore
+                      </button>
+                    )}
+                  </div>
+                ))
               )}
             </div>
           </div>

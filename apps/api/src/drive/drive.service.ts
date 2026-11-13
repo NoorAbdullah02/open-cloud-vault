@@ -35,12 +35,19 @@ export class DriveService {
     userId: string,
     query: {
       folderId?: string;
-      view?: 'my-drive' | 'starred' | 'recent' | 'trash' | 'photos' | 'videos' | 'documents';
+      view?: 'my-drive' | 'starred' | 'recent' | 'trash' | 'photos' | 'videos' | 'documents' | 'vault';
       search?: string;
+      filterType?: 'all' | 'pdf' | 'image' | 'video' | 'audio' | 'document' | 'archive';
+      sizeMin?: string | number;
+      dateFilter?: 'today' | 'week' | 'month';
     },
   ) {
     const view = query.view || 'my-drive';
-    const folderId = query.folderId || null;
+    let folderId = query.folderId || null;
+
+    if (view === 'trash') {
+      await this.purgeExpiredTrash(userId).catch(() => {});
+    }
 
     if (query.search) {
       const term = query.search.trim();
@@ -72,8 +79,16 @@ export class DriveService {
 
     const folderWhere: any = { ownerId: userId };
     const fileWhere: any = { ownerId: userId };
+    let breadcrumbs: { id: string; name: string }[] = [];
 
-    if (view === 'trash') {
+    if (view === 'vault') {
+      const vaultFolder = await this.getOrCreateVaultFolder(userId);
+      folderWhere.isTrash = false;
+      folderWhere.parentId = vaultFolder.id;
+      fileWhere.isTrash = false;
+      fileWhere.folderId = vaultFolder.id;
+      breadcrumbs = [{ id: vaultFolder.id, name: 'Secret Vault 🔒' }];
+    } else if (view === 'trash') {
       folderWhere.isTrash = true;
       fileWhere.isTrash = true;
     } else if (view === 'starred') {
@@ -104,8 +119,43 @@ export class DriveService {
     } else {
       folderWhere.isTrash = false;
       folderWhere.parentId = folderId;
+      if (!folderId) {
+        folderWhere.name = { not: 'Secret Vault' };
+      }
       fileWhere.isTrash = false;
       fileWhere.folderId = folderId;
+    }
+
+    // Apply Smart Search Filters
+    if (query.filterType && query.filterType !== 'all') {
+      if (query.filterType === 'pdf') {
+        fileWhere.extension = 'pdf';
+      } else if (query.filterType === 'image') {
+        fileWhere.mimeType = { startsWith: 'image/' };
+      } else if (query.filterType === 'video') {
+        fileWhere.mimeType = { startsWith: 'video/' };
+      } else if (query.filterType === 'audio') {
+        fileWhere.mimeType = { startsWith: 'audio/' };
+      } else if (query.filterType === 'document') {
+        fileWhere.extension = { in: ['pdf', 'doc', 'docx', 'txt', 'rtf', 'xlsx', 'xls', 'pptx', 'ppt', 'md', 'csv'] };
+      } else if (query.filterType === 'archive') {
+        fileWhere.extension = { in: ['zip', 'rar', '7z', 'tar', 'gz'] };
+      }
+    }
+
+    if (query.sizeMin) {
+      fileWhere.sizeBytes = { gte: BigInt(query.sizeMin) };
+    }
+
+    if (query.dateFilter) {
+      const now = Date.now();
+      if (query.dateFilter === 'today') {
+        fileWhere.createdAt = { gte: new Date(now - 24 * 60 * 60 * 1000) };
+      } else if (query.dateFilter === 'week') {
+        fileWhere.createdAt = { gte: new Date(now - 7 * 24 * 60 * 60 * 1000) };
+      } else if (query.dateFilter === 'month') {
+        fileWhere.createdAt = { gte: new Date(now - 30 * 24 * 60 * 60 * 1000) };
+      }
     }
 
     const [folders, files] = await Promise.all([
@@ -121,7 +171,9 @@ export class DriveService {
       }),
     ]);
 
-    const breadcrumbs = folderId ? await this.buildBreadcrumbs(userId, folderId) : [];
+    if (breadcrumbs.length === 0 && folderId) {
+      breadcrumbs = await this.buildBreadcrumbs(userId, folderId);
+    }
 
     return {
       folders,
@@ -679,5 +731,115 @@ export class DriveService {
       ...this.serializeFile(f),
       folderName: f.folder?.name || 'My Drive (Root)',
     }));
+  }
+
+  // --- Auto-Purge 30-Day Trash ---
+  async purgeExpiredTrash(userId: string) {
+    const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const expiredFiles = await this.prisma.file.findMany({
+      where: {
+        ownerId: userId,
+        isTrash: true,
+        trashedAt: { lt: cutoffDate },
+      },
+      select: { id: true, storageObjectId: true },
+    });
+
+    for (const f of expiredFiles) {
+      await this.prisma.file.delete({ where: { id: f.id } }).catch(() => {});
+      await this.storage.deleteStoredObject(f.storageObjectId).catch(() => {});
+    }
+
+    await this.prisma.folder.deleteMany({
+      where: {
+        ownerId: userId,
+        isTrash: true,
+        trashedAt: { lt: cutoffDate },
+      },
+    }).catch(() => {});
+  }
+
+  // --- Secret Vault ---
+  async getOrCreateVaultFolder(userId: string) {
+    let vaultFolder = await this.prisma.folder.findFirst({
+      where: { ownerId: userId, name: 'Secret Vault', parentId: null },
+    });
+    if (!vaultFolder) {
+      vaultFolder = await this.prisma.folder.create({
+        data: { name: 'Secret Vault', ownerId: userId },
+      });
+    }
+    return vaultFolder;
+  }
+
+  async moveToVault(userId: string, type: 'file' | 'folder', id: string) {
+    const vault = await this.getOrCreateVaultFolder(userId);
+    return this.moveItem(userId, type, id, vault.id);
+  }
+
+  async moveFromVault(userId: string, type: 'file' | 'folder', id: string) {
+    return this.moveItem(userId, type, id, null);
+  }
+
+  // --- File Versioning ---
+  async getFileVersions(userId: string, fileId: string) {
+    const file = await this.prisma.file.findUnique({
+      where: { id: fileId },
+      include: {
+        versions: {
+          orderBy: { versionNumber: 'desc' },
+          include: { storageObject: true },
+        },
+      },
+    });
+    if (!file || file.ownerId !== userId) throw new NotFoundException('File not found');
+
+    return {
+      fileId: file.id,
+      fileName: file.name,
+      currentVersion: file.version,
+      versions: file.versions.map((v) => ({
+        id: v.id,
+        versionNumber: v.versionNumber,
+        sizeBytes: v.sizeBytes.toString(),
+        checksumSha256: v.checksumSha256,
+        isCurrent: v.versionNumber === file.version,
+        createdAt: v.createdAt,
+      })),
+    };
+  }
+
+  async restoreFileVersion(userId: string, fileId: string, versionNumber: number) {
+    const file = await this.prisma.file.findUnique({
+      where: { id: fileId },
+      include: { versions: true },
+    });
+    if (!file || file.ownerId !== userId) throw new NotFoundException('File not found');
+
+    const targetVersion = file.versions.find((v) => v.versionNumber === versionNumber);
+    if (!targetVersion) throw new NotFoundException(`Version ${versionNumber} not found`);
+
+    const updated = await this.prisma.file.update({
+      where: { id: fileId },
+      data: {
+        version: versionNumber,
+        sizeBytes: targetVersion.sizeBytes,
+        checksumSha256: targetVersion.checksumSha256,
+        storageObjectId: targetVersion.storageObjectId,
+        updatedAt: new Date(),
+      },
+      include: { storageObject: true },
+    });
+
+    await this.prisma.activity.create({
+      data: {
+        userId,
+        fileId,
+        action: 'UPDATE',
+        details: { message: `Restored to Version ${versionNumber}` },
+      },
+    });
+
+    return this.serializeFile(updated);
   }
 }
