@@ -1,0 +1,63 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/build-ios-ipa.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-ipa:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.1'
+          channel: 'stable'
+          cache: true
+
+      - name: Initialize iOS project & configurations
+        working-directory: apps/mobile
+        run: |
+          flutter create . --platforms=ios --project-name noor_drive_app --org com.noordrive.app
+          PLIST="ios/Runner/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :NSFaceIDUsageDescription string 'NOOR DRIVE uses Face ID to authenticate and unlock your Secret Vault.'" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'NOOR DRIVE requires photo library access to upload pictures and videos to your cloud drive.'" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'NOOR DRIVE requires camera access to capture documents and photos for cloud backup.'" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName string 'NOOR DRIVE'" "$PLIST" 2>/dev/null || true
+
+      - name: Install dependencies & generate launcher icons
+        working-directory: apps/mobile
+        run: |
+          flutter pub get
+          dart run flutter_launcher_icons
+
+      - name: Build iOS Application (Unsigned IPA)
+        working-directory: apps/mobile
+        run: |
+          flutter build ios --release --no-codesign --dart-define=API_URL=https://noor-cloud-vault.onrender.com/api --dart-define=APP_BUILD_NUMBER=${{ github.run_number }}
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -r noor-drive.ipa Payload
+          ls -lh noor-drive.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: noor-drive-ios-ipa
+          path: apps/mobile/noor-drive.ipa
+
+      - name: Publish iOS GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ios-v1.0.${{ github.run_number }}
+          name: NOOR DRIVE iOS v1.0.${{ github.run_number }}
+          files: apps/mobile/noor-drive.ipa
+          make_latest: false
