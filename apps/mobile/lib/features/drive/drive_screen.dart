@@ -10,7 +10,9 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:xml/xml.dart';
 import '../../core/api_client.dart';
 
@@ -983,6 +985,24 @@ class _DriveScreenState extends State<DriveScreen> {
     });
     List<dynamic> links = List.from(existingRes.data ?? []);
 
+    Future<String> getOrCreateShareUrl() async {
+      if (links.isNotEmpty) {
+        final token = links[0]['shareToken'];
+        final webBase = ApiClient.baseUrl.replaceAll('/api', '');
+        return '$webBase/share/$token';
+      }
+      final res = await apiClient.dio.post('/shares', data: {
+        'type': type,
+        'targetId': id,
+        'permission': permission,
+        if (expiresHours > 0) 'expiresInHours': expiresHours,
+      });
+      links.insert(0, res.data);
+      final token = res.data['shareToken'];
+      final webBase = ApiClient.baseUrl.replaceAll('/api', '');
+      return '$webBase/share/$token';
+    }
+
     if (!mounted) return;
     await showDialog(
       context: context,
@@ -994,6 +1014,7 @@ class _DriveScreenState extends State<DriveScreen> {
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   DropdownButtonFormField<String>(
                     value: permission,
@@ -1017,40 +1038,90 @@ class _DriveScreenState extends State<DriveScreen> {
                     onChanged: (v) => setModalState(() => expiresHours = v!),
                   ),
                   const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.link),
-                      label: const Text('Create & Copy Share Link'),
-                      onPressed: () async {
-                        final res = await apiClient.dio.post('/shares', data: {
-                          'type': type,
-                          'targetId': id,
-                          'permission': permission,
-                          if (expiresHours > 0) 'expiresInHours': expiresHours,
-                        });
-                        final token = res.data['shareToken'];
-                        final webBase = ApiClient.baseUrl.replaceAll('/api', '');
-                        final shareUrl = '$webBase/share/$token';
-                        await Clipboard.setData(ClipboardData(text: shareUrl));
-                        setModalState(() => links.insert(0, res.data));
-                        _showSnack('Share link copied!');
-                      },
+
+                  // Quick WhatsApp Direct Share Button
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF25D366),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    label: const Text('Share to WhatsApp'),
+                    onPressed: () async {
+                      final shareUrl = await getOrCreateShareUrl();
+                      setModalState(() {});
+                      final waUri = Uri.parse(
+                        'https://api.whatsapp.com/send?text=${Uri.encodeComponent('Check out "$name" on NOOR DRIVE:\n$shareUrl')}',
+                      );
+                      if (await canLaunchUrl(waUri)) {
+                        await launchUrl(waUri, mode: LaunchMode.externalApplication);
+                      } else {
+                        await Share.share('Check out "$name" on NOOR DRIVE:\n$shareUrl', subject: name);
+                      }
+                    },
                   ),
+                  const SizedBox(height: 8),
+
+                  // System Share to Any App (Telegram, Messenger, Bluetooth, Gmail)
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    icon: const Icon(Icons.share_outlined),
+                    label: const Text('Share via Any App...'),
+                    onPressed: () async {
+                      final shareUrl = await getOrCreateShareUrl();
+                      setModalState(() {});
+                      await Share.share('Check out "$name" on NOOR DRIVE:\n$shareUrl', subject: name);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Create / Copy Link Button
+                  TextButton.icon(
+                    icon: const Icon(Icons.link),
+                    label: const Text('Copy Public Link'),
+                    onPressed: () async {
+                      final shareUrl = await getOrCreateShareUrl();
+                      await Clipboard.setData(ClipboardData(text: shareUrl));
+                      setModalState(() {});
+                      _showSnack('Share link copied to clipboard!');
+                    },
+                  ),
+
                   if (links.isNotEmpty) ...[
                     const Divider(height: 24),
+                    const Text(
+                      'Active Share Links',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 8),
                     for (final l in links)
                       ListTile(
                         dense: true,
+                        contentPadding: EdgeInsets.zero,
                         title: Text('/share/${l['shareToken']}', overflow: TextOverflow.ellipsis),
                         subtitle: Text('${l['permission']} • ${l['accessCount']} views'),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red),
-                          onPressed: () async {
-                            await apiClient.dio.delete('/shares/${l['id']}');
-                            setModalState(() => links.removeWhere((x) => x['id'] == l['id']));
-                          },
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.copy, size: 18, color: Color(0xFF4F46E5)),
+                              onPressed: () async {
+                                final webBase = ApiClient.baseUrl.replaceAll('/api', '');
+                                await Clipboard.setData(ClipboardData(text: '$webBase/share/${l['shareToken']}'));
+                                _showSnack('Copied link!');
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                              onPressed: () async {
+                                await apiClient.dio.delete('/shares/${l['id']}');
+                                setModalState(() => links.removeWhere((x) => x['id'] == l['id']));
+                              },
+                            ),
+                          ],
                         ),
                       ),
                   ],

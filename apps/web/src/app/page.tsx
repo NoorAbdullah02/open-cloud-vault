@@ -50,6 +50,8 @@ import {
   AlertCircle,
   Layers,
   CheckSquare,
+  MessageCircle,
+  Mail,
 } from 'lucide-react';
 import {
   apiFetch,
@@ -1206,8 +1208,8 @@ function DriveDashboardContent() {
     }
   };
 
-  const handleCreateShareLink = async () => {
-    if (!shareModal) return;
+  const handleCreateShareLink = async (): Promise<string | null> => {
+    if (!shareModal) return null;
     setCreatingShare(true);
     try {
       const created = await apiFetch('/shares', {
@@ -1223,10 +1225,64 @@ function DriveDashboardContent() {
       const url = `${window.location.origin}/share/${created.shareToken}`;
       await navigator.clipboard.writeText(url).catch(() => {});
       showToast('Share link created & copied!');
+      return url;
     } catch (err: any) {
       showToast(err.message, 'error');
+      return null;
     } finally {
       setCreatingShare(false);
+    }
+  };
+
+  const getOrCreateShareUrl = async (): Promise<string | null> => {
+    if (shareLinks.length > 0) {
+      return `${window.location.origin}/share/${shareLinks[0].shareToken}`;
+    }
+    return await handleCreateShareLink();
+  };
+
+  const shareToWhatsApp = async () => {
+    if (!shareModal) return;
+    const url = await getOrCreateShareUrl();
+    if (!url) return;
+    const text = encodeURIComponent(`Check out "${shareModal.name}" on NOOR DRIVE:\n${url}`);
+    window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+  };
+
+  const shareToTelegram = async () => {
+    if (!shareModal) return;
+    const url = await getOrCreateShareUrl();
+    if (!url) return;
+    const text = encodeURIComponent(`Check out "${shareModal.name}" on NOOR DRIVE`);
+    window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${text}`, '_blank');
+  };
+
+  const shareToEmail = async () => {
+    if (!shareModal) return;
+    const url = await getOrCreateShareUrl();
+    if (!url) return;
+    const subject = encodeURIComponent(`Shared from NOOR DRIVE: ${shareModal.name}`);
+    const body = encodeURIComponent(
+      `I shared "${shareModal.name}" with you on NOOR DRIVE:\n\n${url}\n\nYou can view and download it directly.`,
+    );
+    window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
+  };
+
+  const shareNative = async () => {
+    if (!shareModal) return;
+    const url = await getOrCreateShareUrl();
+    if (!url) return;
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: shareModal.name,
+          text: `Check out "${shareModal.name}" on NOOR DRIVE:`,
+          url,
+        });
+      } catch {}
+    } else {
+      await navigator.clipboard.writeText(url).catch(() => {});
+      showToast('Link copied to clipboard!');
     }
   };
 
@@ -3731,6 +3787,62 @@ function DriveDashboardContent() {
                 )}
                 <span>Create &amp; Copy Share Link</span>
               </button>
+            </div>
+
+            {/* Quick Share to Social & Messenger Apps */}
+            <div className="space-y-2">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Share Publicly Via
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {/* WhatsApp */}
+                <button
+                  type="button"
+                  onClick={shareToWhatsApp}
+                  disabled={creatingShare}
+                  className="py-2.5 px-3 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95 disabled:opacity-60"
+                  title="Share directly to WhatsApp"
+                >
+                  <MessageCircle className="w-4 h-4 fill-white/20" />
+                  <span>WhatsApp</span>
+                </button>
+
+                {/* Telegram */}
+                <button
+                  type="button"
+                  onClick={shareToTelegram}
+                  disabled={creatingShare}
+                  className="py-2.5 px-3 rounded-xl bg-[#229ED9] hover:bg-[#1f8ec4] text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95 disabled:opacity-60"
+                  title="Share directly to Telegram"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Telegram</span>
+                </button>
+
+                {/* Email / Gmail */}
+                <button
+                  type="button"
+                  onClick={shareToEmail}
+                  disabled={creatingShare}
+                  className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs flex items-center justify-center gap-1.5 transition active:scale-95 disabled:opacity-60 border border-slate-200/80 dark:border-slate-700"
+                  title="Share via Email"
+                >
+                  <Mail className="w-3.5 h-3.5 text-rose-500" />
+                  <span>Email</span>
+                </button>
+
+                {/* Any App / System Native Share */}
+                <button
+                  type="button"
+                  onClick={shareNative}
+                  disabled={creatingShare}
+                  className="py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95 disabled:opacity-60"
+                  title="Share via Device Apps (AirDrop, Messenger, etc.)"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>More Apps</span>
+                </button>
+              </div>
             </div>
 
             {shareLinks.length > 0 && (
