@@ -10,6 +10,7 @@ import { AuditService } from '../audit/audit.service';
 import { SharePermission, StorageBackend } from '@prisma/client';
 import * as crypto from 'crypto';
 import * as path from 'path';
+import * as fs from 'fs';
 
 @Injectable()
 export class SharesService {
@@ -212,6 +213,16 @@ export class SharesService {
     return { file, stream };
   }
 
+  private computeFileSha256(filePath: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const hash = crypto.createHash('sha256');
+      const stream = fs.createReadStream(filePath);
+      stream.on('data', (chunk) => hash.update(chunk));
+      stream.on('end', () => resolve(hash.digest('hex')));
+      stream.on('error', reject);
+    });
+  }
+
   async uploadToSharedFolder(
     token: string,
     file: Express.Multer.File,
@@ -221,12 +232,14 @@ export class SharesService {
     const share = await this.validateShareToken(token);
 
     if (share.permission !== SharePermission.EDITOR || !share.folderId) {
+      if (file.path) await fs.promises.unlink(file.path).catch(() => {});
       throw new ForbiddenException('This share link does not allow uploading');
     }
 
     const targetFolderId = subFolderId || share.folderId;
     const allowed = await this.isFolderDescendant(share.folderId, targetFolderId);
     if (!allowed) {
+      if (file.path) await fs.promises.unlink(file.path).catch(() => {});
       throw new ForbiddenException('Target folder is outside the shared folder');
     }
 
@@ -234,47 +247,93 @@ export class SharesService {
       where: { id: share.ownerId },
       include: { quota: true },
     });
-    if (!owner) throw new NotFoundException('Owner not found');
-
-    const checksumSha256 = crypto.createHash('sha256').update(file.buffer).digest('hex');
-    const ext = path.extname(file.originalname).replace('.', '').toLowerCase() || 'bin';
-
-    const { storageObjectId } = await this.storage.storeFile(StorageBackend.TELEGRAM_MTPROTO, {
-      buffer: file.buffer,
-      fileName: file.originalname,
-      mimeType: file.mimetype,
-      sizeBytes: file.size,
-      checksumSha256,
-      targetChatId: owner.telegramChatTarget || 'me',
-    });
-
-    const created = await this.prisma.file.create({
-      data: {
-        name: file.originalname,
-        extension: ext,
-        mimeType: file.mimetype,
-        sizeBytes: BigInt(file.size),
-        checksumSha256,
-        storageObjectId,
-        folderId: targetFolderId,
-        ownerId: owner.id,
-      },
-    });
-
-    if (owner.quota) {
-      await this.prisma.userQuota.update({
-        where: { userId: owner.id },
-        data: { usedStorageBytes: { increment: BigInt(file.size) } },
-      });
+    if (!owner) {
+      if (file.path) await fs.promises.unlink(file.path).catch(() => {});
+      throw new NotFoundException('Owner not found');
     }
 
-    return {
-      id: created.id,
-      name: created.name,
-      mimeType: created.mimeType,
-      sizeBytes: created.sizeBytes.toString(),
-      extension: created.extension,
-    };
+    if (owner.quota) {
+      const projected = owner.quota.usedStorageBytes + BigInt(file.size);
+      if (projected > owner.quota.storageQuotaBytes) {
+        if (file.path) await fs.promises.unlink(file.path).catch(() => {});
+        throw new BadRequestException('Owner storage quota exceeded');
+      }
+    }
+
+    try {
+      const checksumSha256 = file.buffer
+        ? crypto.createHash('sha256').update(file.buffer).digest('hex')
+        : await this.computeFileSha256(file.path);
+      const ext = path.extname(file.originalname).replace('.', '').toLowerCase() || 'bin';
+
+      const backend = owner.preferredStorageBackend || StorageBackend.TELEGRAM_MTPROTO;
+
+      const { storageObjectId } = await this.storage.storeFile(backend, {
+        tempFilePath: file.path,
+        buffer: file.buffer,
+        fileName: file.originalname,
+        mimeType: file.mimetype,
+        sizeBytes: file.size,
+        checksumSha256,
+        targetChatId: owner.telegramChatTarget || 'me',
+      });
+
+      const created = await this.prisma.file.create({
+        data: {
+          name: file.originalname,
+          extension: ext,
+          mimeType: file.mimetype,
+          sizeBytes: BigInt(file.size),
+          checksumSha256,
+          storageObjectId,
+          folderId: targetFolderId,
+          ownerId: owner.id,
+        },
+      });
+
+      await this.prisma.fileVersion.create({
+        data: {
+          fileId: created.id,
+          versionNumber: 1,
+          sizeBytes: BigInt(file.size),
+          checksumSha256,
+          storageObjectId,
+        },
+      });
+
+      if (owner.quota) {
+        await this.prisma.userQuota.update({
+          where: { userId: owner.id },
+          data: { usedStorageBytes: { increment: BigInt(file.size) } },
+        });
+      }
+
+      await this.audit.log({
+        actorId: owner.id,
+        action: 'PUBLIC_UPLOAD',
+        targetType: 'file',
+        targetId: created.id,
+        ipAddress: 'public-share',
+        metadata: {
+          sharedUpload: true,
+          shareToken: token,
+          fileName: created.name,
+          backend,
+        },
+      });
+
+      return {
+        id: created.id,
+        name: created.name,
+        mimeType: created.mimeType,
+        sizeBytes: created.sizeBytes.toString(),
+        extension: created.extension,
+      };
+    } finally {
+      if (file.path) {
+        await fs.promises.unlink(file.path).catch(() => {});
+      }
+    }
   }
 }
 

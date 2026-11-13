@@ -12,7 +12,8 @@ import {
   Res,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
+import { diskStorage } from 'multer';
+import * as os from 'os';
 import { Response } from 'express';
 import { SharePermission } from '@prisma/client';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -118,8 +119,14 @@ export class SharesController {
   @Post('public/:token/upload')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: memoryStorage(),
-      limits: { fileSize: 512 * 1024 * 1024 },
+      storage: diskStorage({
+        destination: os.tmpdir(),
+        filename: (req, file, cb) => {
+          const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          cb(null, `noor-shared-upload-${uniqueSuffix}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`);
+        },
+      }),
+      limits: { fileSize: 2 * 1024 * 1024 * 1024 }, // 2 GB limit
     }),
   )
   uploadToSharedFolder(

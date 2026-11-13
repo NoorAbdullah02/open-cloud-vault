@@ -18,8 +18,9 @@ class ApiClient {
         dio = Dio(
           BaseOptions(
             baseUrl: baseUrl,
-            connectTimeout: const Duration(seconds: 45),
-            receiveTimeout: const Duration(minutes: 5),
+            connectTimeout: const Duration(seconds: 60),
+            sendTimeout: const Duration(minutes: 60),
+            receiveTimeout: const Duration(minutes: 60),
           ),
         ) {
     dio.interceptors.add(

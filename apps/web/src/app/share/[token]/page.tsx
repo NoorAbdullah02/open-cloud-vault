@@ -106,6 +106,24 @@ export default function PublicSharePage() {
     loadShare();
   }, [loadShare]);
 
+  useEffect(() => {
+    if (data?.type !== 'folder' || data?.permission !== 'EDITOR') return;
+    const prevent = (e: DragEvent) => e.preventDefault();
+    const handleWindowDrop = (e: DragEvent) => {
+      e.preventDefault();
+      setIsDraggingOver(false);
+      if (e.dataTransfer?.files?.length) {
+        handleUpload(e.dataTransfer.files);
+      }
+    };
+    window.addEventListener('dragover', prevent);
+    window.addEventListener('drop', handleWindowDrop);
+    return () => {
+      window.removeEventListener('dragover', prevent);
+      window.removeEventListener('drop', handleWindowDrop);
+    };
+  }, [data?.type, data?.permission, subFolderId]);
+
   const handleUpload = async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
     if (!fileArray.length) return;
