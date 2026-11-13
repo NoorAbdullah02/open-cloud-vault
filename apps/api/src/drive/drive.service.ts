@@ -12,6 +12,8 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as archiver from 'archiver';
+import * as argon2 from 'argon2';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class DriveService {
@@ -19,6 +21,7 @@ export class DriveService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly audit: AuditService,
+    private readonly mail: MailService,
   ) {}
 
   private serializeFile(f: any) {
@@ -779,6 +782,108 @@ export class DriveService {
 
   async moveFromVault(userId: string, type: 'file' | 'folder', id: string) {
     return this.moveItem(userId, type, id, null);
+  }
+
+  // --- Secret Vault PIN Management via Email OTP ---
+  async getVaultPinStatus() {
+    const pinSetting = await this.prisma.systemSetting.findUnique({
+      where: { key: 'secret_vault_pin_hash' },
+    });
+    return { isPinSet: !!pinSetting };
+  }
+
+  async requestVaultPinOtp(userEmail: string, meta: { ipAddress?: string; userAgent?: string }) {
+    const adminEmail = process.env.ADMIN_NOTIFY_EMAIL || process.env.SUPER_ADMIN_EMAIL || userEmail || 'sheikhnoorabdullah02@gmail.com';
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
+    const expiresAt = Date.now() + 10 * 60 * 1000;
+
+    await this.prisma.systemSetting.upsert({
+      where: { key: 'vault_pin_otp' },
+      update: { value: JSON.stringify({ hash: hashedOtp, expiresAt }) },
+      create: { key: 'vault_pin_otp', value: JSON.stringify({ hash: hashedOtp, expiresAt }) },
+    });
+
+    await this.mail.sendVaultPinOtp({
+      email: adminEmail,
+      otp,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    const [local, domain] = adminEmail.split('@');
+    const masked = local.length > 3 ? `${local.slice(0, 2)}***${local.slice(-2)}@${domain}` : `${local.slice(0, 1)}***@${domain}`;
+    return {
+      success: true,
+      message: `6-digit verification code sent to ${masked}`,
+      maskedEmail: masked,
+      expiresInSeconds: 600,
+    };
+  }
+
+  async setVaultPin(code: string, newPin: string, userEmail: string, meta: { ipAddress?: string; userAgent?: string }) {
+    const otpSetting = await this.prisma.systemSetting.findUnique({
+      where: { key: 'vault_pin_otp' },
+    });
+    if (!otpSetting) {
+      throw new BadRequestException('No verification code requested. Please click "Send Code".');
+    }
+
+    const { hash, expiresAt } = JSON.parse(otpSetting.value);
+    if (Date.now() > expiresAt) {
+      throw new BadRequestException('Verification code has expired. Please request a new code.');
+    }
+
+    const inputHash = crypto.createHash('sha256').update(code.trim()).digest('hex');
+    if (inputHash !== hash) {
+      throw new BadRequestException('Incorrect 6-digit verification code. Please check your email.');
+    }
+
+    if (!newPin || newPin.length < 4 || newPin.length > 8) {
+      throw new BadRequestException('PIN must be between 4 and 8 digits.');
+    }
+
+    const pinHash = await argon2.hash(newPin, { type: argon2.argon2id });
+    await this.prisma.systemSetting.upsert({
+      where: { key: 'secret_vault_pin_hash' },
+      update: { value: pinHash },
+      create: { key: 'secret_vault_pin_hash', value: pinHash },
+    });
+
+    // Delete used OTP
+    await this.prisma.systemSetting.delete({ where: { key: 'vault_pin_otp' } }).catch(() => {});
+
+    const adminEmail = process.env.ADMIN_NOTIFY_EMAIL || process.env.SUPER_ADMIN_EMAIL || userEmail;
+    this.mail.sendVaultPinChanged({
+      email: adminEmail,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return { success: true, message: 'Secret Vault PIN set successfully!' };
+  }
+
+  async verifyVaultPin(pin: string, userEmail: string, meta: { ipAddress?: string; userAgent?: string }) {
+    const pinSetting = await this.prisma.systemSetting.findUnique({
+      where: { key: 'secret_vault_pin_hash' },
+    });
+
+    if (!pinSetting) {
+      return { valid: false, needsSetup: true, message: 'Secret Vault PIN is not set yet. Please set up your PIN.' };
+    }
+
+    const isValid = await argon2.verify(pinSetting.value, pin).catch(() => false);
+    if (isValid) {
+      const adminEmail = process.env.ADMIN_NOTIFY_EMAIL || process.env.SUPER_ADMIN_EMAIL || userEmail;
+      this.mail.sendVaultUnlockedAlert({
+        email: adminEmail,
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+      return { valid: true };
+    }
+
+    return { valid: false, message: 'Incorrect Secret Vault PIN. Please try again.' };
   }
 
   // --- File Versioning ---

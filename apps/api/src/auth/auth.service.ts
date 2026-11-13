@@ -13,7 +13,15 @@ import * as crypto from 'crypto';
 import { authenticator } from 'otplib';
 import * as QRCode from 'qrcode';
 import { Role, StorageBackend } from '@prisma/client';
-import { RegisterDto, LoginDto, PasscodeLoginDto, ChangePasswordDto } from './dto/auth.dto';
+import {
+  RegisterDto,
+  LoginDto,
+  PasscodeLoginDto,
+  ChangePasswordDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+} from './dto/auth.dto';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class AuthService {
@@ -21,6 +29,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly audit: AuditService,
+    private readonly mail: MailService,
   ) {}
 
   private hashToken(token: string): string {
@@ -165,53 +174,238 @@ export class AuthService {
     dto: PasscodeLoginDto,
     meta: { ipAddress?: string; userAgent?: string },
   ) {
-    const ownerEmail = process.env.SUPER_ADMIN_EMAIL || 'admin@noordrive.local';
+    const ownerEmail = (process.env.SUPER_ADMIN_EMAIL || 'sheikhnoorabdullah02@gmail.com').toLowerCase().trim();
     const envPasscode = process.env.DRIVE_PASSCODE;
 
-    if (envPasscode) {
-      if (dto.passcode !== envPasscode) {
-        throw new UnauthorizedException('Invalid passcode');
-      }
-      const user = await this.prisma.user.findUnique({
-        where: { email: ownerEmail },
+    // 1. Locate user (super admin or owner)
+    let user = await this.prisma.user.findUnique({
+      where: { email: ownerEmail },
+    });
+    if (!user) {
+      // Auto-migrate if another super admin account exists in database
+      const fallbackAdmin = await this.prisma.user.findFirst({
+        where: { role: Role.SUPER_ADMIN },
       });
-      if (!user) {
-        throw new UnauthorizedException('Owner account not seeded');
+      if (fallbackAdmin) {
+        user = await this.prisma.user.update({
+          where: { id: fallbackAdmin.id },
+          data: { email: ownerEmail },
+        });
       }
-      if (user.twoFactorEnabled) {
-        if (!dto.totpCode) {
-          return { requiresTwoFactor: true };
-        }
-        const isTotpValid = authenticator.check(dto.totpCode, user.twoFactorSecret || '');
-        if (!isTotpValid) {
-          throw new UnauthorizedException('Invalid two-factor authentication code');
-        }
+    }
+    if (!user) {
+      throw new UnauthorizedException('Owner account not seeded. Please run database seed.');
+    }
+
+    // 2. Validate passcode:
+    // Matches DRIVE_PASSCODE env, OR matches SystemSetting 'drive_passcode', OR matches user.passwordHash
+    let isPasscodeValid = false;
+    if (envPasscode && dto.passcode === envPasscode) {
+      isPasscodeValid = true;
+    } else {
+      const dynamicPasscode = await this.prisma.systemSetting.findUnique({
+        where: { key: 'drive_passcode' },
+      });
+      if (dynamicPasscode && dto.passcode === dynamicPasscode.value) {
+        isPasscodeValid = true;
+      } else {
+        isPasscodeValid = await argon2.verify(user.passwordHash, dto.passcode).catch(() => false);
       }
-      await this.audit.log({
-        actorId: user.id,
-        action: 'PASSCODE_LOGIN_SUCCESS',
-        targetType: 'User',
-        targetId: user.id,
+    }
+
+    if (!isPasscodeValid) {
+      this.mail.sendSecurityAlert({
+        reason: 'Failed Passcode Attempt on NOOR DRIVE',
         ipAddress: meta.ipAddress,
         userAgent: meta.userAgent,
       });
-      return this.issueTokensForUser(user.id, user.email, user.role, {
-        ...meta,
-        deviceName: dto.deviceName,
-        platform: dto.platform,
+      throw new UnauthorizedException('Incorrect passcode');
+    }
+
+    if (user.twoFactorEnabled) {
+      if (!dto.totpCode) {
+        return { requiresTwoFactor: true };
+      }
+      const isTotpValid = authenticator.check(dto.totpCode, user.twoFactorSecret || '');
+      if (!isTotpValid) {
+        throw new UnauthorizedException('Invalid two-factor authentication code');
+      }
+    }
+
+    await this.audit.log({
+      actorId: user.id,
+      action: 'PASSCODE_LOGIN_SUCCESS',
+      targetType: 'User',
+      targetId: user.id,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    this.mail.sendLoginAlert({
+      email: user.email,
+      loginMethod: 'Master Passcode',
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+      deviceName: dto.deviceName,
+      platform: dto.platform,
+    });
+
+    return this.issueTokensForUser(user.id, user.email, user.role, {
+      ...meta,
+      deviceName: dto.deviceName,
+      platform: dto.platform,
+    });
+  }
+
+  /**
+   * Request a 6-digit OTP to reset password via Brevo email
+   */
+  async forgotPassword(
+    dto: ForgotPasswordDto,
+    meta: { ipAddress?: string; userAgent?: string },
+  ) {
+    const ownerEmail = (dto.email || process.env.ADMIN_NOTIFY_EMAIL || process.env.SUPER_ADMIN_EMAIL || 'sheikhnoorabdullah02@gmail.com')
+      .toLowerCase()
+      .trim();
+
+    let user = await this.prisma.user.findUnique({
+      where: { email: ownerEmail },
+    });
+    if (!user) {
+      user = await this.prisma.user.findFirst({
+        where: { role: Role.SUPER_ADMIN },
       });
     }
 
-    return this.login(
-      {
-        email: ownerEmail,
-        password: dto.passcode,
-        totpCode: dto.totpCode,
-        deviceName: dto.deviceName,
-        platform: dto.platform,
+    if (!user) {
+      throw new BadRequestException('User account not found');
+    }
+
+    // Generate cryptographically secure 6-digit numeric OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetPasswordToken: hashedOtp,
+        resetPasswordExpires: expiresAt,
       },
-      meta,
-    );
+    });
+
+    // Send email via Brevo
+    await this.mail.sendPasswordResetOtp({
+      email: user.email,
+      otp,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    // Mask email for display in UI: e.g. sh***02@gmail.com
+    const [localPart, domain] = user.email.split('@');
+    const maskedLocal =
+      localPart.length > 3
+        ? `${localPart.slice(0, 2)}***${localPart.slice(-2)}`
+        : `${localPart.slice(0, 1)}***`;
+    const maskedEmail = `${maskedLocal}@${domain}`;
+
+    return {
+      success: true,
+      message: `A 6-digit verification code has been sent to ${maskedEmail}`,
+      maskedEmail,
+      email: user.email,
+      expiresInSeconds: 600,
+    };
+  }
+
+  /**
+   * Verify the 6-digit OTP and reset password / passcode
+   */
+  async resetPassword(
+    dto: ResetPasswordDto,
+    meta: { ipAddress?: string; userAgent?: string },
+  ) {
+    const ownerEmail = (dto.email || process.env.ADMIN_NOTIFY_EMAIL || process.env.SUPER_ADMIN_EMAIL || 'sheikhnoorabdullah02@gmail.com')
+      .toLowerCase()
+      .trim();
+
+    let user = await this.prisma.user.findUnique({
+      where: { email: ownerEmail },
+    });
+    if (!user) {
+      user = await this.prisma.user.findFirst({
+        where: { role: Role.SUPER_ADMIN },
+      });
+    }
+
+    if (!user) {
+      throw new BadRequestException('User account not found');
+    }
+
+    if (!user.resetPasswordToken || !user.resetPasswordExpires) {
+      throw new BadRequestException('No active password reset request. Please request a new code.');
+    }
+
+    if (new Date() > user.resetPasswordExpires) {
+      throw new BadRequestException('Verification code has expired. Please request a new code.');
+    }
+
+    const hashedInput = crypto.createHash('sha256').update(dto.code.trim()).digest('hex');
+    if (hashedInput !== user.resetPasswordToken) {
+      throw new BadRequestException('Invalid 6-digit verification code. Please check your email.');
+    }
+
+    // Hash new password with Argon2id
+    const newPasswordHash = await argon2.hash(dto.newPassword, {
+      type: argon2.argon2id,
+    });
+
+    // Update user password and clear reset token
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: newPasswordHash,
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+      },
+    });
+
+    // Also update dynamic passcode setting so login works with new code
+    await this.prisma.systemSetting.upsert({
+      where: { key: 'drive_passcode' },
+      update: { value: dto.newPassword },
+      create: { key: 'drive_passcode', value: dto.newPassword },
+    });
+
+    // Send confirmation email
+    this.mail.sendPasswordResetSuccess({
+      email: user.email,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    await this.audit.log({
+      actorId: user.id,
+      action: 'PASSWORD_RESET_SUCCESS',
+      targetType: 'User',
+      targetId: user.id,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    // Issue tokens so user is immediately logged in
+    const tokens = await this.issueTokensForUser(user.id, user.email, user.role, {
+      ...meta,
+      deviceName: dto.deviceName,
+      platform: dto.platform,
+    });
+
+    return {
+      success: true,
+      message: 'Password reset successfully',
+      ...tokens,
+    };
   }
 
   async login(dto: LoginDto, meta: { ipAddress?: string; userAgent?: string }) {

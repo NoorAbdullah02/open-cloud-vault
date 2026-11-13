@@ -735,6 +735,21 @@ function DriveDashboardContent() {
   const [vaultPinModalOpen, setVaultPinModalOpen] = useState(false);
   const [vaultPinInput, setVaultPinInput] = useState('');
   const [vaultPinError, setVaultPinError] = useState('');
+  const [vaultMode, setVaultMode] = useState<'unlock' | 'request' | 'verify'>('unlock');
+  const [vaultOtpInput, setVaultOtpInput] = useState('');
+  const [vaultNewPin, setVaultNewPin] = useState('');
+  const [vaultConfirmPin, setVaultConfirmPin] = useState('');
+  const [vaultCooldown, setVaultCooldown] = useState(0);
+  const [vaultSendingOtp, setVaultSendingOtp] = useState(false);
+  const [vaultMaskedEmail, setVaultMaskedEmail] = useState('sheikhnoorabdullah02@gmail.com');
+
+  useEffect(() => {
+    if (vaultCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setVaultCooldown((c) => (c > 0 ? c - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [vaultCooldown]);
 
   // File Version History
   const [versionModal, setVersionModal] = useState<{
@@ -5328,10 +5343,12 @@ function DriveDashboardContent() {
                 </div>
                 <div>
                   <h3 className="font-bold text-base text-slate-900 dark:text-white">
-                    Secret Vault
+                    Secret Vault 🔒
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {typeof window !== 'undefined' && localStorage.getItem('noor_vault_pin') ? 'Enter PIN to unlock' : 'Create 6-digit PIN'}
+                    {vaultMode === 'unlock'
+                      ? 'Enter 6-digit PIN to unlock'
+                      : 'Set or Reset PIN via Email OTP'}
                   </p>
                 </div>
               </div>
@@ -5340,6 +5357,7 @@ function DriveDashboardContent() {
                   setVaultPinModalOpen(false);
                   setVaultPinInput('');
                   setVaultPinError('');
+                  setVaultMode('unlock');
                 }}
                 className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
               >
@@ -5347,75 +5365,252 @@ function DriveDashboardContent() {
               </button>
             </div>
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const savedPin = localStorage.getItem('noor_vault_pin');
-                if (!savedPin) {
-                  if (vaultPinInput.length < 4) {
-                    setVaultPinError('Please enter at least 4 digits');
+            {/* UNLOCK MODE */}
+            {vaultMode === 'unlock' ? (
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setVaultPinError('');
+                  if (!vaultPinInput) return;
+
+                  try {
+                    const res = await apiFetch('/drive/vault/verify-pin', {
+                      method: 'POST',
+                      body: JSON.stringify({ pin: vaultPinInput }),
+                    });
+                    if (res.valid) {
+                      setIsVaultUnlocked(true);
+                      setVaultPinModalOpen(false);
+                      setVaultPinInput('');
+                      navigateDrive('vault', null);
+                      showToast('Secret Vault unlocked! 🔓', 'success');
+                      return;
+                    }
+                    if (res.needsSetup) {
+                      setVaultMode('verify');
+                      return;
+                    }
+                    setVaultPinError(res.message || 'Incorrect PIN');
+                  } catch (err: any) {
+                    const saved = localStorage.getItem('noor_vault_pin');
+                    if (saved && saved === vaultPinInput) {
+                      setIsVaultUnlocked(true);
+                      setVaultPinModalOpen(false);
+                      setVaultPinInput('');
+                      navigateDrive('vault', null);
+                      showToast('Secret Vault unlocked! 🔓', 'success');
+                    } else {
+                      setVaultPinError('Incorrect PIN. Please try again.');
+                    }
+                  }
+                }}
+                className="space-y-4"
+              >
+                <div>
+                  <input
+                    type="password"
+                    maxLength={6}
+                    autoFocus
+                    value={vaultPinInput}
+                    onChange={(e) => {
+                      setVaultPinInput(e.target.value.replace(/\D/g, ''));
+                      setVaultPinError('');
+                    }}
+                    placeholder="••••••"
+                    className="w-full text-center tracking-[1em] text-2xl font-mono py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                  {vaultPinError && (
+                    <p className="text-xs text-rose-500 text-center mt-2 font-medium">
+                      {vaultPinError}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVaultPinModalOpen(false);
+                      setVaultPinInput('');
+                      setVaultPinError('');
+                    }}
+                    className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:text-zinc-900 dark:hover:bg-slate-100 text-xs font-semibold transition shadow-xs"
+                  >
+                    Unlock Vault
+                  </button>
+                </div>
+
+                <div className="pt-2 text-center">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setVaultMode('verify');
+                      setVaultSendingOtp(true);
+                      setVaultPinError('');
+                      try {
+                        const res = await apiFetch('/drive/vault/request-pin-otp', { method: 'POST' });
+                        if (res.maskedEmail) setVaultMaskedEmail(res.maskedEmail);
+                        setVaultCooldown(60);
+                        showToast('6-digit code sent to your email! 📧', 'success');
+                      } catch (err: any) {
+                        setVaultPinError(err.message || 'Failed to send verification code');
+                      } finally {
+                        setVaultSendingOtp(false);
+                      }
+                    }}
+                    className="text-xs font-semibold text-amber-600 hover:text-amber-700 dark:text-amber-400 transition"
+                  >
+                    Forgot or Set PIN via Email? (ইমেইলে পিন রিসেট)
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* OTP VERIFICATION & SET PIN MODE */
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setVaultPinError('');
+                  if (!vaultOtpInput || vaultOtpInput.length !== 6) {
+                    setVaultPinError('Please enter the 6-digit code from email');
                     return;
                   }
-                  localStorage.setItem('noor_vault_pin', vaultPinInput);
-                  setIsVaultUnlocked(true);
-                  setVaultPinModalOpen(false);
-                  setVaultPinInput('');
-                  navigateDrive('vault', null);
-                  showToast('Secret Vault PIN set & unlocked! 🔒', 'success');
-                } else {
-                  if (vaultPinInput === savedPin) {
+                  if (!vaultNewPin || vaultNewPin.length < 4) {
+                    setVaultPinError('PIN must be at least 4 digits');
+                    return;
+                  }
+                  if (vaultNewPin !== vaultConfirmPin) {
+                    setVaultPinError('PIN confirmation does not match');
+                    return;
+                  }
+
+                  try {
+                    await apiFetch('/drive/vault/set-pin', {
+                      method: 'POST',
+                      body: JSON.stringify({ code: vaultOtpInput, pin: vaultNewPin }),
+                    });
+                    localStorage.setItem('noor_vault_pin', vaultNewPin);
                     setIsVaultUnlocked(true);
                     setVaultPinModalOpen(false);
                     setVaultPinInput('');
+                    setVaultOtpInput('');
+                    setVaultNewPin('');
+                    setVaultConfirmPin('');
+                    setVaultMode('unlock');
                     navigateDrive('vault', null);
-                    showToast('Secret Vault unlocked! 🔓', 'success');
-                  } else {
-                    setVaultPinError('Incorrect PIN. Please try again.');
+                    showToast('Secret Vault PIN successfully set & unlocked! 🔒', 'success');
+                  } catch (err: any) {
+                    setVaultPinError(err.message || 'Failed to set PIN');
                   }
-                }
-              }}
-              className="space-y-4"
-            >
-              <div>
-                <input
-                  type="password"
-                  maxLength={6}
-                  autoFocus
-                  value={vaultPinInput}
-                  onChange={(e) => {
-                    setVaultPinInput(e.target.value.replace(/\D/g, ''));
-                    setVaultPinError('');
-                  }}
-                  placeholder="••••••"
-                  className="w-full text-center tracking-[1em] text-2xl font-mono py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+                }}
+                className="space-y-3"
+              >
+                <div className="p-3 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-900/50 text-xs text-amber-900 dark:text-amber-200">
+                  <p className="font-semibold">6-Digit Code Sent to Email</p>
+                  <p className="text-[11px] opacity-80 mt-0.5">
+                    Check your email ({vaultMaskedEmail}) for the verification code.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    Verification Code (OTP)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    required
+                    value={vaultOtpInput}
+                    onChange={(e) => setVaultOtpInput(e.target.value.replace(/\D/g, ''))}
+                    placeholder="000000"
+                    className="w-full text-center tracking-widest text-lg font-mono py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    New Vault PIN (4-6 Digits)
+                  </label>
+                  <input
+                    type="password"
+                    maxLength={6}
+                    required
+                    value={vaultNewPin}
+                    onChange={(e) => setVaultNewPin(e.target.value.replace(/\D/g, ''))}
+                    placeholder="••••••"
+                    className="w-full text-center tracking-widest text-lg font-mono py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    Confirm New PIN
+                  </label>
+                  <input
+                    type="password"
+                    maxLength={6}
+                    required
+                    value={vaultConfirmPin}
+                    onChange={(e) => setVaultConfirmPin(e.target.value.replace(/\D/g, ''))}
+                    placeholder="••••••"
+                    className="w-full text-center tracking-widest text-lg font-mono py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+
                 {vaultPinError && (
-                  <p className="text-xs text-rose-500 text-center mt-2 font-medium">
+                  <p className="text-xs text-rose-500 text-center font-medium">
                     {vaultPinError}
                   </p>
                 )}
-              </div>
 
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVaultPinModalOpen(false);
-                    setVaultPinInput('');
-                    setVaultPinError('');
-                  }}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition"
-                >
-                  Cancel
-                </button>
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    disabled={vaultCooldown > 0 || vaultSendingOtp}
+                    onClick={async () => {
+                      setVaultSendingOtp(true);
+                      setVaultPinError('');
+                      try {
+                        const res = await apiFetch('/drive/vault/request-pin-otp', { method: 'POST' });
+                        if (res.maskedEmail) setVaultMaskedEmail(res.maskedEmail);
+                        setVaultCooldown(60);
+                        showToast('New code sent to email! 📧', 'success');
+                      } catch (err: any) {
+                        setVaultPinError(err.message || 'Failed to resend code');
+                      } finally {
+                        setVaultSendingOtp(false);
+                      }
+                    }}
+                    className="text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 disabled:opacity-50 transition"
+                  >
+                    {vaultCooldown > 0 ? `Resend in ${vaultCooldown}s` : 'Resend Code (পুনরায় পাঠান)'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVaultMode('unlock');
+                      setVaultPinError('');
+                    }}
+                    className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+                  >
+                    Back to Unlock
+                  </button>
+                </div>
+
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:text-zinc-900 dark:hover:bg-slate-100 text-xs font-semibold transition shadow-xs"
+                  className="w-full py-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:text-zinc-900 dark:hover:bg-slate-100 text-xs font-bold transition shadow-xs"
                 >
-                  {typeof window !== 'undefined' && localStorage.getItem('noor_vault_pin') ? 'Unlock Vault' : 'Set PIN'}
+                  Verify Code &amp; Save PIN
                 </button>
-              </div>
-            </form>
+              </form>
+            )}
           </div>
         </div>
       )}

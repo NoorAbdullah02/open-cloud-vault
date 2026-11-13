@@ -11,11 +11,12 @@ import {
   UseInterceptors,
   UploadedFile,
   Res,
+  Req,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import * as os from 'os';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import { StorageBackend } from '@prisma/client';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser, AuthUser } from '../common/decorators/current-user.decorator';
@@ -277,6 +278,44 @@ export class DriveController {
     @Body('id') id: string,
   ) {
     return this.driveService.moveFromVault(user.id, type, id);
+  }
+
+  @Get('vault/pin-status')
+  getVaultPinStatus() {
+    return this.driveService.getVaultPinStatus();
+  }
+
+  @Post('vault/request-pin-otp')
+  requestVaultPinOtp(@CurrentUser() user: AuthUser, @Req() req: Request) {
+    return this.driveService.requestVaultPinOtp(user.email, {
+      ipAddress: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+  }
+
+  @Post('vault/set-pin')
+  setVaultPin(
+    @CurrentUser() user: AuthUser,
+    @Body('code') code: string,
+    @Body('pin') pin: string,
+    @Req() req: Request,
+  ) {
+    return this.driveService.setVaultPin(code, pin, user.email, {
+      ipAddress: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+  }
+
+  @Post('vault/verify-pin')
+  verifyVaultPin(
+    @CurrentUser() user: AuthUser,
+    @Body('pin') pin: string,
+    @Req() req: Request,
+  ) {
+    return this.driveService.verifyVaultPin(pin, user.email, {
+      ipAddress: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip,
+      userAgent: req.headers['user-agent'],
+    });
   }
 
   @Delete('trash/purge-expired')

@@ -82,3 +82,33 @@ export class ChangePasswordDto {
   newPassword: string;
 }
 
+export class ForgotPasswordDto {
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+}
+
+export class ResetPasswordDto {
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsString()
+  @MinLength(6)
+  @MaxLength(6)
+  code: string;
+
+  @IsString()
+  @MinLength(4)
+  @MaxLength(128)
+  newPassword: string;
+
+  @IsOptional()
+  @IsString()
+  deviceName?: string;
+
+  @IsOptional()
+  @IsString()
+  platform?: string;
+}
+

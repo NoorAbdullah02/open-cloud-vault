@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { StorageModule } from './storage/storage.module';
 import { DriveModule } from './drive/drive.module';
 import { SharesModule } from './shares/shares.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { SharesModule } from './shares/shares.module';
     ]),
     PrismaModule,
     AuditModule,
+    MailModule,
     AuthModule,
     StorageModule,
     DriveModule,

@@ -13,6 +13,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as archiver from 'archiver';
 import { Response } from 'express';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class SharesService {
@@ -20,6 +21,7 @@ export class SharesService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly audit: AuditService,
+    private readonly mail: MailService,
   ) {}
 
   async createShare(
@@ -131,12 +133,31 @@ export class SharesService {
     return false;
   }
 
-  async getPublicShare(token: string, subFolderId?: string) {
+  async getPublicShare(
+    token: string,
+    subFolderId?: string,
+    meta?: { ipAddress?: string; userAgent?: string; referer?: string },
+  ) {
     const share = await this.validateShareToken(token);
 
     await this.prisma.share.update({
       where: { id: share.id },
       data: { accessCount: { increment: 1 } },
+    });
+
+    const itemName = share.file ? share.file.name : share.folder ? share.folder.name : 'Shared Item';
+    const itemType = share.file ? 'file' : 'folder';
+    const itemSize = share.file ? `${(Number(share.file.sizeBytes) / (1024 * 1024)).toFixed(2)} MB` : undefined;
+
+    // Send email alert to admin with all visitor information
+    this.mail.sendShareAccessAlert({
+      itemType,
+      itemName,
+      itemSize,
+      ipAddress: meta?.ipAddress,
+      userAgent: meta?.userAgent,
+      referer: meta?.referer,
+      action: 'VIEW',
     });
 
     if (share.file) {
@@ -192,7 +213,11 @@ export class SharesService {
     throw new NotFoundException('Shared resource not found');
   }
 
-  async downloadSharedFile(token: string, fileId: string) {
+  async downloadSharedFile(
+    token: string,
+    fileId: string,
+    meta?: { ipAddress?: string; userAgent?: string; referer?: string },
+  ) {
     const share = await this.validateShareToken(token);
 
     const file = await this.prisma.file.findUnique({
@@ -210,6 +235,17 @@ export class SharesService {
     } else {
       throw new ForbiddenException('Access denied');
     }
+
+    // Send email alert to admin that this shared file was downloaded
+    this.mail.sendShareAccessAlert({
+      itemType: 'file',
+      itemName: file.name,
+      itemSize: `${(Number(file.sizeBytes) / (1024 * 1024)).toFixed(2)} MB`,
+      ipAddress: meta?.ipAddress,
+      userAgent: meta?.userAgent,
+      referer: meta?.referer,
+      action: 'DOWNLOAD',
+    });
 
     const stream = await this.storage.readFileStream(file.storageObjectId);
     return { file, stream };
@@ -355,6 +391,7 @@ export class SharesService {
     token: string,
     subFolderId: string | undefined,
     res: Response,
+    meta?: { ipAddress?: string; userAgent?: string; referer?: string },
   ) {
     const share = await this.validateShareToken(token);
     if (!share.folderId) {
@@ -371,6 +408,16 @@ export class SharesService {
       where: { id: targetFolderId },
     });
     if (!folder) throw new NotFoundException('Folder not found');
+
+    // Send email alert to admin that this shared folder was downloaded as ZIP
+    this.mail.sendShareAccessAlert({
+      itemType: 'folder',
+      itemName: `${folder.name}.zip`,
+      ipAddress: meta?.ipAddress,
+      userAgent: meta?.userAgent,
+      referer: meta?.referer,
+      action: 'DOWNLOAD',
+    });
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader(

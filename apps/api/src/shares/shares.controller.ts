@@ -10,11 +10,12 @@ import {
   UseInterceptors,
   UploadedFile,
   Res,
+  Req,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import * as os from 'os';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import { SharePermission } from '@prisma/client';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser, AuthUser } from '../common/decorators/current-user.decorator';
@@ -133,9 +134,14 @@ export class SharesController {
   @Get('public/:token')
   getPublicShare(
     @Param('token') token: string,
-    @Query('folderId') folderId?: string,
+    @Query('folderId') folderId: string | undefined,
+    @Req() req: Request,
   ) {
-    return this.sharesService.getPublicShare(token, folderId);
+    return this.sharesService.getPublicShare(token, folderId, {
+      ipAddress: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip,
+      userAgent: req.headers['user-agent'],
+      referer: (req.headers['referer'] || req.headers['referrer']) as string,
+    });
   }
 
   @Get('public/:token/download/:fileId')
@@ -144,8 +150,13 @@ export class SharesController {
     @Param('fileId') fileId: string,
     @Query('inline') inline: string,
     @Res() res: Response,
+    @Req() req: Request,
   ) {
-    const { file, stream } = await this.sharesService.downloadSharedFile(token, fileId);
+    const { file, stream } = await this.sharesService.downloadSharedFile(token, fileId, {
+      ipAddress: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip,
+      userAgent: req.headers['user-agent'],
+      referer: (req.headers['referer'] || req.headers['referrer']) as string,
+    });
     const disposition = inline === 'true' ? 'inline' : 'attachment';
     const accurateMime = getAccurateMimeType(file.extension || file.name.split('.').pop() || '', file.mimeType);
     res.setHeader('Content-Type', accurateMime);
@@ -182,8 +193,13 @@ export class SharesController {
     @Param('token') token: string,
     @Query('folderId') folderId: string | undefined,
     @Res() res: Response,
+    @Req() req: Request,
   ) {
-    return this.sharesService.streamSharedFolderAsZip(token, folderId, res);
+    return this.sharesService.streamSharedFolderAsZip(token, folderId, res, {
+      ipAddress: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip,
+      userAgent: req.headers['user-agent'],
+      referer: (req.headers['referer'] || req.headers['referrer']) as string,
+    });
   }
 }
 
