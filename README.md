@@ -1,183 +1,202 @@
-# NOOR DRIVE
+# NOOR DRIVE — Personal Multi-Platform Cloud Vault
 
-**NOOR DRIVE** is a personal, stateless, multi-platform cloud storage platform inspired by Google Drive and Dropbox.  
-All uploaded files stream directly from memory to your private **Telegram MTProto** vault (**zero local disk storage**), while metadata, folder hierarchies, share links, and audit logs live in **Neon PostgreSQL**.
+[![Build Android APK](https://github.com/NoorAbdullah02/open-cloud-vault/actions/workflows/build-android-apk.yml/badge.svg)](https://github.com/NoorAbdullah02/open-cloud-vault/actions/workflows/build-android-apk.yml)
+[![Latest Release](https://img.shields.io/github/v/release/NoorAbdullah02/open-cloud-vault?color=indigo&label=Android%20APK)](https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest)
+[![Next.js 15](https://img.shields.io/badge/Next.js-15.5-black?logo=next.js)](https://nextjs.org/)
+[![Flutter](https://img.shields.io/badge/Flutter-3.27-blue?logo=flutter)](https://flutter.dev/)
+[![NestJS](https://img.shields.io/badge/NestJS-10.4-red?logo=nestjs)](https://nestjs.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon%20Serverless-00e599?logo=postgresql)](https://neon.tech/)
+
+**NOOR DRIVE** is a personal, private, and stateless cloud storage platform inspired by Google Drive and Dropbox.  
+All uploaded files stream directly through high-speed memory buffers to your private **Telegram MTProto Cloud Vault** (**zero disk usage & unlimited free cloud storage**), while metadata, file version trees, secret vault isolation, folder hierarchies, share links, and audit logs live securely in **Neon PostgreSQL**.
 
 ---
 
-## Architecture
+## 🏛️ System Architecture
 
+```text
+┌─────────────────────────────────┐         ┌─────────────────────────────────┐
+│     Web Dashboard (Next.js 15)  │         │   Android App (Flutter 3.27)    │
+│    PWA Ready • Responsive • SW  │         │   Biometric Auth • Dio • Offline│
+└────────────────┬────────────────┘         └────────────────┬────────────────┘
+                 │                                           │
+                 │                 HTTPS / REST              │
+                 └───────────────────────┬───────────────────┘
+                                         ▼
+                      ┌─────────────────────────────────────┐
+                      │        NestJS API Server            │
+                      │  • Passcode + JWT Auth + 2FA        │
+                      │  • Memory Stream Pipeline           │
+                      │  • Secret Vault Isolated Engine     │
+                      │  • File Version Timeline Manager    │
+                      │  • Batch ZIP Archiver & Downloader  │
+                      │  • 30-Day Trash Auto-Purge Worker   │
+                      └──────────────┬───────────────┬──────┘
+                                     │               │
+                         Prisma ORM  │               │ MTProto Stream
+                                     ▼               ▼
+                      ┌──────────────────────┐ ┌───────────────────────────┐
+                      │   Neon PostgreSQL    │ │   Telegram MTProto Cloud  │
+                      │   (Metadata, ACL,    │ │    (Private Cloud Vault,  │
+                      │   Versions, Shares)  │ │   Saved Messages Storage) │
+                      └──────────────────────┘ └───────────────────────────┘
 ```
-┌────────────────────────┐      ┌────────────────────────┐
-│   Web App (Next.js)    │      │  Android App (Flutter) │
-│  apps/web (PWA Ready)  │      │      apps/mobile       │
-└───────────┬────────────┘      └───────────┬────────────┘
-            │           HTTPS / REST        │
-            └───────────────┬───────────────┘
-                            ▼
-              ┌───────────────────────────┐
-              │   NestJS API (apps/api)   │
-              │  • Passcode + JWT + 2FA   │
-              │  • Memory Upload Stream   │
-              │  • Public Share Engine    │
-              └─────┬───────────────┬─────┘
-                    │               │
-         ┌──────────▼─────┐   ┌─────▼──────────────────┐
-         │ Neon PostgreSQL│   │   Telegram MTProto     │
-         │  (Metadata,    │   │  (Saved Messages /     │
-         │  Folders,Logs) │   │   Private Channel)     │
-         └────────────────┘   └────────────────────────┘
-```
 
 ---
 
-## Features
+## 🌟 Key Features
 
-### Web & Mobile Sync
-- **Passcode Lock Screen:** Unlock with `DRIVE_PASSCODE` from `.env`, owner profile avatar, and optional TOTP 2FA (QR code).
-- **100% Stateless Telegram Storage:** Zero files saved to local disk — uploads stream in memory straight to Telegram MTProto.
-- **Live Upload Progress:** Displays uploaded MB / total MB, transfer speed (`MB/s`), estimated time remaining (ETA), and Telegram sync status.
-- **Folder & Drag-and-Drop Uploads:** Upload entire nested folder trees via button or drag-and-drop.
-- **Live Card Previews & In-App Document Viewers:** Inline thumbnails for images, miniature PDF previews, live text/Markdown snippets, and in-app **PDF, Word (`.docx`), PowerPoint (`.pptx`)** viewers on both Web and Android.
-- **Drag & Drop Upload + Organize:** Drop files or entire nested folders anywhere to upload, or drag files/folders directly onto another folder or breadcrumb to move them.
-- **Fingerprint / Biometric Unlock (Android):** Save credentials securely on first unlock and unlock seamlessly with your fingerprint afterwards.
-- **Fast Caching & In-App Back:** Cached folder views, 30-second JWT session cache, browser preview caching, browser history sync, and an in-app Back button.
-- **Google Drive-Style Sharing (No Passcode Required):**
-  - Share any **single file** (opens with direct inline preview + download) or **folder** (`/share/<token>`).
-  - **Viewer** permission (view & download) or **Editor** permission (view, download, and upload files from any device without logging in).
-  - Configurable expiration (`24h`, `7d`, `30d`, or never) and 1-click **Revoke**.
-- **Trash & Recovery:** Soft-delete, restore, permanent delete (removes from both PostgreSQL and Telegram), and Empty Trash.
-- **Android App & PWA:** Install directly from browser (**Add to Home Screen**) or download the native Flutter Android `.apk` from the sidebar.
+### 1. 🔒 Secret Vault / Safe Folder
+* **Pin & Biometric Isolation:** Accessing sensitive documents requires biometric authentication (Fingerprint / Face ID on mobile via `local_auth`) or a 6-digit Secret PIN on web.
+* **Hidden from Standard Views:** Files and folders inside the Secret Vault are strictly excluded from root `my-drive` queries and search listings.
+* **1-Click Relocation:** Seamlessly move files into the Secret Vault or restore them back to My Drive with context menu actions.
+
+### 2. 🕒 File Version History & 1-Click Rollback
+* **Non-Destructive Overwrites:** Updating a file creates an incremental version record without destroying earlier versions.
+* **Version Timeline Modal:** View version numbers, file sizes, creation timestamps, and active status tags.
+* **Instant Revert:** Revert any file back to a previous version with a single click.
+
+### 3. 🔍 Advanced Smart Search & Filter Chips
+* **1-Tap Category Filters:** Instant horizontal filter pills on Web and native `FilterChip` widgets on Mobile:
+  * `All Files` • `PDFs` • `Photos & Images` • `Videos` • `Audio` • `Documents` (`.docx`, `.xlsx`, `.pptx`, `.txt`, `.md`) • `Archives` (`.zip`, `.rar`, `.7z`)
+* **Live Debounced Search:** Search across names, extensions, and metadata with 300ms debounce.
+
+### 4. 📦 Batch Selection ZIP Download & Multi-Item Delete
+* **Select All / Multi-Select:** Select multiple files and folders across any view using `Ctrl+A` or the dynamic Select All checkbox (`Square` / `MinusSquare` / `CheckSquare`).
+* **1-Click Batch ZIP Download:** Downloads all selected files and nested folders bundled into a single compressed `noor-drive-selection.zip` archive.
+* **Batch Delete & Restore:** Move multiple items to Trash or permanently delete them simultaneously.
+
+### 5. 🗑️ 30-Day Trash Auto-Purge
+* **Automated Cleanup:** Files and folders kept in Trash longer than 30 days are automatically purged from database and Telegram cloud.
+* **Manual Purge Action:** Dedicated "Purge Expired Now" button to instantly clean up items older than 30 days, alongside "Empty Trash".
+
+### 6. 📱 Mobile Gallery Backup & Offline Mode
+* **Camera Roll Sync:** 1-tap backup from your phone's photo gallery into a dedicated `Camera Uploads` cloud folder.
+* **Offline Files Cache:** Save documents and photos directly on device storage to view them anytime without an active internet connection.
+* **PWA Service Worker:** Progressive Web App service worker (`sw.js`) caches application assets for zero-network resilience.
+
+### 7. 📄 In-App Document & Media Viewers
+* **Native In-App Viewers:** Built-in PDF viewer, Word (`.docx`) viewer, PowerPoint (`.pptx`) viewer, custom HTML5 video player, zoomable photo lightbox, and a persistent global audio player bar.
+* **Direct Printing:** Native browser print dialog for PDFs and images without memory bloat or lag.
+
+### 8. 🔗 Google Drive-Style Public Sharing
+* **Tokenized Share Links:** Share any single file or nested folder hierarchy (`/share/<token>`).
+* **Role Permissions:** Viewer (preview & download) or Editor (view, download, and upload without logging in).
+* **QR Codes & Expiration:** Generate QR codes and configure links to expire in 24h, 7d, 30d, or never.
 
 ---
 
-## Project Structure
+## 📱 Mobile App & iOS Support
+
+### Android Installation
+1. Go to [Releases](https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest).
+2. Download the latest **`noor-drive.apk`**.
+3. Open the APK on your Android device and install.
+
+### iOS Support (iPhone & iPad)
+You **do not need Xcode installed locally** to run NOOR DRIVE on an iPhone:
+* **Option A — Instant PWA (Recommended, 0 Setup):**
+  1. Open Safari on your iPhone and visit your deployed web URL.
+  2. Tap the **Share** button (box with upward arrow) at the bottom.
+  3. Scroll down and tap **Add to Home Screen**.
+  4. NOOR DRIVE installs directly to your iOS home screen as a standalone full-screen app with offline caching and native performance!
+* **Option B — GitHub Actions Cloud IPA Build:**
+  * GitHub Actions provides cloud `macos-14` runners with Xcode pre-installed. The Flutter project can be built into an unsigned `.ipa` for sideloading via AltStore, Sideloadly, or TrollStore.
+
+---
+
+## 🛠️ Project Structure
 
 ```text
 Personal_Drive/
 ├── apps/
-│   ├── api/                 # NestJS backend, Prisma schema, Auth, Drive, Shares, Storage
-│   ├── web/                 # Next.js 15 frontend, Tailwind CSS, PWA manifest
-│   └── mobile/              # Flutter Android app (Riverpod, GoRouter, Dio)
-├── packages/
-│   └── shared-types/        # Shared TypeScript DTOs and enums
-├── scripts/
-│   └── telegram-auth.js     # Interactive Telegram MTProto session string generator
-├── .env.example             # Environment variable template
-├── render.yaml              # 100% Free Render Blueprint (API + Web)
-└── package.json             # npm workspaces root
+│   ├── api/                 # NestJS 10 backend
+│   │   ├── prisma/          # Prisma schema & migrations
+│   │   └── src/
+│   │       ├── auth/        # Passcode, JWT strategy, TOTP 2FA
+│   │       ├── drive/       # Drive files, folders, vault, versions, zip
+│   │       ├── shares/      # Public tokenized share links
+│   │       └── storage/     # Telegram MTProto streaming engine
+│   ├── web/                 # Next.js 15 frontend
+│   │   ├── public/          # App icons, favicon, sw.js
+│   │   └── src/
+│   │       ├── app/         # Dashboard, login, share pages
+│   │       └── components/  # Viewers, audio bar, modals
+│   └── mobile/              # Flutter 3.27 Android & iOS app
+│       └── lib/
+│           └── features/    # DriveScreen, auth, offline manager
+├── .github/
+│   └── workflows/
+│       └── build-android-apk.yml # Automated APK release pipeline
+├── package.json             # Root workspaces configuration
+└── render.yaml              # Render Cloud deployment blueprint
 ```
 
 ---
 
-## Local Setup (Step by Step)
+## 🚀 Local Development Setup
 
-### 1. Install Dependencies
+### 1. Prerequisites
+* **Node.js:** v20.x or v22.x
+* **npm:** v10.x+
+* **PostgreSQL:** Neon Serverless Database or local PostgreSQL
+
+### 2. Clone & Install
 ```bash
 git clone https://github.com/NoorAbdullah02/open-cloud-vault.git
 cd open-cloud-vault
-cd Personal_Drive
 npm install
 ```
 
-### 2. Create a Free Neon PostgreSQL Database
-1. Create a free project at [neon.tech](https://neon.tech).
-2. Copy your PostgreSQL connection string (`postgresql://...`).
-3. Keep `DATABASE_URL` strictly on the backend (`.env` / Render) — never expose it in frontend code.
-
-### 3. Get Telegram API Credentials & Session String
-1. Log in at [my.telegram.org](https://my.telegram.org) → **API development tools**.
-2. Create an app (avoid the word "Telegram" in the title; e.g. Title: `Noor Drive`, Short name: `noordrive1`, Platform: `Desktop`).
-3. Copy your **`API_ID`** and **`API_HASH`**.
-4. Create `.env` from `.env.example`:
-   ```bash
-   cp .env.example .env
-   ```
-5. Add `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` to `.env`, then run:
-   ```bash
-   node scripts/telegram-auth.js
-   ```
-6. Enter your phone number (with country code) and the OTP sent to your Telegram app. Copy the printed `TELEGRAM_SESSION_STRING` into `.env`.
-
-### 4. Configure `.env`
+### 3. Environment Configuration
+Create a `.env` file in the root directory:
 ```env
-DATABASE_URL="postgresql://..."
+DATABASE_URL="postgresql://user:password@host/neondb?sslmode=require"
+API_PORT=4000
+NODE_ENV="development"
+CORS_ORIGIN="http://localhost:3000"
+
 DRIVE_PASSCODE="12345"
 SUPER_ADMIN_EMAIL="admin@noordrive.local"
 SUPER_ADMIN_PASSWORD="12345"
-JWT_ACCESS_SECRET="your-64-char-random-hex"
-JWT_REFRESH_SECRET="your-64-char-random-hex"
-DEFAULT_STORAGE_PROVIDER="TELEGRAM_MTPROTO"
+SUPER_ADMIN_NAME="Noor Owner"
+JWT_ACCESS_SECRET="your-access-secret-32-chars-minimum"
+JWT_REFRESH_SECRET="your-refresh-secret-32-chars-minimum"
+
 TELEGRAM_ENABLED="true"
 TELEGRAM_USER_CONSENT="true"
 TELEGRAM_API_ID="your_api_id"
 TELEGRAM_API_HASH="your_api_hash"
 TELEGRAM_SESSION_STRING="your_session_string"
 TELEGRAM_TARGET_CHANNEL="me"
-CORS_ORIGIN="http://localhost:3000"
+
 NEXT_PUBLIC_API_URL="http://localhost:4000/api"
 NEXT_PUBLIC_WS_URL="http://localhost:4000"
 ```
 
-### 5. Push Database Schema & Seed Owner Account
+### 4. Database Setup & Start
 ```bash
+# Push database schema
 npm run db:push
-npm run db:seed
-```
 
-### 6. Start Locally
-```bash
-npm run dev:api   # Backend API -> http://localhost:4000/api
-npm run dev:web   # Web App     -> http://localhost:3000
+# Run API and Web in development
+npm run dev:api
+npm run dev:web
 ```
+* Web Dashboard: `http://localhost:3000`
+* API Server: `http://localhost:4000/api`
 
 ---
 
-## 100% Free Cloud Deployment (Render + Neon)
+## ☁️ Deployment
 
-This repository includes [`render.yaml`](./render.yaml) to deploy **both** the Next.js frontend and NestJS backend together in **one single Free Render service (`noor-cloud`)** via [`scripts/start-combined.js`](./scripts/start-combined.js):
-
-1. Push your repository to GitHub (`.env` is gitignored so your secrets stay private).
-2. In [Render Dashboard](https://dashboard.render.com) → **New +** → **Blueprint** → select your repository (`master` branch).
-   - **Build Command:** `npm install && npm run build`
-   - **Start Command:** `npm start`
-3. Fill in the prompted environment variables for **`noor-cloud`**:
-
-| Variable | Value |
-| :--- | :--- |
-| `DATABASE_URL` | Your Neon PostgreSQL URL |
-| `DRIVE_PASSCODE` | Your unlock passcode (e.g. `12345`) |
-| `SUPER_ADMIN_PASSWORD` | Same passcode (e.g. `12345`) |
-| `TELEGRAM_API_ID` | From `my.telegram.org` |
-| `TELEGRAM_API_HASH` | From `my.telegram.org` |
-| `TELEGRAM_SESSION_STRING` | Generated by `scripts/telegram-auth.js` |
-
-4. Click **Apply** — your app will be live at `https://noor-cloud-vault.onrender.com`!
+### Render Blueprint (1-Click)
+Deploy both the NestJS API and Next.js Web frontend for free on Render using `render.yaml`:
+1. Push your repository to GitHub.
+2. In Render, select **New Blueprint Instance** and connect your repository.
+3. Add your `DATABASE_URL` and Telegram credentials to the Environment Group.
 
 ---
 
-## Android App (`apps/mobile`)
-
-### Run or Build Release APK
-```bash
-cd apps/mobile
-flutter create .
-flutter pub get
-
-# Run in debug mode (pointing to Render or local API):
-flutter run --dart-define=API_URL=https://noor-cloud-vault.onrender.com/api
-
-# Build release APK:
-flutter build apk --release --dart-define=API_URL=https://noor-cloud-vault.onrender.com/api
-```
-
-### Host the APK on Your Website
-Copy `build/app/outputs/flutter-apk/app-release.apk` to `apps/web/public/downloads/noor-drive.apk` (or set `NEXT_PUBLIC_ANDROID_APK_URL` to a GitHub Release URL). The **Download Android App** modal in the web sidebar will automatically detect and display the exact APK file size.
-
----
-
-## Security & Notes
-
-- **Never commit `.env`:** `.gitignore` ignores `.env` and `**/.env`.
-- **Telegram Limits:** Standard Telegram accounts support up to **2 GB per file** (4 GB for Telegram Premium) and enforce FloodWait rate limits.
-- **Revocable Shares:** Any shared link can be revoked immediately from the Share modal.
+## 📄 License
+This project is private and developed for personal cloud vault storage. All rights reserved.
