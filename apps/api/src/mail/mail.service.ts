@@ -21,7 +21,7 @@ export class MailService {
   }
 
   private get senderEmail(): string {
-    return process.env.BREVO_SENDER_EMAIL || this.adminEmail;
+    return process.env.MAIL_FROM || process.env.BREVO_SENDER_EMAIL || this.adminEmail;
   }
 
   /**

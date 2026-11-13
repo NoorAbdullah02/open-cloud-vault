@@ -83,7 +83,7 @@ export class AuthService {
         sessionId: session.id,
       },
       {
-        secret: process.env.JWT_ACCESS_SECRET,
+        secret: process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || 'fallback-dev-secret-change-me',
         expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
       },
     );
