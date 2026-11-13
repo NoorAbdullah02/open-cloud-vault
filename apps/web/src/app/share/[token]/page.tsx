@@ -22,6 +22,7 @@ import { getApiUrl } from '@/lib/api';
 import PdfViewer from '@/components/PdfViewer';
 import DocxViewer from '@/components/DocxViewer';
 import PptxViewer from '@/components/PptxViewer';
+import ZoomableImage from '@/components/ZoomableImage';
 
 const API_URL = getApiUrl();
 
@@ -43,6 +44,12 @@ export default function PublicSharePage() {
   const [subFolderId, setSubFolderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{
+    current: number;
+    total: number;
+    fileName: string;
+  } | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<any>(null);
   const [previewText, setPreviewText] = useState<string | null>(null);
@@ -99,11 +106,20 @@ export default function PublicSharePage() {
     loadShare();
   }, [loadShare]);
 
-  const handleUpload = async (files: FileList) => {
-    if (!files.length) return;
+  const handleUpload = async (files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    if (!fileArray.length) return;
     setUploading(true);
     try {
-      for (const file of Array.from(files)) {
+      let idx = 0;
+      for (const file of fileArray) {
+        idx++;
+        setUploadProgress({
+          current: idx,
+          total: fileArray.length,
+          fileName: file.name,
+        });
+
         const formData = new FormData();
         formData.append('file', file);
         if (subFolderId) formData.append('folderId', subFolderId);
@@ -114,14 +130,15 @@ export default function PublicSharePage() {
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          throw new Error(err.message || 'Upload failed');
+          throw new Error(err.message || `Upload failed for ${file.name}`);
         }
       }
-      loadShare();
+      await loadShare();
     } catch (err: any) {
       alert(err.message);
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -359,11 +376,12 @@ export default function PublicSharePage() {
                 : 'bg-white p-4 sm:p-6 flex items-center justify-center min-h-[420px]'
             }`}>
               {data.file.mimeType.startsWith('image/') ? (
-                <img
-                  src={getDownloadLink(data.file.id, true)}
-                  alt={data.file.name}
-                  className="max-h-[75vh] max-w-full rounded-2xl object-contain"
-                />
+                <div className="w-full h-[75vh]">
+                  <ZoomableImage
+                    src={getDownloadLink(data.file.id, true)}
+                    alt={data.file.name}
+                  />
+                </div>
               ) : data.file.mimeType.startsWith('video/') ? (
                 <video
                   src={getDownloadLink(data.file.id, true)}
@@ -408,19 +426,107 @@ export default function PublicSharePage() {
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-3">
-              {subFolderId && subFolderId !== data.rootFolderId && (
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                {subFolderId && subFolderId !== data.rootFolderId && (
+                  <button
+                    onClick={() => setSubFolderId(data.folder?.parentId || data.rootFolderId)}
+                    className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                )}
+                <div>
+                  <h1 className="text-xl font-bold text-slate-900">
+                    {data.folder?.name || 'Shared Folder'}
+                  </h1>
+                  {data.permission === 'EDITOR' && (
+                    <p className="text-xs text-emerald-600 font-medium flex items-center gap-1 mt-0.5">
+                      <ShieldCheck className="w-3.5 h-3.5" /> Public Contributor Mode: Anyone with this link can view, download &amp; upload files
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {data.permission === 'EDITOR' && (
                 <button
-                  onClick={() => setSubFolderId(data.folder?.parentId || data.rootFolderId)}
-                  className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50"
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs flex items-center gap-2 transition shrink-0"
                 >
-                  <ArrowLeft className="w-4 h-4" />
+                  {uploading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4" />
+                  )}
+                  <span className="hidden sm:inline">{uploading ? 'Uploading...' : 'Upload Files'}</span>
                 </button>
               )}
-              <h1 className="text-xl font-bold text-slate-900">
-                {data.folder?.name || 'Shared Folder'}
-              </h1>
             </div>
+
+            {/* Public Upload Dropzone for EDITOR Folders */}
+            {data.permission === 'EDITOR' && (
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDraggingOver(true);
+                }}
+                onDragLeave={() => setIsDraggingOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDraggingOver(false);
+                  if (e.dataTransfer.files) handleUpload(e.dataTransfer.files);
+                }}
+                onClick={() => fileInputRef.current?.click()}
+                className={`cursor-pointer rounded-2xl border-2 border-dashed p-6 transition flex flex-col sm:flex-row items-center justify-between gap-4 ${
+                  isDraggingOver
+                    ? 'border-indigo-500 bg-indigo-50/70 scale-[1.005]'
+                    : 'border-slate-300/80 bg-white hover:border-indigo-400 hover:bg-slate-50/60 shadow-xs'
+                }`}
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                    <Upload className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">
+                      Upload Files to this Shared Folder
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Drag &amp; drop files directly here, or click to browse (Multiple files supported)
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={uploading}
+                  className="px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold shadow-xs flex items-center gap-2 shrink-0 transition"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Choose Files</span>
+                </button>
+              </div>
+            )}
+
+            {/* Upload Progress Indicator */}
+            {uploadProgress && (
+              <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-100 flex flex-col gap-2 shadow-xs">
+                <div className="flex items-center justify-between text-xs font-semibold text-indigo-900">
+                  <span className="flex items-center gap-2 truncate max-w-[80%]">
+                    <Loader2 className="w-4 h-4 animate-spin text-indigo-600 shrink-0" />
+                    Uploading file {uploadProgress.current} of {uploadProgress.total}: {uploadProgress.fileName}
+                  </span>
+                  <span className="shrink-0">{Math.round((uploadProgress.current / uploadProgress.total) * 100)}%</span>
+                </div>
+                <div className="w-full h-2 bg-indigo-200/60 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-600 rounded-full transition-all duration-300"
+                    style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
 
             {data.subFolders?.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -517,13 +623,14 @@ export default function PublicSharePage() {
               </button>
             </div>
           </div>
-          <div className="flex-1 flex items-center justify-center overflow-auto">
+          <div className="flex-1 flex items-center justify-center overflow-hidden p-2">
             {previewFile.mimeType.startsWith('image/') ? (
-              <img
-                src={getDownloadLink(previewFile.id, true)}
-                alt={previewFile.name}
-                className="max-h-full max-w-full rounded-2xl object-contain"
-              />
+              <div className="w-full h-full max-h-[85vh]">
+                <ZoomableImage
+                  src={getDownloadLink(previewFile.id, true)}
+                  alt={previewFile.name}
+                />
+              </div>
             ) : previewFile.mimeType.startsWith('video/') ? (
               <video
                 src={getDownloadLink(previewFile.id, true)}

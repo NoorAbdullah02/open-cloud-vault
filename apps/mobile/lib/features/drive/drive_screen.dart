@@ -982,16 +982,9 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                 ),
               ],
             ),
-            body: Center(
-              child: InteractiveViewer(
-                child: Image.network(
-                  inlineUrl,
-                  headers: authHeaders,
-                  loadingBuilder: (_, child, progress) => progress == null
-                      ? child
-                      : const CircularProgressIndicator(color: Colors.white),
-                ),
-              ),
+            body: _MobileZoomableImageViewer(
+              imageUrl: inlineUrl,
+              headers: authHeaders,
             ),
           ),
         ),
@@ -1334,9 +1327,10 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     });
     List<dynamic> links = List.from(existingRes.data ?? []);
 
-    Future<String> getOrCreateShareUrl() async {
-      if (links.isNotEmpty) {
-        final token = links[0]['shareToken'];
+    Future<String> getOrCreateShareUrl({bool forceNew = false}) async {
+      final matching = links.where((l) => l['permission'] == permission).toList();
+      if (!forceNew && matching.isNotEmpty) {
+        final token = matching[0]['shareToken'];
         final webBase = ApiClient.baseUrl.replaceAll('/api', '');
         return '$webBase/share/$token';
       }
@@ -1427,10 +1421,29 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                   ),
                   const SizedBox(height: 8),
 
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    icon: const Icon(Icons.add_link),
+                    label: Text(type == 'folder' && permission == 'EDITOR'
+                        ? 'Create Editor Link (Can Upload)'
+                        : 'Create New Link'),
+                    onPressed: () async {
+                      final shareUrl = await getOrCreateShareUrl(forceNew: true);
+                      await Clipboard.setData(ClipboardData(text: shareUrl));
+                      setModalState(() {});
+                      _showSnack('Share link created & copied!');
+                    },
+                  ),
+                  const SizedBox(height: 8),
+
                   // Create / Copy Link Button
                   TextButton.icon(
                     icon: const Icon(Icons.link),
-                    label: const Text('Copy Public Link'),
+                    label: const Text('Copy Current Link'),
                     onPressed: () async {
                       final shareUrl = await getOrCreateShareUrl();
                       await Clipboard.setData(ClipboardData(text: shareUrl));
@@ -2522,6 +2535,192 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _MobileZoomableImageViewer extends StatefulWidget {
+  final String imageUrl;
+  final Map<String, String>? headers;
+
+  const _MobileZoomableImageViewer({
+    required this.imageUrl,
+    this.headers,
+  });
+
+  @override
+  State<_MobileZoomableImageViewer> createState() => _MobileZoomableImageViewerState();
+}
+
+class _MobileZoomableImageViewerState extends State<_MobileZoomableImageViewer>
+    with SingleTickerProviderStateMixin {
+  late TransformationController _transformationController;
+  TapDownDetails? _doubleTapDetails;
+  AnimationController? _animationController;
+  Animation<Matrix4>? _animation;
+  double _currentScale = 1.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _transformationController = TransformationController();
+    _transformationController.addListener(_onTransformationChanged);
+  }
+
+  void _onTransformationChanged() {
+    final scale = _transformationController.value.getMaxScaleOnAxis();
+    if (mounted && (_currentScale - scale).abs() > 0.05) {
+      setState(() {
+        _currentScale = scale;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _transformationController.removeListener(_onTransformationChanged);
+    _transformationController.dispose();
+    _animationController?.dispose();
+    super.dispose();
+  }
+
+  void _animateTo(Matrix4 target) {
+    _animationController?.dispose();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 240),
+    );
+    _animation = Matrix4Tween(
+      begin: _transformationController.value,
+      end: target,
+    ).animate(CurvedAnimation(
+      parent: _animationController!,
+      curve: Curves.easeOutCubic,
+    ));
+
+    _animationController!.addListener(() {
+      _transformationController.value = _animation!.value;
+    });
+    _animationController!.forward();
+  }
+
+  void _handleDoubleTap() {
+    final currentScale = _transformationController.value.getMaxScaleOnAxis();
+    if (currentScale > 1.2) {
+      _animateTo(Matrix4.identity());
+    } else {
+      final position = _doubleTapDetails?.localPosition ?? Offset.zero;
+      final target = Matrix4.identity()
+        ..translate(-position.dx * 1.5, -position.dy * 1.5)
+        ..scale(2.5);
+      _animateTo(target);
+    }
+  }
+
+  void _zoomIn() {
+    final scale = _transformationController.value.getMaxScaleOnAxis();
+    final targetScale = (scale * 1.4).clamp(0.6, 5.0);
+    final target = Matrix4.identity()..scale(targetScale);
+    _animateTo(target);
+  }
+
+  void _zoomOut() {
+    final scale = _transformationController.value.getMaxScaleOnAxis();
+    final targetScale = (scale / 1.4).clamp(0.6, 5.0);
+    final target = targetScale <= 1.05 ? Matrix4.identity() : (Matrix4.identity()..scale(targetScale));
+    _animateTo(target);
+  }
+
+  void _resetZoom() {
+    _animateTo(Matrix4.identity());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        GestureDetector(
+          onDoubleTapDown: (d) => _doubleTapDetails = d,
+          onDoubleTap: _handleDoubleTap,
+          child: Center(
+            child: InteractiveViewer(
+              transformationController: _transformationController,
+              minScale: 0.5,
+              maxScale: 5.0,
+              child: Image.network(
+                widget.imageUrl,
+                headers: widget.headers,
+                loadingBuilder: (_, child, progress) => progress == null
+                    ? child
+                    : const CircularProgressIndicator(color: Colors.white),
+              ),
+            ),
+          ),
+        ),
+
+        // Floating Zoom Toolbar & Percentage
+        Positioned(
+          bottom: 24,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xCC0F172A),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white12),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black45, blurRadius: 12, offset: Offset(0, 4)),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.zoom_out, color: Colors.white, size: 20),
+                    onPressed: _zoomOut,
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Zoom Out',
+                  ),
+                  GestureDetector(
+                    onTap: _resetZoom,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: Text(
+                        '${(_currentScale * 100).round()}%',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.zoom_in, color: Colors.white, size: 20),
+                    onPressed: _zoomIn,
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Zoom In',
+                  ),
+                  Container(
+                    width: 1,
+                    height: 16,
+                    color: Colors.white24,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh, color: Colors.white, size: 18),
+                    onPressed: _resetZoom,
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Reset Zoom',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

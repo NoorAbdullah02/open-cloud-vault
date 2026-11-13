@@ -68,6 +68,7 @@ import {
 import PdfViewer from '@/components/PdfViewer';
 import DocxViewer from '@/components/DocxViewer';
 import PptxViewer from '@/components/PptxViewer';
+import ZoomableImage from '@/components/ZoomableImage';
 
 type ViewMode = 'my-drive' | 'recent' | 'starred' | 'photos' | 'videos' | 'documents' | 'trash';
 
@@ -3561,11 +3562,12 @@ function DriveDashboardContent() {
                 <p className="text-sm text-slate-300">Loading preview from NOOR DRIVE...</p>
               </div>
             ) : previewModal.file.mimeType.startsWith('image/') ? (
-              <img
-                src={previewModal.url}
-                alt={previewModal.file.name}
-                className="max-h-[80dvh] max-w-full rounded-2xl object-contain shadow-2xl"
-              />
+              <div className="w-full h-full max-h-[82dvh]">
+                <ZoomableImage
+                  src={previewModal.url}
+                  alt={previewModal.file.name}
+                />
+              </div>
             ) : previewModal.file.mimeType.startsWith('video/') ? (
               <video
                 src={previewModal.url}
