@@ -1576,6 +1576,42 @@ function DriveDashboardContent() {
     }
   };
 
+  const handleBatchDownload = () => {
+    const fileIds = selectedItems.filter((s) => s.type === 'file').map((s) => s.id);
+    const folderIds = selectedItems.filter((s) => s.type === 'folder').map((s) => s.id);
+
+    if (fileIds.length === 0 && folderIds.length === 0) return;
+
+    if (fileIds.length === 1 && folderIds.length === 0) {
+      const singleFile = files.find((f) => f.id === fileIds[0]);
+      if (singleFile) {
+        handleDownload(singleFile);
+        return;
+      }
+    }
+
+    if (folderIds.length === 1 && fileIds.length === 0) {
+      const singleFolder = folders.find((f) => f.id === folderIds[0]);
+      if (singleFolder) {
+        handleDownloadFolder(singleFolder);
+        return;
+      }
+    }
+
+    const { accessToken } = getStoredTokens();
+    const downloadUrl = `${getApiUrl()}/drive/batch/download?fileIds=${encodeURIComponent(
+      fileIds.join(','),
+    )}&folderIds=${encodeURIComponent(folderIds.join(','))}&token=${accessToken || ''}`;
+
+    showToast(`Downloading ${selectedItems.length} selected items as .zip...`, 'success');
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = 'noor-drive-selection.zip';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const saveStoragePreferences = async () => {
     try {
       await apiFetch('/drive/storage/preferences', {
@@ -2602,17 +2638,11 @@ function DriveDashboardContent() {
                 ) : (
                   <>
                     <button
-                      onClick={() => {
-                        const selectedFileIds = new Set(
-                          selectedItems.filter((s) => s.type === 'file').map((s) => s.id),
-                        );
-                        files
-                          .filter((f) => selectedFileIds.has(f.id))
-                          .forEach((f) => handleDownload(f));
-                      }}
-                      className="px-3.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 transition"
+                      onClick={handleBatchDownload}
+                      className="px-3.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 transition flex items-center gap-1.5"
                     >
-                      Download Files
+                      <Download className="w-3.5 h-3.5 text-sky-500" />
+                      <span>Download Selected ({selectedItems.length})</span>
                     </button>
                     <button
                       onClick={() =>

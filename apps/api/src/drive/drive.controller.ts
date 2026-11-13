@@ -160,6 +160,33 @@ export class DriveController {
     return this.driveService.streamFolderAsZip(user.id, id, res);
   }
 
+  @Get('batch/download')
+  async downloadBatchSelectionGet(
+    @CurrentUser() user: AuthUser,
+    @Query('fileIds') fileIdsStr: string,
+    @Query('folderIds') folderIdsStr: string,
+    @Res() res: Response,
+  ) {
+    const fileIds = fileIdsStr ? fileIdsStr.split(',').filter(Boolean) : [];
+    const folderIds = folderIdsStr ? folderIdsStr.split(',').filter(Boolean) : [];
+    return this.driveService.streamBatchSelectionAsZip(user.id, fileIds, folderIds, res);
+  }
+
+  @Post('batch/download')
+  async downloadBatchSelectionPost(
+    @CurrentUser() user: AuthUser,
+    @Body('fileIds') fileIds: string[],
+    @Body('folderIds') folderIds: string[],
+    @Res() res: Response,
+  ) {
+    return this.driveService.streamBatchSelectionAsZip(
+      user.id,
+      fileIds || [],
+      folderIds || [],
+      res,
+    );
+  }
+
   @Patch(':type/:id/star')
   toggleStar(
     @CurrentUser() user: AuthUser,

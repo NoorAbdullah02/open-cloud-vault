@@ -842,4 +842,68 @@ export class DriveService {
 
     return this.serializeFile(updated);
   }
+
+  async streamBatchSelectionAsZip(
+    userId: string,
+    fileIds: string[],
+    folderIds: string[],
+    res: any,
+  ) {
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="noor-drive-selection.zip"',
+    );
+
+    const archive = archiver('zip', { zlib: { level: 5 } });
+    archive.on('error', () => {
+      if (!res.headersSent) res.status(500).end();
+    });
+    archive.pipe(res);
+
+    const appendFolder = async (currentFolderId: string, prefix: string) => {
+      const [files, subFolders] = await Promise.all([
+        this.prisma.file.findMany({
+          where: { ownerId: userId, folderId: currentFolderId, isTrash: false },
+        }),
+        this.prisma.folder.findMany({
+          where: { ownerId: userId, parentId: currentFolderId, isTrash: false },
+        }),
+      ]);
+
+      for (const f of files) {
+        try {
+          const stream = await this.storage.readFileStream(f.storageObjectId);
+          archive.append(stream as any, { name: `${prefix}${f.name}` });
+        } catch {}
+      }
+
+      for (const sf of subFolders) {
+        await appendFolder(sf.id, `${prefix}${sf.name}/`);
+      }
+    };
+
+    if (folderIds && folderIds.length > 0) {
+      const folders = await this.prisma.folder.findMany({
+        where: { id: { in: folderIds }, ownerId: userId, isTrash: false },
+      });
+      for (const folder of folders) {
+        await appendFolder(folder.id, `${folder.name}/`);
+      }
+    }
+
+    if (fileIds && fileIds.length > 0) {
+      const files = await this.prisma.file.findMany({
+        where: { id: { in: fileIds }, ownerId: userId, isTrash: false },
+      });
+      for (const f of files) {
+        try {
+          const stream = await this.storage.readFileStream(f.storageObjectId);
+          archive.append(stream as any, { name: f.name });
+        } catch {}
+      }
+    }
+
+    await archive.finalize();
+  }
 }

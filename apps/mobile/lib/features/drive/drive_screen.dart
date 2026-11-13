@@ -2470,6 +2470,30 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _batchDownloadSelected() async {
+    final fileIds = <String>[];
+    final folderIds = <String>[];
+    for (final key in _selectedKeys) {
+      if (key.startsWith('file:')) fileIds.add(key.substring(5));
+      if (key.startsWith('folder:')) folderIds.add(key.substring(7));
+    }
+    if (fileIds.isEmpty && folderIds.isEmpty) return;
+
+    _showSnack('Starting download of ${fileIds.length + folderIds.length} items as .zip...');
+    try {
+      final token = await apiClient.storage.read(key: 'access_token');
+      final query = {
+        if (fileIds.isNotEmpty) 'fileIds': fileIds.join(','),
+        if (folderIds.isNotEmpty) 'folderIds': folderIds.join(','),
+        if (token != null) 'token': token,
+      };
+      final uri = Uri.parse('${apiClient.dio.options.baseUrl}/drive/batch/download').replace(queryParameters: query);
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      _showSnack('Failed to start batch download: $e', isError: true);
+    }
+  }
+
   Future<void> _restoreItem(String type, String id) async {
     setState(() {
       if (type == 'file') {
@@ -2587,6 +2611,12 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                     ? 'Deselect All'
                     : 'Select All',
               ),
+              if (_view != 'trash')
+                IconButton(
+                  icon: const Icon(Icons.download_rounded, color: Color(0xFF2563EB)),
+                  onPressed: _batchDownloadSelected,
+                  tooltip: 'Download Selected (.zip)',
+                ),
               if (_view == 'trash') ...[
                 IconButton(
                   icon: const Icon(Icons.restore_from_trash, color: Color(0xFF059669)),
