@@ -2295,6 +2295,181 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     _showSnack('Moved to Trash');
   }
 
+  Future<bool> _authenticateVault() async {
+    if (_vaultUnlocked) return true;
+    try {
+      final auth = LocalAuthentication();
+      final canCheck = await auth.canCheckBiometrics || await auth.isDeviceSupported();
+      if (canCheck) {
+        final success = await auth.authenticate(
+          localizedReason: 'Authenticate to access NOOR DRIVE Secret Vault',
+          options: const AuthenticationOptions(stickyAuth: true, biometricOnly: false),
+        );
+        if (success) {
+          setState(() => _vaultUnlocked = true);
+          return true;
+        }
+      } else {
+        setState(() => _vaultUnlocked = true);
+        return true;
+      }
+    } catch (_) {
+      setState(() => _vaultUnlocked = true);
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> _moveToVault(String type, String id) async {
+    try {
+      await apiClient.dio.post('/drive/vault/move-in', data: {'type': type, 'id': id});
+      _showSnack('Moved to Secret Vault 🔒');
+      _loadDrive(silent: true);
+    } catch (e) {
+      _showSnack('Failed to move to vault: $e', isError: true);
+    }
+  }
+
+  Future<void> _moveFromVault(String type, String id) async {
+    try {
+      await apiClient.dio.post('/drive/vault/move-out', data: {'type': type, 'id': id});
+      _showSnack('Moved to My Drive 🔓');
+      _loadDrive(silent: true);
+    } catch (e) {
+      _showSnack('Failed to move from vault: $e', isError: true);
+    }
+  }
+
+  Future<void> _showVersionHistory(Map<String, dynamic> file) async {
+    try {
+      final res = await apiClient.dio.get('/drive/files/${file['id']}/versions');
+      final versions = List<dynamic>.from(res.data['versions'] ?? []);
+      if (!mounted) return;
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        builder: (ctx) => Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: const [
+                      Icon(Icons.history, color: Color(0xFF7C3AED)),
+                      SizedBox(width: 8),
+                      Text(
+                        'Version History',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                      ),
+                    ],
+                  ),
+                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                ],
+              ),
+              Text(
+                file['name'] ?? '',
+                style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 16),
+              if (versions.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Text('Current file is at initial Version 1.', style: TextStyle(color: Color(0xFF94A3B8))),
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: versions.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (c, idx) {
+                      final v = versions[idx];
+                      final isCurrent = v['isCurrent'] == true;
+                      final sizeStr = _formatBytes(v['sizeBytes']);
+                      final dateStr = v['createdAt'] != null
+                          ? DateFormat('MMM d, yyyy h:mm a').format(DateTime.parse(v['createdAt']).toLocal())
+                          : '';
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: CircleAvatar(
+                          backgroundColor: isCurrent ? const Color(0xFFEDE9FE) : const Color(0xFFF1F5F9),
+                          child: Text(
+                            'v${v['versionNumber']}',
+                            style: TextStyle(
+                              color: isCurrent ? const Color(0xFF7C3AED) : const Color(0xFF64748B),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        title: Row(
+                          children: [
+                            Text('Version ${v['versionNumber']}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                            if (isCurrent) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF7C3AED),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text('Active', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ],
+                        ),
+                        subtitle: Text('$sizeStr • $dateStr', style: const TextStyle(fontSize: 11)),
+                        trailing: isCurrent
+                            ? null
+                            : OutlinedButton(
+                                onPressed: () async {
+                                  Navigator.pop(ctx);
+                                  try {
+                                    await apiClient.dio.post('/drive/files/${file['id']}/versions/${v['versionNumber']}/restore');
+                                    _showSnack('Restored to Version ${v['versionNumber']}');
+                                    _loadDrive(silent: true);
+                                  } catch (e) {
+                                    _showSnack('Restore failed: $e', isError: true);
+                                  }
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Color(0xFF7C3AED)),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                child: const Text('Restore', style: TextStyle(color: Color(0xFF7C3AED), fontSize: 12)),
+                              ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      _showSnack('Failed to load version history: $e', isError: true);
+    }
+  }
+
+  Future<void> _purgeExpiredTrash() async {
+    try {
+      await apiClient.dio.delete('/drive/trash/purge-expired');
+      _showSnack('Purged expired items (>30 days old)');
+      _loadDrive(silent: true);
+    } catch (e) {
+      _showSnack('Purge failed: $e', isError: true);
+    }
+  }
+
   Future<void> _restoreItem(String type, String id) async {
     setState(() {
       if (type == 'file') {
@@ -3121,6 +3296,9 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                           child: PopupMenuButton<String>(
                                             icon: const Icon(Icons.more_vert, size: 18, color: Color(0xFF64748B)),
                                             onSelected: (action) {
+                                              if (action == 'version') _showVersionHistory(file);
+                                              if (action == 'vault_in') _moveToVault('file', file['id']);
+                                              if (action == 'vault_out') _moveFromVault('file', file['id']);
                                               if (action == 'offline') _toggleOfflineFile(file);
                                               if (action == 'download') _downloadAndOpen(file);
                                               if (action == 'share') _openShareDialog('file', file['id'], file['name']);
