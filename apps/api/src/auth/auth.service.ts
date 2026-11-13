@@ -175,7 +175,8 @@ export class AuthService {
     meta: { ipAddress?: string; userAgent?: string },
   ) {
     const ownerEmail = (process.env.SUPER_ADMIN_EMAIL || 'sheikhnoorabdullah02@gmail.com').toLowerCase().trim();
-    const envPasscode = process.env.DRIVE_PASSCODE;
+    // Unified Master Password / Passcode: reads SUPER_ADMIN_PASSWORD first, with DRIVE_PASSCODE fallback
+    const envPasscode = process.env.SUPER_ADMIN_PASSWORD || process.env.DRIVE_PASSCODE || '12345';
 
     // 1. Locate user (super admin or owner)
     let user = await this.prisma.user.findUnique({
@@ -197,10 +198,11 @@ export class AuthService {
       throw new UnauthorizedException('Owner account not seeded. Please run database seed.');
     }
 
-    // 2. Validate passcode:
-    // Matches DRIVE_PASSCODE env, OR matches SystemSetting 'drive_passcode', OR matches user.passwordHash
+    // 2. Validate passcode against SUPER_ADMIN_PASSWORD / DRIVE_PASSCODE / passwordHash
     let isPasscodeValid = false;
     if (envPasscode && dto.passcode === envPasscode) {
+      isPasscodeValid = true;
+    } else if (process.env.DRIVE_PASSCODE && dto.passcode === process.env.DRIVE_PASSCODE) {
       isPasscodeValid = true;
     } else {
       const dynamicPasscode = await this.prisma.systemSetting.findUnique({
