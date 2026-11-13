@@ -62,14 +62,18 @@ export default function LoginPage() {
       <div className="w-full max-w-[390px] bg-white/95 backdrop-blur-xl border border-zinc-200/80 rounded-[32px] shadow-[0_24px_64px_-16px_rgba(15,23,42,0.12)] p-7 sm:p-9 relative z-10">
         {/* Top Brand + Owner Pill */}
         <div className="flex items-center justify-between mb-7">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-zinc-900 to-blue-600 flex items-center justify-center shadow-sm">
+          <a
+            href="/"
+            className="flex items-center gap-2.5 cursor-pointer group"
+            title="Go to NOOR DRIVE Root (/)"
+          >
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-zinc-900 to-blue-600 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
               <Cloud className="w-5 h-5 text-white" />
             </div>
-            <span className="font-bold text-sm tracking-tight text-zinc-900">
+            <span className="font-bold text-sm tracking-tight text-zinc-900 group-hover:text-blue-600 transition-colors">
               NOOR DRIVE
             </span>
-          </div>
+          </a>
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-wider">
             <Sparkles className="w-3 h-3" /> Private
           </span>

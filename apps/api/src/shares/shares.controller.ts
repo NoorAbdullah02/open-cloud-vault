@@ -22,6 +22,45 @@ import { SharesService } from './shares.service';
 
 let cachedRelease: { version: string; sizeBytes: number; downloadUrl: string; fetchedAt: number } | null = null;
 
+function getAccurateMimeType(ext: string, fallbackMime?: string): string {
+  const cleanExt = (ext || '').toLowerCase().replace(/^\./, '');
+  const mimeMap: Record<string, string> = {
+    pdf: 'application/pdf',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    svg: 'image/svg+xml',
+    mp4: 'video/mp4',
+    webm: 'video/webm',
+    mov: 'video/quicktime',
+    mp3: 'audio/mpeg',
+    wav: 'audio/wav',
+    ogg: 'audio/ogg',
+    m4a: 'audio/mp4',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    doc: 'application/msword',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    ppt: 'application/vnd.ms-powerpoint',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    xls: 'application/vnd.ms-excel',
+    txt: 'text/plain; charset=utf-8',
+    log: 'text/plain; charset=utf-8',
+    md: 'text/markdown; charset=utf-8',
+    json: 'application/json; charset=utf-8',
+    csv: 'text/csv; charset=utf-8',
+    ts: 'text/plain; charset=utf-8',
+    js: 'text/javascript; charset=utf-8',
+    py: 'text/plain; charset=utf-8',
+    html: 'text/html; charset=utf-8',
+    css: 'text/css; charset=utf-8',
+  };
+  if (mimeMap[cleanExt]) return mimeMap[cleanExt];
+  if (fallbackMime && fallbackMime !== 'application/octet-stream') return fallbackMime;
+  return 'application/octet-stream';
+}
+
 @Controller('shares')
 export class SharesController {
   constructor(private readonly sharesService: SharesService) {}
@@ -108,7 +147,8 @@ export class SharesController {
   ) {
     const { file, stream } = await this.sharesService.downloadSharedFile(token, fileId);
     const disposition = inline === 'true' ? 'inline' : 'attachment';
-    res.setHeader('Content-Type', file.mimeType);
+    const accurateMime = getAccurateMimeType(file.extension || file.name.split('.').pop() || '', file.mimeType);
+    res.setHeader('Content-Type', accurateMime);
     res.setHeader(
       'Content-Disposition',
       `${disposition}; filename="${encodeURIComponent(file.name)}"`,

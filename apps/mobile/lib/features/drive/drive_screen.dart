@@ -410,6 +410,206 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _backupGalleryPhotos() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.media,
+        allowMultiple: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      final selectedCount = result.files.length;
+      if (!mounted) return;
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Backup Gallery Media'),
+          content: Text(
+            'Found $selectedCount photos/videos selected from your phone. '
+            'Do you want to back them up to your "Camera Uploads" folder in NOOR DRIVE?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4F46E5),
+                foregroundColor: Colors.white,
+              ),
+              child: Text('Backup ($selectedCount)'),
+            ),
+          ],
+        ),
+      );
+
+      if (proceed != true) return;
+
+      // Find or create "Camera Uploads" folder in root
+      String? cameraUploadsFolderId;
+      try {
+        final rootRes = await apiClient.dio.get('/drive/items');
+        if (rootRes.data is Map && rootRes.data['folders'] is List) {
+          final List rootFolders = rootRes.data['folders'];
+          for (final f in rootFolders) {
+            if (f is Map && (f['name'] as String).toLowerCase() == 'camera uploads') {
+              cameraUploadsFolderId = f['id'] as String;
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+
+      if (cameraUploadsFolderId == null) {
+        try {
+          final newFolderRes = await apiClient.dio.post('/drive/folders', data: {
+            'name': 'Camera Uploads',
+          });
+          if (newFolderRes.data is Map && newFolderRes.data['id'] != null) {
+            cameraUploadsFolderId = newFolderRes.data['id'] as String;
+          }
+        } catch (_) {}
+      }
+
+      int successCount = 0;
+      for (int i = 0; i < result.files.length; i++) {
+        final f = result.files[i];
+        if (f.path == null) continue;
+        if (!mounted) break;
+        setState(() {
+          _uploadingName = '[${i + 1}/$selectedCount] ${f.name}';
+        });
+        try {
+          await _uploadSingleFile(f.path!, f.name, cameraUploadsFolderId);
+          successCount++;
+        } catch (_) {
+          // Continue with remaining files even if one fails
+        }
+      }
+
+      if (mounted) {
+        _showSnack('🎉 $successCount of $selectedCount media files backed up to "Camera Uploads"!');
+        await _loadDrive(silent: true);
+        await _loadUser();
+      }
+    } catch (e) {
+      _showSnack('Gallery backup error: $e', isError: true);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _uploadingName = null;
+          _syncingDrive = false;
+          _uploadCancelToken = null;
+        });
+      }
+    }
+  }
+
+  void _showUploadMenu() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.bottom(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Add to NOOR DRIVE',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEF2FF),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.upload_file, color: Color(0xFF4F46E5)),
+                ),
+                title: const Text('Upload Files', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Select documents, archives or media', style: TextStyle(fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _uploadFiles();
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.drive_folder_upload, color: Color(0xFFD97706)),
+                ),
+                title: const Text('Upload Folder', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Upload an entire folder and its contents', style: TextStyle(fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _uploadFolder();
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.photo_library, color: Color(0xFF059669)),
+                ),
+                title: const Text('Backup Phone Gallery', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Sync photos & videos to Camera Uploads', style: TextStyle(fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _backupGalleryPhotos();
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.create_new_folder, color: Color(0xFF475569)),
+                ),
+                title: const Text('Create Folder', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Create a new sub-folder here', style: TextStyle(fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _createFolder();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _uploadFolder() async {
     final dirPath = await FilePicker.platform.getDirectoryPath();
     if (dirPath == null) return;
@@ -1687,19 +1887,32 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                       onPressed: _goBack,
                     )
                   : null),
-          title: Text(
-            _selectedKeys.isNotEmpty
-                ? '${_selectedKeys.length} selected'
-                : 'NOOR DRIVE',
-            style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 18),
-          ),
+          title: _selectedKeys.isNotEmpty
+              ? Text(
+                  '${_selectedKeys.length} selected',
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 18),
+                )
+              : GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _folderId = null;
+                      _view = 'my-drive';
+                      _searchController.clear();
+                    });
+                    _loadDrive();
+                  },
+                  child: const Text(
+                    'NOOR DRIVE',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 18),
+                  ),
+                ),
           actions: [
             if (_selectedKeys.isNotEmpty) ...[
               IconButton(
                 icon: Icon(
                   _selectedKeys.length == (_folders.length + _files.length) && (_folders.length + _files.length) > 0
-                      ? Icons.deselect
-                      : Icons.select_all,
+                      ? Icons.check_box
+                      : Icons.check_box_outline_blank,
                   color: const Color(0xFF4F46E5),
                 ),
                 onPressed: _toggleSelectAll,
@@ -1742,10 +1955,15 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
               ),
               if (_files.isNotEmpty || _folders.isNotEmpty)
                 IconButton(
-                  icon: const Icon(Icons.checklist, color: Color(0xFF4F46E5)),
+                  icon: const Icon(Icons.select_all, color: Color(0xFF4F46E5)),
                   onPressed: _selectAll,
                   tooltip: 'Select All',
                 ),
+              IconButton(
+                icon: const Icon(Icons.photo_library_outlined, color: Color(0xFF18181B)),
+                onPressed: _backupGalleryPhotos,
+                tooltip: 'Backup Gallery (Camera Uploads)',
+              ),
               IconButton(
                 icon: const Icon(Icons.create_new_folder_outlined, color: Color(0xFF18181B)),
                 onPressed: _createFolder,
@@ -1783,30 +2001,41 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                 child: ListView(
                   padding: EdgeInsets.zero,
                   children: [
-                    DrawerHeader(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [_accentColor, const Color(0xFF2563EB)],
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _folderId = null;
+                          _view = 'my-drive';
+                          _searchController.clear();
+                        });
+                        Navigator.pop(context);
+                        _loadDrive();
+                      },
+                      child: DrawerHeader(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [_accentColor, const Color(0xFF2563EB)],
+                          ),
                         ),
-                      ),
-                      child: const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          CircleAvatar(
-                            radius: 26,
-                            backgroundImage: AssetImage('assets/owner.jpg'),
-                          ),
-                          SizedBox(height: 10),
-                          Text(
-                            'NOOR DRIVE',
-                            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            'Personal Cloud Vault',
-                            style: TextStyle(color: Colors.white70, fontSize: 12),
-                          ),
-                        ],
+                        child: const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            CircleAvatar(
+                              radius: 26,
+                              backgroundImage: AssetImage('assets/owner.jpg'),
+                            ),
+                            SizedBox(height: 10),
+                            Text(
+                              'NOOR DRIVE',
+                              style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              'Personal Cloud Vault (Tap for Root)',
+                              style: TextStyle(color: Colors.white70, fontSize: 12),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     for (final item in [
@@ -1831,6 +2060,17 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                           _loadDrive();
                         },
                       ),
+                    const Divider(),
+                    ListTile(
+                      leading: const Icon(Icons.photo_library_outlined, color: Color(0xFF4F46E5)),
+                      title: const Text('Backup Gallery Photos', style: TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Sync phone photos to Camera Uploads', style: TextStyle(fontSize: 12)),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _backupGalleryPhotos();
+                      },
+                    ),
+                    const Divider(),
                     ListTile(
                       leading: Icon(Icons.palette_outlined, color: _accentColor),
                       title: const Text('Customize Theme Color'),
@@ -1914,7 +2154,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
           ),
         ),
         floatingActionButton: FloatingActionButton.extended(
-          onPressed: _uploadingName != null ? null : _uploadFiles,
+          onPressed: _uploadingName != null ? null : _showUploadMenu,
           backgroundColor: _accentColor,
           foregroundColor: Colors.white,
           icon: _uploadingName != null
@@ -1923,7 +2163,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                   height: 18,
                   child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                 )
-              : const Icon(Icons.upload_file),
+              : const Icon(Icons.add),
           label: Text(_uploadingName != null ? 'Uploading...' : 'Upload'),
         ),
         body: Column(

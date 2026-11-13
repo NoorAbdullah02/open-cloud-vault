@@ -176,28 +176,14 @@ export default function PublicSharePage() {
     const mime = (file.mimeType || '').toLowerCase();
     const ext = (file.extension || file.name.split('.').pop() || '').toLowerCase();
 
-    // 1. PDF printing via invisible iframe
+    // 1. PDF printing
     if (mime.includes('pdf') || ext === 'pdf') {
-      const iframe = document.createElement('iframe');
-      iframe.style.position = 'fixed';
-      iframe.style.right = '0';
-      iframe.style.bottom = '0';
-      iframe.style.width = '0';
-      iframe.style.height = '0';
-      iframe.style.border = '0';
-      iframe.src = inlineUrl;
-      document.body.appendChild(iframe);
-      iframe.onload = () => {
-        try {
-          iframe.contentWindow?.focus();
-          iframe.contentWindow?.print();
-        } catch {
-          window.open(inlineUrl, '_blank');
-        }
-        setTimeout(() => {
-          try { document.body.removeChild(iframe); } catch {}
-        }, 60000);
-      };
+      const printWin = window.open(inlineUrl, '_blank');
+      if (printWin) {
+        printWin.focus();
+      } else {
+        window.location.href = inlineUrl;
+      }
       return;
     }
 
@@ -211,13 +197,13 @@ export default function PublicSharePage() {
             <head>
               <title>Print - ${file.name}</title>
               <style>
-                body { margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #fff; }
-                img { max-width: 100%; max-height: 100vh; object-fit: contain; }
-                @media print { body { margin: 0; } img { max-width: 100%; height: auto; } }
+                body { margin: 0; padding: 24px; display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #fff; }
+                img { max-width: 100%; max-height: 92vh; object-fit: contain; }
+                @media print { body { padding: 0; } img { max-width: 100%; height: auto; } }
               </style>
             </head>
             <body>
-              <img src="${inlineUrl}" onload="window.focus(); window.print(); window.close();" />
+              <img src="${inlineUrl}" onload="window.focus(); setTimeout(function(){ window.print(); }, 250);" />
             </body>
           </html>
         `);
@@ -296,12 +282,16 @@ export default function PublicSharePage() {
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900">
       <header className="h-16 px-4 md:px-8 bg-white border-b border-slate-200/80 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-sky-500 flex items-center justify-center shadow-sm">
+        <a
+          href="/"
+          className="flex items-center gap-3 cursor-pointer group"
+          title="Go to NOOR DRIVE Root (/)"
+        >
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-sky-500 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
             <HardDrive className="w-5 h-5 text-white" />
           </div>
           <div>
-            <span className="font-bold text-base tracking-tight block leading-none">
+            <span className="font-bold text-base tracking-tight block leading-none group-hover:text-indigo-600 transition-colors">
               NOOR DRIVE
             </span>
             <span className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
@@ -309,7 +299,7 @@ export default function PublicSharePage() {
               Shared {data.type === 'folder' ? 'Folder' : 'File'} • {data.permission}
             </span>
           </div>
-        </div>
+        </a>
 
         {data.type === 'folder' && data.permission === 'EDITOR' && (
           <div>

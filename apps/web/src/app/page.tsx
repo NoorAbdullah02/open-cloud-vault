@@ -50,6 +50,8 @@ import {
   AlertCircle,
   Layers,
   CheckSquare,
+  MinusSquare,
+  Square,
   MessageCircle,
   Mail,
   Play,
@@ -1304,22 +1306,27 @@ function DriveDashboardContent() {
   };
 
   const handlePreview = async (file: any) => {
-    setPreviewModal({ file, loading: true });
-    try {
-      const url = await fetchAuthorizedBlobUrl(file.id);
-      let textContent: string | undefined;
-      if (
-        file.mimeType.startsWith('text/') ||
-        ['json', 'md', 'csv', 'log', 'ts', 'js', 'py'].includes(file.extension)
-      ) {
-        const res = await fetch(url);
-        textContent = await res.text();
-      }
-      setPreviewModal({ file, url, textContent, loading: false });
-    } catch {
-      setPreviewModal(null);
-      showToast('Could not preview file', 'error');
+    const { accessToken } = getStoredTokens();
+    const streamUrl = `${getApiUrl()}/drive/files/${file.id}/download?inline=true${
+      accessToken ? `&token=${encodeURIComponent(accessToken)}` : ''
+    }`;
+
+    const mime = (file.mimeType || '').toLowerCase();
+    const ext = (file.extension || file.name.split('.').pop() || '').toLowerCase();
+    const isText =
+      mime.startsWith('text/') ||
+      ['json', 'md', 'csv', 'log', 'ts', 'js', 'py', 'html', 'css', 'txt'].includes(ext);
+
+    let textContent: string | undefined;
+    if (isText) {
+      setPreviewModal({ file, loading: true });
+      try {
+        const res = await fetch(streamUrl);
+        if (res.ok) textContent = await res.text();
+      } catch {}
     }
+
+    setPreviewModal({ file, url: streamUrl, textContent, loading: false });
   };
 
   const handleDownload = async (file: any) => {
@@ -1338,32 +1345,21 @@ function DriveDashboardContent() {
   const handlePrint = async (file: any, existingUrl?: string, textContent?: string) => {
     try {
       showToast(`Preparing "${file.name}" for print...`);
-      const url = existingUrl || (await fetchAuthorizedBlobUrl(file.id));
+      const { accessToken } = getStoredTokens();
+      const url = existingUrl || `${getApiUrl()}/drive/files/${file.id}/download?inline=true${
+        accessToken ? `&token=${encodeURIComponent(accessToken)}` : ''
+      }`;
       const mime = (file.mimeType || '').toLowerCase();
       const ext = (file.extension || file.name.split('.').pop() || '').toLowerCase();
 
-      // 1. PDF printing via invisible iframe
+      // 1. PDF printing
       if (mime.includes('pdf') || ext === 'pdf') {
-        const iframe = document.createElement('iframe');
-        iframe.style.position = 'fixed';
-        iframe.style.right = '0';
-        iframe.style.bottom = '0';
-        iframe.style.width = '0';
-        iframe.style.height = '0';
-        iframe.style.border = '0';
-        iframe.src = url;
-        document.body.appendChild(iframe);
-        iframe.onload = () => {
-          try {
-            iframe.contentWindow?.focus();
-            iframe.contentWindow?.print();
-          } catch {
-            window.open(url, '_blank');
-          }
-          setTimeout(() => {
-            try { document.body.removeChild(iframe); } catch {}
-          }, 60000);
-        };
+        const printWin = window.open(url, '_blank');
+        if (printWin) {
+          printWin.focus();
+        } else {
+          window.location.href = url;
+        }
         return;
       }
 
@@ -1377,13 +1373,13 @@ function DriveDashboardContent() {
               <head>
                 <title>Print - ${file.name}</title>
                 <style>
-                  body { margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #fff; }
-                  img { max-width: 100%; max-height: 100vh; object-fit: contain; }
-                  @media print { body { margin: 0; } img { max-width: 100%; height: auto; } }
+                  body { margin: 0; padding: 24px; display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #fff; }
+                  img { max-width: 100%; max-height: 92vh; object-fit: contain; }
+                  @media print { body { padding: 0; } img { max-width: 100%; height: auto; } }
                 </style>
               </head>
               <body>
-                <img src="${url}" onload="window.focus(); window.print(); window.close();" />
+                <img src="${url}" onload="window.focus(); setTimeout(function(){ window.print(); }, 250);" />
               </body>
             </html>
           `);
@@ -1418,7 +1414,7 @@ function DriveDashboardContent() {
               <body>
                 <h1>${file.name}</h1>
                 <pre>${(content || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
-                <script>window.onload = function() { window.focus(); window.print(); window.close(); };</script>
+                <script>window.onload = function() { window.focus(); setTimeout(function(){ window.print(); }, 250); };</script>
               </body>
             </html>
           `);
@@ -1946,12 +1942,19 @@ function DriveDashboardContent() {
         }`}
       >
         <div className="p-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 to-sky-500 flex items-center justify-center shadow-md shadow-indigo-500/20">
+          <div
+            onClick={() => {
+              setSearch('');
+              navigateDrive('my-drive', null);
+            }}
+            className="flex items-center gap-3 cursor-pointer group select-none"
+            title="Go to NOOR DRIVE Root (/)"
+          >
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 to-sky-500 flex items-center justify-center shadow-md shadow-indigo-500/20 group-hover:scale-105 transition-transform">
               <HardDrive className="w-5 h-5 text-white" />
             </div>
             <div>
-              <span className="font-bold text-base tracking-tight block leading-none text-slate-900 dark:text-white">
+              <span className="font-bold text-base tracking-tight block leading-none text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                 NOOR DRIVE
               </span>
               <span className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400">
@@ -2143,7 +2146,14 @@ function DriveDashboardContent() {
               >
                 <Menu className="w-5 h-5" />
               </button>
-              <span className="sm:hidden font-bold text-sm tracking-tight text-zinc-900 dark:text-white">
+              <span
+                onClick={() => {
+                  setSearch('');
+                  navigateDrive('my-drive', null);
+                }}
+                className="sm:hidden font-bold text-sm tracking-tight text-zinc-900 dark:text-white cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                title="Go to NOOR DRIVE Root (/)"
+              >
                 NOOR DRIVE
               </span>
               <div className="relative flex-1 hidden sm:block">
@@ -2198,7 +2208,13 @@ function DriveDashboardContent() {
                   }`}
                   title={isAllSelected ? 'Deselect All (Ctrl+A)' : 'Select All (Ctrl+A)'}
                 >
-                  <CheckSquare className="w-3.5 h-3.5" />
+                  {isAllSelected ? (
+                    <CheckSquare className="w-3.5 h-3.5" />
+                  ) : selectedItems.length > 0 ? (
+                    <MinusSquare className="w-3.5 h-3.5" />
+                  ) : (
+                    <Square className="w-3.5 h-3.5" />
+                  )}
                   <span className="hidden sm:inline">
                     {isAllSelected ? 'Deselect All' : 'Select All'}
                   </span>
@@ -2684,7 +2700,13 @@ function DriveDashboardContent() {
                       }}
                       className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
                     >
-                      <CheckSquare className="w-3.5 h-3.5" />
+                      {folders.every((f) => isItemSelected('folder', f.id)) ? (
+                        <CheckSquare className="w-3.5 h-3.5" />
+                      ) : folders.some((f) => isItemSelected('folder', f.id)) ? (
+                        <MinusSquare className="w-3.5 h-3.5" />
+                      ) : (
+                        <Square className="w-3.5 h-3.5" />
+                      )}
                       <span>
                         {folders.every((f) => isItemSelected('folder', f.id))
                           ? 'Deselect Folders'
@@ -2891,7 +2913,13 @@ function DriveDashboardContent() {
                       }}
                       className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
                     >
-                      <CheckSquare className="w-3.5 h-3.5" />
+                      {files.every((f) => isItemSelected('file', f.id)) ? (
+                        <CheckSquare className="w-3.5 h-3.5" />
+                      ) : files.some((f) => isItemSelected('file', f.id)) ? (
+                        <MinusSquare className="w-3.5 h-3.5" />
+                      ) : (
+                        <Square className="w-3.5 h-3.5" />
+                      )}
                       <span>
                         {files.every((f) => isItemSelected('file', f.id))
                           ? 'Deselect Files'
@@ -2936,18 +2964,24 @@ function DriveDashboardContent() {
                               onClick={() => handlePreview(file)}
                               className={`h-32 ${visual.bg} flex items-center justify-center relative cursor-pointer overflow-hidden`}
                             >
-                              <input
-                                type="checkbox"
-                                checked={isItemSelected('file', file.id)}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  toggleItemSelection('file', file.id);
-                                }}
+                              <div
                                 onClick={(e) => e.stopPropagation()}
-                                className={`absolute top-2.5 left-2.5 z-10 w-4 h-4 rounded accent-indigo-600 cursor-pointer transition ${
+                                onPointerDown={(e) => e.stopPropagation()}
+                                className={`absolute top-2 left-2 z-20 p-1 rounded-md transition ${
                                   selectedItems.length > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                                 }`}
-                              />
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isItemSelected('file', file.id)}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    toggleItemSelection('file', file.id);
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="w-4 h-4 rounded accent-indigo-600 cursor-pointer block"
+                                />
+                              </div>
                               <FileThumbnail
                                 fileId={file.id}
                                 mimeType={file.mimeType}
