@@ -485,24 +485,175 @@ export class DriveService {
   }
 
   async renameItem(userId: string, type: 'file' | 'folder', id: string, newName: string) {
-    if (!newName.trim()) throw new BadRequestException('Name cannot be empty');
+    const trimmed = newName.trim();
+    if (!trimmed) throw new BadRequestException('Name cannot be empty');
     if (type === 'file') {
       const file = await this.prisma.file.findUnique({ where: { id } });
       if (!file || file.ownerId !== userId) throw new NotFoundException('File not found');
+
+      // Preserve or update extension intelligently
+      const originalExt = file.extension || (file.name.includes('.') ? file.name.split('.').pop() || '' : '');
+      let finalName = trimmed;
+      let newExt = trimmed.includes('.') ? trimmed.split('.').pop() || '' : '';
+
+      if (!newExt && originalExt) {
+        finalName = `${trimmed}.${originalExt}`;
+        newExt = originalExt;
+      }
+
       const updated = await this.prisma.file.update({
         where: { id },
-        data: { name: newName.trim() },
+        data: {
+          name: finalName,
+          extension: (newExt || originalExt || '').toLowerCase(),
+        },
         include: { storageObject: true },
       });
+
+      await this.prisma.activity.create({
+        data: {
+          userId,
+          fileId: id,
+          action: 'RENAME',
+          details: { oldName: file.name, newName: finalName },
+        },
+      }).catch(() => {});
+
       return this.serializeFile(updated);
     } else {
       const folder = await this.prisma.folder.findUnique({ where: { id } });
       if (!folder || folder.ownerId !== userId) throw new NotFoundException('Folder not found');
       return this.prisma.folder.update({
         where: { id },
-        data: { name: newName.trim() },
+        data: { name: trimmed },
       });
     }
+  }
+
+  async replaceFile(
+    userId: string,
+    fileId: string,
+    file: Express.Multer.File,
+    requestedBackend?: StorageBackend,
+  ) {
+    const existingFile = await this.prisma.file.findUnique({
+      where: { id: fileId },
+      include: { storageObject: true },
+    });
+    if (!existingFile || existingFile.ownerId !== userId) {
+      throw new NotFoundException('Target file to replace not found');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { quota: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    let backend = requestedBackend || existingFile.storageObject?.backend || StorageBackend.TELEGRAM_MTPROTO;
+
+    const checksumSha256 = file.buffer
+      ? crypto.createHash('sha256').update(file.buffer).digest('hex')
+      : await this.computeFileSha256(file.path);
+    const ext = path.extname(file.originalname).replace('.', '').toLowerCase() || existingFile.extension || 'bin';
+
+    let storageObjectId: string;
+    const existingStorageObject = await this.prisma.storageObject.findFirst({
+      where: {
+        checksumSha256,
+        backend,
+      },
+    });
+
+    if (existingStorageObject) {
+      storageObjectId = existingStorageObject.id;
+    } else {
+      try {
+        const stored = await this.storage.storeFile(backend, {
+          tempFilePath: file.path,
+          buffer: file.buffer,
+          fileName: file.originalname,
+          mimeType: file.mimetype,
+          sizeBytes: file.size,
+          checksumSha256,
+          targetChatId: user.telegramChatTarget || undefined,
+        });
+        storageObjectId = stored.storageObjectId;
+      } catch (storeErr: any) {
+        if (backend === StorageBackend.TELEGRAM_MTPROTO) {
+          this.logger.warn(
+            `Telegram upload failed for replace "${file.originalname}" (${storeErr.message}). Falling back to LOCAL_DISK.`,
+          );
+          backend = StorageBackend.LOCAL_DISK;
+          const fallbackStored = await this.storage.storeFile(backend, {
+            tempFilePath: file.path,
+            buffer: file.buffer,
+            fileName: file.originalname,
+            mimeType: file.mimetype,
+            sizeBytes: file.size,
+            checksumSha256,
+          });
+          storageObjectId = fallbackStored.storageObjectId;
+        } else {
+          throw storeErr;
+        }
+      }
+    }
+
+    // Save previous version in history
+    await this.prisma.fileVersion.create({
+      data: {
+        fileId: existingFile.id,
+        versionNumber: existingFile.version,
+        sizeBytes: existingFile.sizeBytes,
+        checksumSha256: existingFile.checksumSha256,
+        storageObjectId: existingFile.storageObjectId,
+      },
+    }).catch(() => {});
+
+    // Update the existing File record in-place, keeping file.id IDENTICAL
+    // This preserves all public share links (/share/<token>), stars, comments, and tags!
+    const nextVersion = existingFile.version + 1;
+    const updated = await this.prisma.file.update({
+      where: { id: fileId },
+      data: {
+        name: file.originalname,
+        extension: ext,
+        mimeType: file.mimetype,
+        sizeBytes: BigInt(file.size),
+        checksumSha256,
+        storageObjectId,
+        version: nextVersion,
+        updatedAt: new Date(),
+      },
+      include: { storageObject: true },
+    });
+
+    // Update quota diff
+    const sizeDiff = BigInt(file.size) - existingFile.sizeBytes;
+    if (user.quota && sizeDiff !== BigInt(0)) {
+      await this.prisma.userQuota.update({
+        where: { userId },
+        data: { usedStorageBytes: { increment: sizeDiff } },
+      }).catch(() => {});
+    }
+
+    // Record activity
+    await this.prisma.activity.create({
+      data: {
+        userId,
+        fileId: existingFile.id,
+        action: 'REPLACE',
+        details: {
+          previousVersion: existingFile.version,
+          newVersion: nextVersion,
+          fileName: file.originalname,
+          sizeBytes: file.size,
+        },
+      },
+    }).catch(() => {});
+
+    return this.serializeFile(updated);
   }
 
   async moveItem(

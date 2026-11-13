@@ -21,6 +21,7 @@ import { StorageBackend } from '@prisma/client';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser, AuthUser } from '../common/decorators/current-user.decorator';
 import { DriveService } from './drive.service';
+import { CleanupService } from './cleanup.service';
 
 function getAccurateMimeType(ext: string, fallbackMime?: string): string {
   const cleanExt = (ext || '').toLowerCase().replace(/^\./, '');
@@ -64,7 +65,10 @@ function getAccurateMimeType(ext: string, fallbackMime?: string): string {
 @UseGuards(JwtAuthGuard)
 @Controller('drive')
 export class DriveController {
-  constructor(private readonly driveService: DriveService) {}
+  constructor(
+    private readonly driveService: DriveService,
+    private readonly cleanupService: CleanupService,
+  ) {}
 
   @Get()
   list(
@@ -118,6 +122,30 @@ export class DriveController {
     return this.driveService.uploadFile(user.id, file, folderId, backend);
   }
 
+  @Post('files/:id/replace')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: os.tmpdir(),
+        filename: (req, file, cb) => {
+          const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          cb(null, `noor-replace-${uniqueSuffix}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`);
+        },
+      }),
+      limits: {
+        fileSize: 100 * 1024 * 1024 * 1024, // 100 GB Massive File Limit
+      },
+    }),
+  )
+  replaceFile(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body('backend') backend?: StorageBackend,
+  ) {
+    return this.driveService.replaceFile(user.id, id, file, backend);
+  }
+
   @Get('files/:id/download')
   async downloadFile(
     @CurrentUser() user: AuthUser,
@@ -129,14 +157,22 @@ export class DriveController {
     const disposition = inline === 'true' ? 'inline' : 'attachment';
     const accurateMime = getAccurateMimeType(file.extension || file.name.split('.').pop() || '', file.mimeType);
     res.setHeader('Content-Type', accurateMime);
+    res.setHeader('Content-Length', file.sizeBytes.toString());
+    res.setHeader('Accept-Ranges', 'bytes');
+    const safeAscii = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     res.setHeader(
       'Content-Disposition',
-      `${disposition}; filename="${encodeURIComponent(file.name)}"`,
+      `${disposition}; filename="${safeAscii}"; filename*=UTF-8''${encodeURIComponent(file.name)}`,
     );
     if (inline === 'true') {
       res.setHeader('Cache-Control', 'private, max-age=3600');
     }
     stream.pipe(res);
+  }
+
+  @Post('cleanup/run')
+  runManualCleanup(@CurrentUser() user: AuthUser) {
+    return this.cleanupService.runCleanup();
   }
 
   @Get('storage/duplicates')

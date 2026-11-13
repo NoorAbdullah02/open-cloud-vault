@@ -1973,6 +1973,37 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _saveFileToDevice(dynamic file) async {
+    try {
+      _showSnack('Starting download for "${file['name']}"...');
+      Directory? targetDir;
+      try {
+        targetDir = await getDownloadsDirectory();
+      } catch (_) {}
+      targetDir ??= await getApplicationDocumentsDirectory();
+
+      final savePath = '${targetDir.path}/${file['name']}';
+      final token = await apiClient.storage.read(key: 'access_token');
+      await apiClient.dio.download(
+        '/drive/files/${file['id']}/download',
+        savePath,
+        options: Options(
+          headers: token != null ? {'Authorization': 'Bearer $token'} : null,
+        ),
+      );
+      _showSnack('Downloaded "${file['name']}"');
+
+      // Open native save/share sheet so user can choose external SSD, SD card, files, or apps
+      await Share.shareXFiles(
+        [XFile(savePath)],
+        subject: file['name'].toString(),
+        text: 'Save or transfer ${file['name']}',
+      );
+    } catch (e) {
+      _showSnack('Download failed: $e', isError: true);
+    }
+  }
+
   Future<void> _downloadFolderZip(dynamic folder) async {
     try {
       _showSnack('Preparing "${folder['name']}.zip"...');
@@ -3174,7 +3205,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                                     width: double.infinity,
                                                     child: Text(
                                                       folder['name'],
-                                                      maxLines: 1,
+                                                      maxLines: 2,
                                                       overflow: TextOverflow.ellipsis,
                                                       textAlign: TextAlign.center,
                                                       style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
@@ -3331,6 +3362,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                               if (action == 'vault_out') _moveFromVault('file', file['id']);
                                               if (action == 'offline') _toggleOfflineFile(file);
                                               if (action == 'download') _downloadAndOpen(file);
+                                              if (action == 'save_device') _saveFileToDevice(file);
                                               if (action == 'share') _openShareDialog('file', file['id'], file['name']);
                                               if (action == 'print') _printFile(file);
                                               if (action == 'rename') _renameItem('file', file['id'], file['name']);
@@ -3406,6 +3438,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                                       ),
                                                     ),
                                                     const PopupMenuItem(value: 'download', child: Text('Download & Open')),
+                                                    const PopupMenuItem(value: 'save_device', child: Text('Save to Device / SSD')),
                                                     const PopupMenuItem(value: 'share', child: Text('Share')),
                                                     PopupMenuItem(
                                                       value: 'print',
@@ -3584,6 +3617,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                           if (action == 'vault_out') _moveFromVault('file', file['id']);
                                           if (action == 'offline') _toggleOfflineFile(file);
                                           if (action == 'download') _downloadAndOpen(file);
+                                          if (action == 'save_device') _saveFileToDevice(file);
                                           if (action == 'share') _openShareDialog('file', file['id'], file['name']);
                                           if (action == 'print') _printFile(file);
                                           if (action == 'rename') _renameItem('file', file['id'], file['name']);
@@ -3659,6 +3693,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                                   ),
                                                 ),
                                                 const PopupMenuItem(value: 'download', child: Text('Download & Open')),
+                                                    const PopupMenuItem(value: 'save_device', child: Text('Save to Device / SSD')),
                                                 const PopupMenuItem(value: 'share', child: Text('Share')),
                                                 PopupMenuItem(
                                                   value: 'print',

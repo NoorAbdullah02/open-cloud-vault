@@ -160,9 +160,12 @@ export class SharesController {
     const disposition = inline === 'true' ? 'inline' : 'attachment';
     const accurateMime = getAccurateMimeType(file.extension || file.name.split('.').pop() || '', file.mimeType);
     res.setHeader('Content-Type', accurateMime);
+    res.setHeader('Content-Length', file.sizeBytes.toString());
+    res.setHeader('Accept-Ranges', 'bytes');
+    const safeAscii = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     res.setHeader(
       'Content-Disposition',
-      `${disposition}; filename="${encodeURIComponent(file.name)}"`,
+      `${disposition}; filename="${safeAscii}"; filename*=UTF-8''${encodeURIComponent(file.name)}`,
     );
     stream.pipe(res);
   }

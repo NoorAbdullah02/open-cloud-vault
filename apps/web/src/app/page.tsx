@@ -62,6 +62,7 @@ import {
   Printer,
   Music2,
   Apple,
+  RefreshCw,
 } from 'lucide-react';
 import {
   apiFetch,
@@ -473,7 +474,7 @@ function FileThumbnail({
 
   // 1. PowerPoint / Presentation Preview Card
   if (isPptx) {
-    const title = docPreview?.title || cleanTitleFromFileName(fileName) || 'PowerPoint Presentation';
+    const title = cleanTitleFromFileName(fileName) || docPreview?.title || 'PowerPoint Presentation';
     return (
       <div className="w-full h-full bg-gradient-to-br from-slate-950 via-slate-900 to-amber-950/40 text-white p-3 flex flex-col justify-between overflow-hidden select-none border-b-2 border-orange-500 shadow-inner">
         <div className="flex items-center justify-between">
@@ -513,7 +514,7 @@ function FileThumbnail({
 
   // 2. Word Document Preview Card
   if (isDocx) {
-    const title = docPreview?.title || cleanTitleFromFileName(fileName) || 'Word Document';
+    const title = cleanTitleFromFileName(fileName) || docPreview?.title || 'Word Document';
     return (
       <div className="w-full h-full bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 p-3 flex flex-col justify-between overflow-hidden select-none border-b-2 border-blue-500 shadow-inner">
         <div className="flex items-center justify-between">
@@ -758,6 +759,19 @@ function DriveDashboardContent() {
     onConfirm: () => void;
   } | null>(null);
 
+  // File replacement (Upload new version preserving public share link)
+  const replaceFileInputRef = useRef<HTMLInputElement>(null);
+  const [targetReplaceFile, setTargetReplaceFile] = useState<any | null>(null);
+  const [isReplacing, setIsReplacing] = useState(false);
+
+  const triggerReplaceFile = (file: any) => {
+    setTargetReplaceFile(file);
+    if (replaceFileInputRef.current) {
+      replaceFileInputRef.current.value = '';
+      replaceFileInputRef.current.click();
+    }
+  };
+
   // Storage Cleaner & Duplicate Finder state
   const [cleanerModalOpen, setCleanerModalOpen] = useState(false);
   const [cleanerTab, setCleanerTab] = useState<'duplicates' | 'large'>('duplicates');
@@ -932,10 +946,17 @@ function DriveDashboardContent() {
   useEffect(() => {
     const saved = localStorage.getItem('noor_accent_color');
     if (saved) setAccentColor(saved);
+    const savedTheme = localStorage.getItem('noor_dark_mode');
+    if (savedTheme !== null) {
+      setDarkMode(savedTheme === 'true');
+    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      setDarkMode(true);
+    }
   }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
+    localStorage.setItem('noor_dark_mode', String(darkMode));
   }, [darkMode]);
 
   useEffect(() => {
@@ -1486,22 +1507,85 @@ function DriveDashboardContent() {
     e.preventDefault();
     if (!renameModal || !renameModal.name.trim()) return;
     const trimmed = renameModal.name.trim();
-    if (renameModal.type === 'file') {
-      setFiles((prev) => prev.map((f) => (f.id === renameModal.id ? { ...f, name: trimmed } : f)));
-    } else {
-      setFolders((prev) => prev.map((f) => (f.id === renameModal.id ? { ...f, name: trimmed } : f)));
-    }
     const target = renameModal;
     setRenameModal(null);
     try {
-      await apiFetch(`/drive/${target.type}/${target.id}/rename`, {
+      const updated = await apiFetch(`/drive/${target.type}/${target.id}/rename`, {
         method: 'PATCH',
         body: JSON.stringify({ name: trimmed }),
       });
-      showToast('Renamed');
+      // Invalidate cache immediately
+      driveViewCache.clear();
+      docPreviewCache.delete(target.id);
+
+      if (target.type === 'file') {
+        const newName = updated?.name || trimmed;
+        setFiles((prev) =>
+          prev.map((f) => (f.id === target.id ? { ...f, ...(updated || {}), name: newName } : f)),
+        );
+      } else {
+        const newName = updated?.name || trimmed;
+        setFolders((prev) =>
+          prev.map((f) => (f.id === target.id ? { ...f, ...(updated || {}), name: newName } : f)),
+        );
+      }
+
+      // Update active detail panel if currently showing this item
+      setActiveDetailItem((prev) => {
+        if (!prev || prev.item?.id !== target.id) return prev;
+        return {
+          ...prev,
+          item: {
+            ...prev.item,
+            ...(updated || {}),
+            name: updated?.name || trimmed,
+          },
+        };
+      });
+
+      showToast('Renamed successfully');
     } catch (err: any) {
       showToast(err.message, 'error');
       loadDrive(true);
+    }
+  };
+
+  const handleReplaceFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !targetReplaceFile) return;
+    try {
+      setIsReplacing(true);
+      showToast(`Uploading new version for "${targetReplaceFile.name}"...`);
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await apiFetch(`/drive/files/${targetReplaceFile.id}/replace`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      // Clear caches
+      driveViewCache.clear();
+      thumbnailCache.delete(targetReplaceFile.id);
+      docPreviewCache.delete(targetReplaceFile.id);
+      textSnippetCache.delete(targetReplaceFile.id);
+
+      // Update local state
+      setFiles((prev) => prev.map((f) => (f.id === targetReplaceFile.id ? { ...f, ...res } : f)));
+      setActiveDetailItem((prev) =>
+        prev && prev.item?.id === targetReplaceFile.id
+          ? { ...prev, item: { ...prev.item, ...res } }
+          : prev,
+      );
+
+      showToast(`Replaced "${targetReplaceFile.name}"! Share link remains active.`);
+      loadDrive(true);
+    } catch (err: any) {
+      showToast(err.message || 'Replace failed', 'error');
+    } finally {
+      setIsReplacing(false);
+      setTargetReplaceFile(null);
+      if (replaceFileInputRef.current) replaceFileInputRef.current.value = '';
     }
   };
 
@@ -1531,12 +1615,20 @@ function DriveDashboardContent() {
 
   const handleDownload = async (file: any) => {
     try {
-      const url = await fetchAuthorizedBlobUrl(file.id);
+      showToast(`Starting fast download for "${file.name}"...`);
+      const { accessToken } = getStoredTokens();
+      const directUrl = `${getApiUrl()}/drive/files/${file.id}/download?token=${encodeURIComponent(
+        accessToken || '',
+      )}`;
+
       const a = document.createElement('a');
-      a.href = url;
+      a.href = directUrl;
       a.download = file.name;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
     } catch {
       showToast('Download failed', 'error');
     }
@@ -3585,6 +3677,13 @@ function DriveDashboardContent() {
                                   >
                                     <Edit3 className="w-3.5 h-3.5" />
                                   </button>
+                                  <button
+                                    onClick={() => triggerReplaceFile(file)}
+                                    title="Replace file (Keep same share link)"
+                                    className="p-1.5 rounded-lg hover:bg-violet-50 dark:hover:bg-slate-800 text-slate-500 hover:text-violet-600 transition"
+                                  >
+                                    <RefreshCw className="w-3.5 h-3.5" />
+                                  </button>
                                 </div>
                                 {view === 'trash' ? (
                                   <div className="flex items-center gap-0.5">
@@ -3752,6 +3851,13 @@ function DriveDashboardContent() {
                                   >
                                     <Edit3 className="w-4 h-4" />
                                   </button>
+                                  <button
+                                    onClick={() => triggerReplaceFile(file)}
+                                    title="Replace file (Keep same share link)"
+                                    className="p-1.5 rounded-lg hover:bg-violet-50 text-slate-500 hover:text-violet-600"
+                                  >
+                                    <RefreshCw className="w-4 h-4" />
+                                  </button>
                                   {view === 'trash' ? (
                                     <>
                                       <button
@@ -3893,6 +3999,13 @@ function DriveDashboardContent() {
                         >
                           <Printer className="w-4 h-4 text-emerald-500" /> Print File
                         </button>
+                        <button
+                          onClick={() => triggerReplaceFile(activeDetailItem.item)}
+                          className="w-full py-2 px-3 rounded-xl bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 dark:hover:bg-violet-900/50 text-violet-700 dark:text-violet-300 font-semibold flex items-center justify-center gap-2 transition"
+                        >
+                          <RefreshCw className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                          Replace File (Keep Link)
+                        </button>
                       </>
                     ) : (
                       <>
@@ -4028,6 +4141,14 @@ function DriveDashboardContent() {
           </form>
         </div>
       )}
+
+      {/* Hidden File Input for Replace File / Upload New Version */}
+      <input
+        ref={replaceFileInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleReplaceFileChange}
+      />
 
       {/* Rename Modal */}
       {renameModal && (
@@ -5206,6 +5327,16 @@ function DriveDashboardContent() {
                 >
                   <Edit3 className="w-4 h-4 text-slate-500" />
                   <span>Rename</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setContextMenu(null);
+                    triggerReplaceFile(file);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
+                >
+                  <RefreshCw className="w-4 h-4 text-violet-500" />
+                  <span>Replace File (Keep Link)</span>
                 </button>
                 <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
                 {view === 'trash' ? (
