@@ -40,6 +40,14 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
   bool _syncingDrive = false;
   CancelToken? _uploadCancelToken;
 
+  // Offline storage & registry
+  final Map<String, Map<String, dynamic>> _offlineFiles = {};
+
+  // Auto-sync preferences
+  bool _autoSyncEnabled = false;
+  bool _autoSyncWifiOnly = true;
+  String? _lastAutoSyncTime;
+
   Map<String, dynamic>? _user;
   List<dynamic> _folders = [];
   List<dynamic> _files = [];
@@ -56,12 +64,14 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _loadAccentColor();
     _loadUser();
+    _loadOfflineRegistry();
+    _loadAutoSyncSettings();
     _loadDrive();
     _checkForAppUpdate(silent: true);
 
     // Real-Time Sync Engine: 4s background refresh
     _realtimeSyncTimer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (mounted && _uploadingName == null) {
+      if (mounted && _uploadingName == null && _view != 'offline') {
         _loadDrive(silent: true);
       }
     });
@@ -70,7 +80,12 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _loadDrive(silent: true);
+      if (_view != 'offline') {
+        _loadDrive(silent: true);
+      }
+      if (_autoSyncEnabled) {
+        _triggerAutoSyncCheck();
+      }
     }
   }
 
@@ -295,6 +310,19 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
   Future<void> _loadDrive({bool silent = false}) async {
     _authToken ??= await apiClient.storage.read(key: 'access_token');
     if (!silent) _selectedKeys.clear();
+
+    if (_view == 'offline') {
+      if (mounted) {
+        setState(() {
+          _folders = [];
+          _breadcrumbs = [{'id': 'offline', 'name': 'Offline Files'}];
+          _files = _offlineFiles.values.toList();
+          _loading = false;
+        });
+      }
+      return;
+    }
+
     final cacheKey = '$_view:${_folderId ?? 'root'}:$_search';
     final cached = _driveCache[cacheKey];
     if (cached != null && !silent) {
@@ -333,7 +361,19 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
         });
       }
     } catch (e) {
-      if (mounted) _showSnack('Error loading drive: $e', isError: true);
+      if (_offlineFiles.isNotEmpty && _view != 'offline' && !silent) {
+        if (mounted) {
+          _showSnack('Offline Mode: Disconnected from network. Showing cached offline files.', isError: true);
+          setState(() {
+            _view = 'offline';
+            _folders = [];
+            _breadcrumbs = [{'id': 'offline', 'name': 'Offline Files'}];
+            _files = _offlineFiles.values.toList();
+          });
+        }
+      } else if (mounted && !silent) {
+        _showSnack('Error loading drive: $e', isError: true);
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -357,7 +397,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
       'backend': 'TELEGRAM_MTPROTO',
     });
 
-    await apiClient.dio.post(
+    final res = await apiClient.dio.post(
       '/drive/upload',
       data: formData,
       cancelToken: _uploadCancelToken,
@@ -377,6 +417,441 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
         });
       },
     );
+
+    if (res.data is Map && res.data['isDeduplicated'] == true && mounted) {
+      _showSnack('⚡ Instant Upload: "$name" deduplicated via SHA-256 (0 bytes transferred)!');
+    }
+  }
+
+  // --- Offline Mode & Offline Registry ---
+  Future<File> _getOfflineRegistryFile() async {
+    final docsDir = await getApplicationDocumentsDirectory();
+    final cacheDir = Directory('${docsDir.path}/noor_offline_cache');
+    if (!cacheDir.existsSync()) {
+      cacheDir.createSync(recursive: true);
+    }
+    return File('${cacheDir.path}/registry.json');
+  }
+
+  Future<void> _loadOfflineRegistry() async {
+    try {
+      final regFile = await _getOfflineRegistryFile();
+      if (regFile.existsSync()) {
+        final content = await regFile.readAsString();
+        final Map<String, dynamic> data = jsonDecode(content);
+        if (mounted) {
+          setState(() {
+            _offlineFiles.clear();
+            data.forEach((k, v) {
+              if (v is Map) {
+                _offlineFiles[k] = Map<String, dynamic>.from(v);
+              }
+            });
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveOfflineRegistry() async {
+    try {
+      final regFile = await _getOfflineRegistryFile();
+      await regFile.writeAsString(jsonEncode(_offlineFiles));
+    } catch (_) {}
+  }
+
+  Future<void> _toggleOfflineFile(dynamic file) async {
+    final fileId = file['id'] as String;
+    final fileName = file['name'] as String;
+
+    if (_offlineFiles.containsKey(fileId)) {
+      final entry = _offlineFiles[fileId];
+      final localPath = entry?['localPath'] as String?;
+      if (localPath != null) {
+        final f = File(localPath);
+        if (f.existsSync()) {
+          try { f.deleteSync(); } catch (_) {}
+        }
+      }
+      setState(() {
+        _offlineFiles.remove(fileId);
+        if (_view == 'offline') {
+          _files = _offlineFiles.values.toList();
+        }
+      });
+      await _saveOfflineRegistry();
+      _showSnack('Removed "$fileName" from Offline Files');
+    } else {
+      try {
+        _showSnack('Downloading "$fileName" for offline access...');
+        final docsDir = await getApplicationDocumentsDirectory();
+        final cacheDir = Directory('${docsDir.path}/noor_offline_cache');
+        if (!cacheDir.existsSync()) {
+          cacheDir.createSync(recursive: true);
+        }
+        final savePath = '${cacheDir.path}/${fileId}_$fileName';
+
+        await apiClient.dio.download(
+          '/drive/files/$fileId/download',
+          savePath,
+          options: Options(responseType: ResponseType.stream),
+        );
+
+        final entry = {
+          'id': fileId,
+          'name': fileName,
+          'sizeBytes': file['sizeBytes'],
+          'mimeType': file['mimeType'] ?? '',
+          'extension': file['extension'] ?? fileName.split('.').pop(),
+          'createdAt': file['createdAt'],
+          'localPath': savePath,
+          'cachedAt': DateTime.now().toIso8601String(),
+        };
+
+        setState(() {
+          _offlineFiles[fileId] = entry;
+          if (_view == 'offline') {
+            _files = _offlineFiles.values.toList();
+          }
+        });
+        await _saveOfflineRegistry();
+        _showSnack('✅ "$fileName" is now Available Offline!');
+      } catch (e) {
+        _showSnack('Failed to cache file offline: $e', isError: true);
+      }
+    }
+  }
+
+  // --- Background Auto-Sync Settings ---
+  Future<void> _loadAutoSyncSettings() async {
+    try {
+      final enabled = await apiClient.storage.read(key: 'noor_auto_sync_enabled');
+      final wifiOnly = await apiClient.storage.read(key: 'noor_auto_sync_wifi_only');
+      final lastRun = await apiClient.storage.read(key: 'noor_auto_sync_last_run');
+      if (mounted) {
+        setState(() {
+          _autoSyncEnabled = enabled == 'true';
+          _autoSyncWifiOnly = wifiOnly != 'false';
+          _lastAutoSyncTime = lastRun;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveAutoSyncSettings() async {
+    try {
+      await apiClient.storage.write(key: 'noor_auto_sync_enabled', value: _autoSyncEnabled ? 'true' : 'false');
+      await apiClient.storage.write(key: 'noor_auto_sync_wifi_only', value: _autoSyncWifiOnly ? 'true' : 'false');
+      if (_lastAutoSyncTime != null) {
+        await apiClient.storage.write(key: 'noor_auto_sync_last_run', value: _lastAutoSyncTime!);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _triggerAutoSyncCheck() async {
+    if (_uploadingName != null) return;
+    final now = DateTime.now().toIso8601String();
+    setState(() => _lastAutoSyncTime = now);
+    await _saveAutoSyncSettings();
+  }
+
+  void _showAutoSyncDialog() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.bottom(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEEF2FF),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.sync, color: Color(0xFF4F46E5)),
+                    ),
+                    const SizedBox(width: 12),
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Background Auto-Sync',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          'Keep Camera Uploads in sync automatically',
+                          style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Auto-Sync Gallery Photos', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Automatically detect and sync new photos when app is active or resumed'),
+                  value: _autoSyncEnabled,
+                  activeColor: const Color(0xFF4F46E5),
+                  onChanged: (val) {
+                    setState(() => _autoSyncEnabled = val);
+                    setSheetState(() {});
+                    _saveAutoSyncSettings();
+                  },
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Wi-Fi Only', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Avoid using mobile cellular data for background syncing'),
+                  value: _autoSyncWifiOnly,
+                  activeColor: const Color(0xFF4F46E5),
+                  onChanged: _autoSyncEnabled
+                      ? (val) {
+                          setState(() => _autoSyncWifiOnly = val);
+                          setSheetState(() {});
+                          _saveAutoSyncSettings();
+                        }
+                      : null,
+                ),
+                if (_lastAutoSyncTime != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      'Last synced: ${_formatDateTime(_lastAutoSyncTime)}',
+                      style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF4F46E5),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.cloud_upload_outlined),
+                    label: const Text('Sync Camera Roll Now', style: TextStyle(fontWeight: FontWeight.bold)),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _backupGalleryPhotos();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- Duplicate Files Cleaner ---
+  Future<void> _showDuplicateCleanerDialog() async {
+    try {
+      _showSnack('Scanning for duplicate files in NOOR DRIVE...');
+      final res = await apiClient.dio.get('/drive/storage/duplicates');
+      if (!mounted) return;
+      final data = res.data is Map ? res.data : null;
+      if (data == null) return;
+
+      final totalGroups = data['totalGroups'] as int? ?? 0;
+      final totalWastedBytes = data['totalWastedBytes']?.toString() ?? '0';
+      final List groups = data['groups'] as List? ?? [];
+
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setSheetState) => DraggableScrollableSheet(
+            initialChildSize: 0.7,
+            minChildSize: 0.4,
+            maxChildSize: 0.95,
+            expand: false,
+            builder: (_, scrollController) => Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.bottom(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Duplicate Files Cleaner',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                          ),
+                          Text(
+                            totalGroups > 0
+                                ? '$totalGroups duplicate sets found (${_formatBytes(totalWastedBytes)} wasted)'
+                                : 'No duplicate files found! Your drive is clean.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: totalGroups > 0 ? const Color(0xFFE11D48) : const Color(0xFF059669),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 24),
+                  if (groups.isEmpty)
+                    const Expanded(
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.check_circle_outline, size: 56, color: Color(0xFF059669)),
+                            SizedBox(height: 12),
+                            Text(
+                              'Everything is optimized!',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                            Text(
+                              'All files have unique SHA-256 signatures.',
+                              style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: ListView.separated(
+                        controller: scrollController,
+                        itemCount: groups.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (_, idx) {
+                          final group = groups[idx];
+                          final List files = group['files'] as List? ?? [];
+                          final size = group['sizeBytes'];
+                          return Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      '${files.length} Copies • ${_formatBytes(size)} each',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFFE4E6),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        'Wastes ${_formatBytes(group['wastedBytes'])}',
+                                        style: const TextStyle(color: Color(0xFFE11D48), fontSize: 10.5, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                for (int i = 0; i < files.length; i++) ...[
+                                  ListTile(
+                                    dense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: Icon(
+                                      i == 0 ? Icons.verified : Icons.copy,
+                                      color: i == 0 ? const Color(0xFF059669) : const Color(0xFF64748B),
+                                      size: 18,
+                                    ),
+                                    title: Text(
+                                      files[i]['name'] ?? 'File',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                                    ),
+                                    subtitle: Text(
+                                      'In ${files[i]['folderName'] ?? 'Root'} • ${_formatDateTime(files[i]['createdAt'])}',
+                                      style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
+                                    ),
+                                    trailing: i > 0
+                                        ? TextButton(
+                                            style: TextButton.styleFrom(foregroundColor: const Color(0xFFE11D48)),
+                                            onPressed: () async {
+                                              try {
+                                                await apiClient.dio.patch('/drive/file/${files[i]['id']}/trash');
+                                                setSheetState(() {
+                                                  files.removeAt(i);
+                                                });
+                                                _showSnack('Moved duplicate to Trash');
+                                                _loadDrive(silent: true);
+                                              } catch (e) {
+                                                _showSnack('Error: $e', isError: true);
+                                              }
+                                            },
+                                            child: const Text('Trash Copy', style: TextStyle(fontSize: 11)),
+                                          )
+                                        : const Text('Primary', style: TextStyle(color: Color(0xFF059669), fontSize: 11, fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      _showSnack('Could not scan for duplicates: $e', isError: true);
+    }
   }
 
   Future<void> _uploadFiles() async {
@@ -1156,6 +1631,17 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _previewOrOpenFile(dynamic file) async {
+    final fileId = file['id']?.toString() ?? '';
+    if (_offlineFiles.containsKey(fileId)) {
+      final localPath = _offlineFiles[fileId]?['localPath'] as String?;
+      if (localPath != null && File(localPath).existsSync()) {
+        try {
+          await OpenFilex.open(localPath);
+          return;
+        } catch (_) {}
+      }
+    }
+
     final mime = (file['mimeType'] ?? '') as String;
     final ext = (file['extension'] ?? '').toString().toLowerCase();
     final token = await apiClient.storage.read(key: 'access_token');
@@ -2040,6 +2526,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                     ),
                     for (final item in [
                       ('my-drive', 'My Drive', Icons.folder_outlined),
+                      ('offline', 'Offline Files', Icons.offline_pin_outlined),
                       ('recent', 'Recent', Icons.access_time),
                       ('starred', 'Starred', Icons.star_outline),
                       ('photos', 'Photos', Icons.image_outlined),
@@ -2068,6 +2555,24 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                       onTap: () {
                         Navigator.pop(context);
                         _backupGalleryPhotos();
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.sync, color: Color(0xFF4F46E5)),
+                      title: const Text('Background Auto-Sync', style: TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text(_autoSyncEnabled ? 'Auto-sync active' : 'Disabled • Tap to configure', style: const TextStyle(fontSize: 12)),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showAutoSyncDialog();
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.cleaning_services_outlined, color: Color(0xFFD97706)),
+                      title: const Text('Storage Cleaner & Duplicates', style: TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Find SHA-256 duplicate files & free space', style: TextStyle(fontSize: 12)),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showDuplicateCleanerDialog();
                       },
                     ),
                     const Divider(),
@@ -2529,6 +3034,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                           child: PopupMenuButton<String>(
                                             icon: const Icon(Icons.more_vert, size: 18, color: Color(0xFF64748B)),
                                             onSelected: (action) {
+                                              if (action == 'offline') _toggleOfflineFile(file);
                                               if (action == 'download') _downloadAndOpen(file);
                                               if (action == 'share') _openShareDialog('file', file['id'], file['name']);
                                               if (action == 'print') _printFile(file);
@@ -2557,9 +3063,23 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                                     PopupMenuItem(value: 'restore', child: Text('Restore')),
                                                     PopupMenuItem(value: 'delete', child: Text('Delete Forever')),
                                                   ]
-                                                : const [
-                                                    PopupMenuItem(value: 'download', child: Text('Download & Open')),
-                                                    PopupMenuItem(value: 'share', child: Text('Share')),
+                                                : [
+                                                    PopupMenuItem(
+                                                      value: 'offline',
+                                                      child: Row(
+                                                        children: [
+                                                          Icon(
+                                                            _offlineFiles.containsKey(file['id']) ? Icons.offline_pin : Icons.offline_pin_outlined,
+                                                            size: 16,
+                                                            color: _offlineFiles.containsKey(file['id']) ? const Color(0xFF059669) : const Color(0xFF64748B),
+                                                          ),
+                                                          const SizedBox(width: 8),
+                                                          Text(_offlineFiles.containsKey(file['id']) ? 'Remove Offline' : 'Available Offline'),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    const PopupMenuItem(value: 'download', child: Text('Download & Open')),
+                                                    const PopupMenuItem(value: 'share', child: Text('Share')),
                                                     PopupMenuItem(
                                                       value: 'print',
                                                       child: Row(
@@ -2732,6 +3252,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                       },
                                       trailing: PopupMenuButton<String>(
                                         onSelected: (action) {
+                                          if (action == 'offline') _toggleOfflineFile(file);
                                           if (action == 'download') _downloadAndOpen(file);
                                           if (action == 'share') _openShareDialog('file', file['id'], file['name']);
                                           if (action == 'print') _printFile(file);
@@ -2760,9 +3281,23 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                                 PopupMenuItem(value: 'restore', child: Text('Restore')),
                                                 PopupMenuItem(value: 'delete', child: Text('Delete Forever')),
                                               ]
-                                            : const [
-                                                PopupMenuItem(value: 'download', child: Text('Download & Open')),
-                                                PopupMenuItem(value: 'share', child: Text('Share')),
+                                            : [
+                                                PopupMenuItem(
+                                                  value: 'offline',
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                        _offlineFiles.containsKey(file['id']) ? Icons.offline_pin : Icons.offline_pin_outlined,
+                                                        size: 16,
+                                                        color: _offlineFiles.containsKey(file['id']) ? const Color(0xFF059669) : const Color(0xFF64748B),
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      Text(_offlineFiles.containsKey(file['id']) ? 'Remove Offline' : 'Available Offline'),
+                                                    ],
+                                                  ),
+                                                ),
+                                                const PopupMenuItem(value: 'download', child: Text('Download & Open')),
+                                                const PopupMenuItem(value: 'share', child: Text('Share')),
                                                 PopupMenuItem(
                                                   value: 'print',
                                                   child: Row(

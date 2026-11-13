@@ -128,6 +128,19 @@ export class DriveController {
     stream.pipe(res);
   }
 
+  @Get('storage/duplicates')
+  getDuplicates(@CurrentUser() user: AuthUser) {
+    return this.driveService.getDuplicates(user.id);
+  }
+
+  @Get('storage/large-files')
+  getLargeFiles(
+    @CurrentUser() user: AuthUser,
+    @Query('limit') limit?: number,
+  ) {
+    return this.driveService.getLargeFiles(user.id, limit);
+  }
+
   @Get('folders/:id/download')
   async downloadFolderZip(
     @CurrentUser() user: AuthUser,

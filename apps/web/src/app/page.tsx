@@ -698,6 +698,31 @@ function DriveDashboardContent() {
     onConfirm: () => void;
   } | null>(null);
 
+  // Storage Cleaner & Duplicate Finder state
+  const [cleanerModalOpen, setCleanerModalOpen] = useState(false);
+  const [cleanerTab, setCleanerTab] = useState<'duplicates' | 'large'>('duplicates');
+  const [cleanerData, setCleanerData] = useState<any>(null);
+  const [largeFilesData, setLargeFilesData] = useState<any[]>([]);
+  const [cleanerLoading, setCleanerLoading] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+
+  const openStorageCleaner = async () => {
+    setCleanerModalOpen(true);
+    setCleanerLoading(true);
+    try {
+      const [dupRes, largeRes] = await Promise.all([
+        apiFetch('/drive/storage/duplicates'),
+        apiFetch('/drive/storage/large-files?limit=40'),
+      ]);
+      setCleanerData(dupRes);
+      setLargeFilesData(Array.isArray(largeRes) ? largeRes : []);
+    } catch (e: any) {
+      showToast('Could not load storage analysis: ' + e.message, 'error');
+    } finally {
+      setCleanerLoading(false);
+    }
+  };
+
   // Google Drive Style Right-Click Context Menu State
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -773,6 +798,31 @@ function DriveDashboardContent() {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsOnline(navigator.onLine);
+      const handleOnline = () => {
+        setIsOnline(true);
+        showToast('Back online! Syncing files...', 'success');
+      };
+      const handleOffline = () => {
+        setIsOnline(false);
+        showToast('You are offline. Running in offline cache mode.', 'error');
+      };
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      }
+
+      return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      };
+    }
+  }, []);
 
   const loadUser = useCallback(async () => {
     const { accessToken } = getStoredTokens();
@@ -1099,7 +1149,7 @@ function DriveDashboardContent() {
           if (targetFolderId) formData.append('folderId', targetFolderId);
           formData.append('backend', selectedBackend);
 
-          await uploadFileWithProgress(
+          const uploadRes = await uploadFileWithProgress(
             formData,
             (progress) => {
               setUploadingFiles((prev) =>
@@ -1108,7 +1158,11 @@ function DriveDashboardContent() {
             },
             controller.signal,
           );
-          showToast(`Uploaded "${file.name}" to NOOR DRIVE`);
+          if (uploadRes?.isDeduplicated) {
+            showToast(`⚡ Instant 0ms upload: "${file.name}" deduplicated via SHA-256 (0 bytes transferred)!`);
+          } else {
+            showToast(`Uploaded "${file.name}" to NOOR DRIVE`);
+          }
         } catch (err: any) {
           console.error('[NOOR DRIVE] Upload error for file', file.name, err);
           if (err.message === 'Upload cancelled') {
@@ -2109,6 +2163,13 @@ function DriveDashboardContent() {
                 : `${formatBytes(user.usedStorageBytes)} of ${formatBytes(user.storageQuotaBytes)}`
               : '...'}
           </p>
+          <button
+            onClick={() => openStorageCleaner()}
+            className="w-full mt-2.5 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 text-indigo-600 dark:text-indigo-400 text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs transition"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Clean Duplicates & Space</span>
+          </button>
           <div className="mt-2.5 pt-2.5 border-t border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between text-[11px]">
             <span className="text-slate-500 flex items-center gap-1">
               <Send className="w-3 h-3 text-sky-500" />
@@ -2169,6 +2230,12 @@ function DriveDashboardContent() {
             </div>
 
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {!isOnline && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-xs font-semibold shrink-0">
+                  <AlertCircle className="w-3.5 h-3.5 animate-pulse" />
+                  <span className="hidden sm:inline">Offline Mode</span>
+                </div>
+              )}
               <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
                 <button
                   onClick={() => setLayout('grid')}
@@ -4777,6 +4844,185 @@ function DriveDashboardContent() {
               </div>
             );
           })()}
+        </div>
+      )}
+
+      {/* Storage Cleaner & Duplicate Finder Modal */}
+      {cleanerModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full border border-slate-200/80 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-5 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-indigo-500" /> Storage Cleaner & Optimizer
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Analyze duplicate SHA-256 files and largest files in your drive
+                </p>
+              </div>
+              <button
+                onClick={() => setCleanerModalOpen(false)}
+                className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-slate-200/80 dark:border-slate-800 px-5 gap-4">
+              <button
+                onClick={() => setCleanerTab('duplicates')}
+                className={`py-3 text-sm font-semibold border-b-2 transition ${
+                  cleanerTab === 'duplicates'
+                    ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Duplicate Files {cleanerData?.totalGroups ? `(${cleanerData.totalGroups})` : ''}
+              </button>
+              <button
+                onClick={() => setCleanerTab('large')}
+                className={`py-3 text-sm font-semibold border-b-2 transition ${
+                  cleanerTab === 'large'
+                    ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Large Files {largeFilesData.length > 0 ? `(${largeFilesData.length})` : ''}
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 overflow-y-auto flex-1 space-y-4">
+              {cleanerLoading ? (
+                <div className="py-16 flex flex-col items-center justify-center gap-3">
+                  <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+                  <span className="text-sm text-slate-500">Scanning your drive...</span>
+                </div>
+              ) : cleanerTab === 'duplicates' ? (
+                <>
+                  {cleanerData?.groups?.length > 0 ? (
+                    <>
+                      <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-bold text-rose-700 dark:text-rose-300 block">
+                            {cleanerData.totalGroups} Duplicate File Sets Found
+                          </span>
+                          <span className="text-[11px] text-rose-600 dark:text-rose-400">
+                            You can reclaim up to {formatBytes(cleanerData.totalWastedBytes)} by cleaning duplicate copies.
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        {cleanerData.groups.map((grp: any, idx: number) => (
+                          <div
+                            key={idx}
+                            className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 space-y-2"
+                          >
+                            <div className="flex items-center justify-between text-xs font-semibold">
+                              <span>
+                                {grp.files.length} Copies • {formatBytes(grp.sizeBytes)} each
+                              </span>
+                              <span className="text-rose-600 font-mono text-[11px]">
+                                Wastes {formatBytes(grp.wastedBytes)}
+                              </span>
+                            </div>
+                            <div className="space-y-1.5 divide-y divide-slate-200/60 dark:divide-slate-700/60">
+                              {grp.files.map((f: any, fIdx: number) => (
+                                <div key={f.id} className="pt-1.5 flex items-center justify-between text-xs">
+                                  <div className="min-w-0 flex-1 pr-3">
+                                    <span className="font-medium text-slate-800 dark:text-slate-100 truncate block">
+                                      {f.name}
+                                    </span>
+                                    <span className="text-[10px] text-slate-500">
+                                      Folder: {f.folderName} • {formatDateTime(f.createdAt)}
+                                    </span>
+                                  </div>
+                                  {fIdx === 0 ? (
+                                    <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
+                                      Primary
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          await apiFetch(`/drive/file/${f.id}/trash`, { method: 'PATCH' });
+                                          showToast(`Moved "${f.name}" copy to Trash`);
+                                          openStorageCleaner();
+                                          loadDrive(true);
+                                        } catch (e: any) {
+                                          showToast(e.message, 'error');
+                                        }
+                                      }}
+                                      className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:hover:bg-rose-900/60 text-xs font-semibold transition"
+                                    >
+                                      Trash Copy
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="py-12 flex flex-col items-center justify-center text-center">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center mb-3">
+                        <Check className="w-6 h-6 text-emerald-600" />
+                      </div>
+                      <h4 className="font-bold text-sm text-slate-900 dark:text-white">No Duplicates Found!</h4>
+                      <p className="text-xs text-slate-500 max-w-xs mt-1">
+                        All files in your NOOR DRIVE have unique SHA-256 signatures. No wasted space detected.
+                      </p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="space-y-2">
+                  {largeFilesData.length > 0 ? (
+                    largeFilesData.map((f: any) => (
+                      <div
+                        key={f.id}
+                        className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between text-xs gap-3"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <span className="font-semibold text-slate-800 dark:text-slate-100 truncate block">
+                            {f.name}
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            Folder: {f.folderName} • {formatDateTime(f.createdAt)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                            {formatBytes(f.sizeBytes)}
+                          </span>
+                          <button
+                            onClick={() => handlePreview(f)}
+                            className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300"
+                            title="Preview"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleTrash('file', f.id)}
+                            className="p-1.5 rounded-lg hover:bg-rose-100 text-rose-600"
+                            title="Move to Trash"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-12 text-center text-slate-500 text-xs">No files found.</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

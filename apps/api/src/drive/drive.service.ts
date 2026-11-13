@@ -287,7 +287,10 @@ export class DriveService {
         },
       });
 
-      return this.serializeFile(createdFile);
+      return {
+        ...this.serializeFile(createdFile),
+        isDeduplicated: !!existingStorageObject,
+      };
     } finally {
       await fs.promises.unlink(file.path).catch(() => {});
     }
@@ -619,5 +622,62 @@ export class DriveService {
       }
     }
     return { succeeded, failed };
+  }
+
+  async getDuplicates(userId: string) {
+    const files = await this.prisma.file.findMany({
+      where: { ownerId: userId, isTrash: false },
+      include: { folder: true, storageObject: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const groupsMap = new Map<string, any[]>();
+    for (const f of files) {
+      if (!f.checksumSha256) continue;
+      const key = `${f.checksumSha256}_${f.sizeBytes.toString()}`;
+      if (!groupsMap.has(key)) groupsMap.set(key, []);
+      groupsMap.get(key)!.push(f);
+    }
+
+    let totalPotentialSavings = BigInt(0);
+    const duplicateGroups: any[] = [];
+
+    for (const [, list] of groupsMap.entries()) {
+      if (list.length > 1) {
+        const sizeBytes = list[0].sizeBytes;
+        const wasted = sizeBytes * BigInt(list.length - 1);
+        totalPotentialSavings += wasted;
+        duplicateGroups.push({
+          checksum: list[0].checksumSha256,
+          sizeBytes: sizeBytes.toString(),
+          count: list.length,
+          wastedBytes: wasted.toString(),
+          files: list.map((f) => ({
+            ...this.serializeFile(f),
+            folderName: f.folder?.name || 'My Drive (Root)',
+          })),
+        });
+      }
+    }
+
+    return {
+      totalGroups: duplicateGroups.length,
+      totalWastedBytes: totalPotentialSavings.toString(),
+      groups: duplicateGroups,
+    };
+  }
+
+  async getLargeFiles(userId: string, limit = 50) {
+    const files = await this.prisma.file.findMany({
+      where: { ownerId: userId, isTrash: false },
+      include: { folder: true, storageObject: true },
+      orderBy: { sizeBytes: 'desc' },
+      take: Number(limit) || 50,
+    });
+
+    return files.map((f) => ({
+      ...this.serializeFile(f),
+      folderName: f.folder?.name || 'My Drive (Root)',
+    }));
   }
 }
