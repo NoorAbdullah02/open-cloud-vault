@@ -254,7 +254,7 @@ export class SharesService {
       throw new NotFoundException('Owner not found');
     }
 
-    if (owner.quota) {
+    if (owner.quota && owner.quota.storageQuotaBytes > BigInt(0)) {
       const projected = owner.quota.usedStorageBytes + BigInt(file.size);
       if (projected > owner.quota.storageQuotaBytes) {
         if (file.path) await fs.promises.unlink(file.path).catch(() => {});

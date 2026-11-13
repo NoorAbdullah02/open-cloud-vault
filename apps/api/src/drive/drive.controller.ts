@@ -55,7 +55,7 @@ export class DriveController {
         },
       }),
       limits: {
-        fileSize: 2 * 1024 * 1024 * 1024, // 2 GB limit
+        fileSize: 100 * 1024 * 1024 * 1024, // 100 GB Massive File Limit
       },
     }),
   )

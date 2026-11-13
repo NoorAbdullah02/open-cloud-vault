@@ -1892,11 +1892,14 @@ function DriveDashboardContent() {
     };
   })();
 
+  const isUnlimitedQuota = !user?.storageQuotaBytes || Number(user.storageQuotaBytes) === 0;
   const usedPercent = user
-    ? Math.min(
-        100,
-        Math.round((Number(user.usedStorageBytes) / Math.max(1, Number(user.storageQuotaBytes))) * 100),
-      )
+    ? isUnlimitedQuota
+      ? 5
+      : Math.min(
+          100,
+          Math.round((Number(user.usedStorageBytes) / Math.max(1, Number(user.storageQuotaBytes))) * 100),
+        )
     : 0;
 
   const navItems: { id: ViewMode; label: string; icon: any }[] = [
@@ -2098,7 +2101,9 @@ function DriveDashboardContent() {
           </div>
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
             {user
-              ? `${formatBytes(user.usedStorageBytes)} of ${formatBytes(user.storageQuotaBytes)}`
+              ? isUnlimitedQuota
+                ? `${formatBytes(user.usedStorageBytes)} used (Unlimited Storage)`
+                : `${formatBytes(user.usedStorageBytes)} of ${formatBytes(user.storageQuotaBytes)}`
               : '...'}
           </p>
           <div className="mt-2.5 pt-2.5 border-t border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between text-[11px]">
@@ -3368,7 +3373,11 @@ function DriveDashboardContent() {
                   <div className="p-4 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/40">
                     <p className="font-bold text-slate-800 dark:text-white mb-1">Drive Storage</p>
                     <p className="text-[11px] text-slate-500 mb-3">
-                      {user ? `${formatBytes(user.usedStorageBytes)} of ${formatBytes(user.storageQuotaBytes)} used` : '...'}
+                      {user
+                        ? isUnlimitedQuota
+                          ? `${formatBytes(user.usedStorageBytes)} used (Unlimited Storage)`
+                          : `${formatBytes(user.usedStorageBytes)} of ${formatBytes(user.storageQuotaBytes)} used`
+                        : '...'}
                     </p>
                     <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden flex">
                       <div style={{ width: `${storageBreakdown.imagesPct}%` }} className="bg-sky-500 h-full" title="Images" />

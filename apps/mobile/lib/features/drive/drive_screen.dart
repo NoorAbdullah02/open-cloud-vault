@@ -1660,8 +1660,10 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final canGoBack = _folderId != null || _view != 'my-drive';
     final usedBytes = int.tryParse(_user?['usedStorageBytes']?.toString() ?? '0') ?? 0;
-    final quotaBytes = int.tryParse(_user?['storageQuotaBytes']?.toString() ?? '1') ?? 1;
-    final usedRatio = (usedBytes / quotaBytes).clamp(0.0, 1.0);
+    final rawQuota = int.tryParse(_user?['storageQuotaBytes']?.toString() ?? '0') ?? 0;
+    final isUnlimited = rawQuota == 0;
+    final quotaBytes = isUnlimited ? 1 : rawQuota;
+    final usedRatio = isUnlimited ? 0.05 : (usedBytes / quotaBytes).clamp(0.0, 1.0);
 
     return PopScope(
       canPop: !canGoBack,
@@ -1899,7 +1901,9 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                       LinearProgressIndicator(value: usedRatio, minHeight: 6, borderRadius: BorderRadius.circular(4)),
                       const SizedBox(height: 6),
                       Text(
-                        '${_formatBytes(usedBytes)} of ${_formatBytes(quotaBytes)}',
+                        isUnlimited
+                            ? '${_formatBytes(usedBytes)} used (Unlimited Storage)'
+                            : '${_formatBytes(usedBytes)} of ${_formatBytes(quotaBytes)}',
                         style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
                       ),
                     ],

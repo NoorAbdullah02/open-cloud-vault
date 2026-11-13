@@ -216,3 +216,4 @@ export default function AudioPlayerBar({ track, onClose }: AudioPlayerBarProps) 
     </div>
   );
 }
+

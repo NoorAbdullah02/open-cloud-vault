@@ -3,7 +3,10 @@ import { StorageBackend } from '@prisma/client';
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 import { CustomFile } from 'telegram/client/uploads';
-import { Readable } from 'stream';
+import { Readable, PassThrough } from 'stream';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import {
   GetObjectParams,
   IStorageProvider,
@@ -11,7 +14,7 @@ import {
   StoredObjectResult,
 } from './storage-provider.interface';
 
-const TELEGRAM_MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB standard limit
+const TELEGRAM_SINGLE_PART_BYTES = 1800 * 1024 * 1024; // 1.8 GB safe chunk limit (Telegram limit is 2 GB)
 
 @Injectable()
 export class TelegramMtprotoProvider implements IStorageProvider {
@@ -54,45 +57,140 @@ export class TelegramMtprotoProvider implements IStorageProvider {
   }
 
   async putObject(input: PutObjectInput): Promise<StoredObjectResult> {
-    if (input.sizeBytes > TELEGRAM_MAX_FILE_BYTES) {
-      throw new BadRequestException(
-        'File exceeds Telegram standard 2 GB per-file limit. Use Local or S3 storage for larger files.',
-      );
-    }
-
     const client = await this.getClient();
     const target = input.targetChatId || process.env.TELEGRAM_TARGET_CHANNEL || 'me';
 
-    this.logger.log(`Uploading "${input.fileName}" (${input.sizeBytes} bytes) to Telegram target: ${target}`);
+    // 1. Single Part Upload (if file is <= 1.8 GB)
+    if (input.sizeBytes <= TELEGRAM_SINGLE_PART_BYTES) {
+      this.logger.log(`Uploading single file "${input.fileName}" (${input.sizeBytes} bytes) to Telegram target: ${target}`);
 
-    const filePayload = input.buffer
-      ? new CustomFile(input.fileName, input.sizeBytes, '', input.buffer)
-      : input.tempFilePath!;
+      const filePayload = input.buffer
+        ? new CustomFile(input.fileName, input.sizeBytes, '', input.buffer)
+        : input.tempFilePath!;
 
-    const sentMessage = await client.sendFile(target, {
-      file: filePayload,
-      forceDocument: true,
-      caption: `NoorDrive | ${input.fileName} | sha256:${input.checksumSha256.slice(0, 16)}`,
+      const sentMessage = await client.sendFile(target, {
+        file: filePayload,
+        forceDocument: true,
+        caption: `NoorDrive | ${input.fileName} | sha256:${input.checksumSha256.slice(0, 16)}`,
+      });
+
+      const msgId = sentMessage.id;
+      return {
+        backend: this.backend,
+        objectKey: `tg:${target}:${msgId}`,
+        telegramMessageId: msgId,
+        telegramChatId: target,
+      };
+    }
+
+    // 2. Multi-Part Auto-Chunking for Massive Files (5GB, 10GB, 20GB, 50GB+)
+    const totalChunks = Math.ceil(input.sizeBytes / TELEGRAM_SINGLE_PART_BYTES);
+    this.logger.log(
+      `Auto-chunking massive file "${input.fileName}" (${input.sizeBytes} bytes) into ${totalChunks} parts for Telegram...`,
+    );
+
+    const chunkMessageIds: number[] = [];
+
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * TELEGRAM_SINGLE_PART_BYTES;
+      const end = Math.min((i + 1) * TELEGRAM_SINGLE_PART_BYTES, input.sizeBytes);
+      const partSize = end - start;
+      const partSuffix = `part${(i + 1).toString().padStart(3, '0')}`;
+      const tempChunkPath = path.join(
+        os.tmpdir(),
+        `noor-chunk-${Date.now()}-${i}-${path.basename(input.fileName)}`,
+      );
+
+      this.logger.log(`Preparing & uploading Part ${i + 1}/${totalChunks} (${partSize} bytes) to Telegram...`);
+
+      if (input.tempFilePath) {
+        await new Promise((resolve, reject) => {
+          const readStream = fs.createReadStream(input.tempFilePath!, { start, end: end - 1 });
+          const writeStream = fs.createWriteStream(tempChunkPath);
+          readStream.pipe(writeStream);
+          writeStream.on('finish', () => resolve(true));
+          writeStream.on('error', reject);
+        });
+      } else if (input.buffer) {
+        const slice = input.buffer.subarray(start, end);
+        await fs.promises.writeFile(tempChunkPath, slice);
+      }
+
+      try {
+        const sentMessage = await client.sendFile(target, {
+          file: tempChunkPath,
+          forceDocument: true,
+          caption: `NoorDrive | ${input.fileName} (${partSuffix}) | sha256:${input.checksumSha256.slice(0, 16)}`,
+        });
+        chunkMessageIds.push(sentMessage.id);
+      } finally {
+        await fs.promises.unlink(tempChunkPath).catch(() => {});
+      }
+    }
+
+    const multiMetadata = JSON.stringify({
+      type: 'multipart',
+      target,
+      totalChunks,
+      chunkMessageIds,
+      sizeBytes: input.sizeBytes,
     });
 
-    const msgId = sentMessage.id;
     return {
       backend: this.backend,
-      objectKey: `tg:${target}:${msgId}`,
-      telegramMessageId: msgId,
+      objectKey: multiMetadata,
+      telegramMessageId: chunkMessageIds[0],
       telegramChatId: target,
     };
   }
 
   async getObjectStream(params: GetObjectParams): Promise<NodeJS.ReadableStream> {
+    const client = await this.getClient();
+    const defaultTarget = params.telegramChatId || process.env.TELEGRAM_TARGET_CHANNEL || 'me';
+
+    // Check if multipart
+    if (params.objectKey && params.objectKey.startsWith('{')) {
+      try {
+        const meta = JSON.parse(params.objectKey);
+        if (meta.type === 'multipart' && Array.isArray(meta.chunkMessageIds)) {
+          const target = meta.target || defaultTarget;
+          const chunkMessageIds: number[] = meta.chunkMessageIds;
+          const passThrough = new PassThrough();
+
+          (async () => {
+            try {
+              for (let i = 0; i < chunkMessageIds.length; i++) {
+                const msgId = chunkMessageIds[i];
+                const messages = await client.getMessages(target, { ids: [msgId] });
+                const message = messages[0];
+                if (!message || !message.media) {
+                  throw new BadRequestException(`Chunk part ${i + 1} not found in Telegram vault`);
+                }
+                const buffer = (await client.downloadMedia(message, {})) as Buffer;
+                const canContinue = passThrough.write(buffer);
+                if (!canContinue) {
+                  await new Promise((resolve) => passThrough.once('drain', resolve));
+                }
+              }
+              passThrough.end();
+            } catch (err) {
+              passThrough.destroy(err as Error);
+            }
+          })();
+
+          return passThrough;
+        }
+      } catch (e: any) {
+        this.logger.error(`Failed to parse multipart objectKey: ${e.message}`);
+      }
+    }
+
+    // Standard single file stream
     if (!params.telegramMessageId) {
       throw new BadRequestException('Missing Telegram message ID for retrieval');
     }
 
-    const client = await this.getClient();
-    const target = params.telegramChatId || process.env.TELEGRAM_TARGET_CHANNEL || 'me';
-
-    const messages = await client.getMessages(target, {
+    const messages = await client.getMessages(defaultTarget, {
       ids: [params.telegramMessageId],
     });
 
@@ -106,9 +204,20 @@ export class TelegramMtprotoProvider implements IStorageProvider {
   }
 
   async deleteObject(params: GetObjectParams): Promise<void> {
-    if (!params.telegramMessageId) return;
     const client = await this.getClient();
     const target = params.telegramChatId || process.env.TELEGRAM_TARGET_CHANNEL || 'me';
+
+    if (params.objectKey && params.objectKey.startsWith('{')) {
+      try {
+        const meta = JSON.parse(params.objectKey);
+        if (meta.type === 'multipart' && Array.isArray(meta.chunkMessageIds)) {
+          await client.deleteMessages(meta.target || target, meta.chunkMessageIds, { revoke: true });
+          return;
+        }
+      } catch {}
+    }
+
+    if (!params.telegramMessageId) return;
     await client.deleteMessages(target, [params.telegramMessageId], { revoke: true });
   }
 }

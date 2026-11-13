@@ -126,7 +126,7 @@ export class SharesController {
           cb(null, `noor-shared-upload-${uniqueSuffix}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`);
         },
       }),
-      limits: { fileSize: 2 * 1024 * 1024 * 1024 }, // 2 GB limit
+      limits: { fileSize: 100 * 1024 * 1024 * 1024 }, // 100 GB Massive File Limit
     }),
   )
   uploadToSharedFolder(

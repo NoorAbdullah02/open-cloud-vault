@@ -192,7 +192,7 @@ export class DriveService {
     });
     if (!user) throw new NotFoundException('User not found');
 
-    if (user.quota) {
+    if (user.quota && user.quota.storageQuotaBytes > BigInt(0)) {
       const projected = user.quota.usedStorageBytes + BigInt(file.size);
       if (projected > user.quota.storageQuotaBytes) {
         await fs.promises.unlink(file.path).catch(() => {});
