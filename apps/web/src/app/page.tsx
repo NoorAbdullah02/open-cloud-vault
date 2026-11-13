@@ -32,6 +32,7 @@ import {
   Loader2,
   Menu,
   ChevronRight,
+  ChevronLeft,
   Send,
   Smartphone,
   Cloud,
@@ -744,6 +745,8 @@ function DriveDashboardContent() {
     url?: string;
     textContent?: string;
     loading?: boolean;
+    imageIndex?: number;
+    allImageFiles?: any[];
   } | null>(null);
   const [activeAudioTrack, setActiveAudioTrack] = useState<AudioTrack | null>(null);
   const [storageModalOpen, setStorageModalOpen] = useState(false);
@@ -1589,7 +1592,7 @@ function DriveDashboardContent() {
     }
   };
 
-  const handlePreview = async (file: any) => {
+  const handlePreview = async (file: any, customImageFiles?: any[]) => {
     const { accessToken } = getStoredTokens();
     const streamUrl = `${getApiUrl()}/drive/files/${file.id}/download?inline=true${
       accessToken ? `&token=${encodeURIComponent(accessToken)}` : ''
@@ -1601,17 +1604,57 @@ function DriveDashboardContent() {
       mime.startsWith('text/') ||
       ['json', 'md', 'csv', 'log', 'ts', 'js', 'py', 'html', 'css', 'txt'].includes(ext);
 
+    const isImg = mime.startsWith('image/');
+    const allImageFiles = isImg
+      ? (customImageFiles || sortedFiles.filter((f) => (f.mimeType || '').startsWith('image/')))
+      : undefined;
+    const imageIndex = isImg && allImageFiles
+      ? allImageFiles.findIndex((f) => f.id === file.id)
+      : undefined;
+
     let textContent: string | undefined;
     if (isText) {
-      setPreviewModal({ file, loading: true });
+      setPreviewModal({ file, loading: true, imageIndex, allImageFiles });
       try {
         const res = await fetch(streamUrl);
         if (res.ok) textContent = await res.text();
       } catch {}
     }
 
-    setPreviewModal({ file, url: streamUrl, textContent, loading: false });
+    setPreviewModal({
+      file,
+      url: streamUrl,
+      textContent,
+      loading: false,
+      imageIndex: imageIndex !== undefined && imageIndex !== -1 ? imageIndex : 0,
+      allImageFiles,
+    });
   };
+
+  const navigatePreviewImage = (direction: 1 | -1) => {
+    if (
+      !previewModal ||
+      previewModal.imageIndex === undefined ||
+      !previewModal.allImageFiles ||
+      previewModal.allImageFiles.length <= 1
+    ) {
+      return;
+    }
+    const len = previewModal.allImageFiles.length;
+    const nextIdx = (previewModal.imageIndex + direction + len) % len;
+    const nextFile = previewModal.allImageFiles[nextIdx];
+    handlePreview(nextFile, previewModal.allImageFiles);
+  };
+
+  useEffect(() => {
+    if (!previewModal || previewModal.imageIndex === undefined) return;
+    const handleKeyNav = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') navigatePreviewImage(1);
+      if (e.key === 'ArrowLeft') navigatePreviewImage(-1);
+    };
+    window.addEventListener('keydown', handleKeyNav);
+    return () => window.removeEventListener('keydown', handleKeyNav);
+  }, [previewModal]);
 
   const handleDownload = async (file: any) => {
     try {
@@ -4198,9 +4241,16 @@ function DriveDashboardContent() {
       {previewModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col p-3 sm:p-5 h-[100dvh]">
           <div className="flex items-center justify-between gap-3 text-white pb-3 shrink-0">
-            <span className="font-semibold text-sm sm:text-base truncate min-w-0 flex-1">
-              {previewModal.file.name}
-            </span>
+            <div className="flex items-center gap-2 truncate min-w-0 flex-1">
+              <span className="font-semibold text-sm sm:text-base truncate">
+                {previewModal.file.name}
+              </span>
+              {previewModal.allImageFiles && previewModal.allImageFiles.length > 1 && (
+                <span className="px-2.5 py-0.5 rounded-full bg-white/15 text-slate-300 text-xs font-mono shrink-0">
+                  {(previewModal.imageIndex ?? 0) + 1} / {previewModal.allImageFiles.length}
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() =>
@@ -4252,7 +4302,33 @@ function DriveDashboardContent() {
                 <p className="text-sm text-slate-300">Loading preview from NOOR DRIVE...</p>
               </div>
             ) : previewModal.file.mimeType.startsWith('image/') ? (
-              <div className="w-full h-full max-h-[82dvh]">
+              <div className="w-full h-full max-h-[82dvh] relative flex items-center justify-center select-none">
+                {previewModal.allImageFiles && previewModal.allImageFiles.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigatePreviewImage(-1);
+                      }}
+                      title="Previous Image (Left Arrow)"
+                      className="absolute left-2 sm:left-6 top-1/2 -translate-y-1/2 z-30 p-2.5 sm:p-3.5 rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-md transition shadow-2xl hover:scale-110 active:scale-95 border border-white/10"
+                    >
+                      <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigatePreviewImage(1);
+                      }}
+                      title="Next Image (Right Arrow)"
+                      className="absolute right-2 sm:right-6 top-1/2 -translate-y-1/2 z-30 p-2.5 sm:p-3.5 rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-md transition shadow-2xl hover:scale-110 active:scale-95 border border-white/10"
+                    >
+                      <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </button>
+                  </>
+                )}
                 <ZoomableImage
                   src={previewModal.url}
                   alt={previewModal.file.name}

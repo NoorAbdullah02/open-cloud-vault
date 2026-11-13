@@ -555,10 +555,95 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _triggerAutoSyncCheck() async {
-    if (_uploadingName != null) return;
-    final now = DateTime.now().toIso8601String();
-    setState(() => _lastAutoSyncTime = now);
-    await _saveAutoSyncSettings();
+    if (_uploadingName != null || !_autoSyncEnabled) return;
+    try {
+      final now = DateTime.now().toIso8601String();
+      setState(() => _lastAutoSyncTime = now);
+      await _saveAutoSyncSettings();
+
+      // Find or create 'Camera Uploads' folder
+      String? cameraUploadsFolderId;
+      try {
+        final rootRes = await apiClient.dio.get('/drive/items');
+        if (rootRes.data is Map && rootRes.data['folders'] is List) {
+          final List rootFolders = rootRes.data['folders'];
+          for (final f in rootFolders) {
+            if (f is Map && (f['name'] as String).toLowerCase() == 'camera uploads') {
+              cameraUploadsFolderId = f['id'] as String;
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+
+      if (cameraUploadsFolderId == null) {
+        try {
+          final newFolderRes = await apiClient.dio.post('/drive/folders', data: {
+            'name': 'Camera Uploads',
+          });
+          if (newFolderRes.data is Map && newFolderRes.data['id'] != null) {
+            cameraUploadsFolderId = newFolderRes.data['id'] as String;
+          }
+        } catch (_) {}
+      }
+
+      // Check camera roll directory for new images
+      final List<File> candidateFiles = [];
+      final List<String> cameraDirs = [
+        '/storage/emulated/0/DCIM/Camera',
+        '/storage/emulated/0/Pictures',
+        '/sdcard/DCIM/Camera',
+      ];
+
+      for (final dirPath in cameraDirs) {
+        final dir = Directory(dirPath);
+        if (await dir.exists()) {
+          try {
+            final entities = dir.listSync();
+            for (final entity in entities) {
+              if (entity is File) {
+                final ext = entity.path.split('.').last.toLowerCase();
+                if (['jpg', 'jpeg', 'png', 'webp', 'heic', 'mp4'].contains(ext)) {
+                  candidateFiles.add(entity);
+                }
+              }
+            }
+          } catch (_) {}
+        }
+      }
+
+      if (candidateFiles.isNotEmpty && cameraUploadsFolderId != null) {
+        candidateFiles.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+        final existingNames = <String>{};
+        try {
+          final existingRes = await apiClient.dio.get('/drive/items?folderId=$cameraUploadsFolderId');
+          if (existingRes.data is Map && existingRes.data['files'] is List) {
+            for (final ef in existingRes.data['files']) {
+              if (ef is Map && ef['name'] != null) {
+                existingNames.add(ef['name'].toString().toLowerCase());
+              }
+            }
+          }
+        } catch (_) {}
+
+        int autoSyncedCount = 0;
+        for (final photoFile in candidateFiles.take(20)) {
+          final fileName = photoFile.path.split(Platform.pathSeparator).last;
+          if (existingNames.contains(fileName.toLowerCase())) continue;
+
+          try {
+            await _uploadSingleFile(photoFile.path, fileName, cameraUploadsFolderId);
+            autoSyncedCount++;
+            existingNames.add(fileName.toLowerCase());
+          } catch (_) {}
+        }
+
+        if (autoSyncedCount > 0 && mounted) {
+          _showSnack('📸 Auto-synced $autoSyncedCount new camera photo(s) to "Camera Uploads"');
+          await _loadDrive(silent: true);
+        }
+      }
+    } catch (_) {}
   }
 
   void _showAutoSyncDialog() {
@@ -1654,32 +1739,113 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     final authHeaders = token != null ? {'Authorization': 'Bearer $token'} : <String, String>{};
     final inlineUrl = '${ApiClient.baseUrl}/drive/files/${file['id']}/download?inline=true';
 
-    // 1. In-App Image Preview
+    // 1. In-App Multi-Image Preview & Swipe Gallery
     if (mime.startsWith('image/')) {
+      final allImages = _files.where((f) => (f['mimeType'] ?? '').toString().startsWith('image/')).toList();
+      final initialIdx = allImages.indexWhere((f) => f['id'] == file['id']);
+      final startIdx = initialIdx >= 0 ? initialIdx : 0;
+
       if (!mounted) return;
       showDialog(
         context: context,
-        builder: (_) => Dialog.fullscreen(
-          backgroundColor: Colors.black,
-          child: Scaffold(
-            backgroundColor: Colors.black,
-            appBar: AppBar(
-              backgroundColor: Colors.black,
-              foregroundColor: Colors.white,
-              title: Text(file['name'], overflow: TextOverflow.ellipsis),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.download),
-                  onPressed: () => _downloadAndOpen(file),
+        builder: (_) {
+          int currentImageIdx = startIdx;
+          final pageController = PageController(initialPage: startIdx);
+
+          return StatefulBuilder(
+            builder: (dialogCtx, setDialogState) {
+              return Dialog.fullscreen(
+                backgroundColor: Colors.black,
+                child: Scaffold(
+                  backgroundColor: Colors.black,
+                  appBar: AppBar(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    title: Text(
+                      allImages.length > 1
+                          ? '${allImages[currentImageIdx]['name']} (${currentImageIdx + 1}/${allImages.length})'
+                          : allImages[currentImageIdx]['name'],
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 15),
+                    ),
+                    actions: [
+                      IconButton(
+                        icon: const Icon(Icons.download),
+                        tooltip: 'Save to Device',
+                        onPressed: () => _saveFileToDevice(allImages[currentImageIdx]),
+                      ),
+                    ],
+                  ),
+                  body: Stack(
+                    children: [
+                      PageView.builder(
+                        controller: pageController,
+                        itemCount: allImages.length,
+                        onPageChanged: (idx) {
+                          setDialogState(() {
+                            currentImageIdx = idx;
+                          });
+                        },
+                        itemBuilder: (ctx, idx) {
+                          final cur = allImages[idx];
+                          final curUrl = '${ApiClient.baseUrl}/drive/files/${cur['id']}/download?inline=true';
+                          return _MobileZoomableImageViewer(
+                            imageUrl: curUrl,
+                            headers: authHeaders,
+                          );
+                        },
+                      ),
+                      if (allImages.length > 1) ...[
+                        if (currentImageIdx > 0)
+                          Positioned(
+                            left: 12,
+                            top: 0,
+                            bottom: 0,
+                            child: Center(
+                              child: IconButton(
+                                style: IconButton.styleFrom(
+                                  backgroundColor: Colors.black54,
+                                  foregroundColor: Colors.white,
+                                ),
+                                icon: const Icon(Icons.chevron_left, size: 30),
+                                onPressed: () {
+                                  pageController.previousPage(
+                                    duration: const Duration(milliseconds: 250),
+                                    curve: Curves.easeInOut,
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        if (currentImageIdx < allImages.length - 1)
+                          Positioned(
+                            right: 12,
+                            top: 0,
+                            bottom: 0,
+                            child: Center(
+                              child: IconButton(
+                                style: IconButton.styleFrom(
+                                  backgroundColor: Colors.black54,
+                                  foregroundColor: Colors.white,
+                                ),
+                                icon: const Icon(Icons.chevron_right, size: 30),
+                                onPressed: () {
+                                  pageController.nextPage(
+                                    duration: const Duration(milliseconds: 250),
+                                    curve: Curves.easeInOut,
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                      ],
+                    ],
+                  ),
                 ),
-              ],
-            ),
-            body: _MobileZoomableImageViewer(
-              imageUrl: inlineUrl,
-              headers: authHeaders,
-            ),
-          ),
-        ),
+              );
+            },
+          );
+        },
       );
       return;
     }
