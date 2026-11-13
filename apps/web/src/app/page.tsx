@@ -49,6 +49,7 @@ import {
   FileSpreadsheet,
   AlertCircle,
   Layers,
+  CheckSquare,
 } from 'lucide-react';
 import {
   apiFetch,
@@ -676,6 +677,7 @@ function DriveDashboardContent() {
   // Global Window Drag & Drop Listeners (Robust across all OS: Ubuntu, Linux, Windows, macOS)
   // Use a ref so the drop handler always has the latest folderId/handleUploadFiles without re-registering listeners
   const handleDropItemsRef = useRef<((dt: DataTransfer) => void) | null>(null);
+  const toggleSelectAllRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     let dragCounter = 0;
@@ -755,6 +757,9 @@ function DriveDashboardContent() {
         setShortcutsModalOpen(true);
       } else if (!isInput && (e.key === 'i' || e.key === 'I')) {
         setInfoPanelOpen((prev) => !prev);
+      } else if (!isInput && (e.metaKey || e.ctrlKey) && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        toggleSelectAllRef.current?.();
       }
     };
     const onWindowClick = () => {
@@ -1254,13 +1259,30 @@ function DriveDashboardContent() {
     );
   };
 
-  const selectAllItems = () => {
+  const totalItemCount = folders.length + files.length;
+  const isAllSelected = totalItemCount > 0 && selectedItems.length === totalItemCount;
+
+  const toggleSelectAll = useCallback(() => {
+    if (isAllSelected) {
+      setSelectedItems([]);
+    } else {
+      const all: { type: 'file' | 'folder'; id: string }[] = [
+        ...folders.map((f) => ({ type: 'folder' as const, id: f.id })),
+        ...files.map((f) => ({ type: 'file' as const, id: f.id })),
+      ];
+      setSelectedItems(all);
+    }
+  }, [isAllSelected, folders, files]);
+
+  const selectAllItems = useCallback(() => {
     const all: { type: 'file' | 'folder'; id: string }[] = [
       ...folders.map((f) => ({ type: 'folder' as const, id: f.id })),
       ...files.map((f) => ({ type: 'file' as const, id: f.id })),
     ];
     setSelectedItems(all);
-  };
+  }, [folders, files]);
+
+  toggleSelectAllRef.current = toggleSelectAll;
 
   const handleBulkAction = async (action: 'trash' | 'restore' | 'delete') => {
     if (selectedItems.length === 0) return;
@@ -1788,6 +1810,32 @@ function DriveDashboardContent() {
                 </button>
               </div>
 
+              {/* Select All Toggle Button */}
+              {totalItemCount > 0 && (
+                <button
+                  type="button"
+                  onClick={toggleSelectAll}
+                  className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold shadow-xs transition active:scale-95 ${
+                    isAllSelected
+                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                      : selectedItems.length > 0
+                      ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-300 dark:border-indigo-700 text-indigo-600 dark:text-indigo-300'
+                      : 'bg-white dark:bg-slate-800 border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50'
+                  }`}
+                  title={isAllSelected ? 'Deselect All (Ctrl+A)' : 'Select All (Ctrl+A)'}
+                >
+                  <CheckSquare className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">
+                    {isAllSelected ? 'Deselect All' : 'Select All'}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded-md bg-black/10 dark:bg-white/10 text-[10px] font-mono">
+                    {selectedItems.length > 0
+                      ? `${selectedItems.length}/${totalItemCount}`
+                      : totalItemCount}
+                  </span>
+                </button>
+              )}
+
               {/* Sort Menu */}
               <div className="relative">
                 <button
@@ -1976,10 +2024,10 @@ function DriveDashboardContent() {
                   {selectedItems.length} selected
                 </span>
                 <button
-                  onClick={selectAllItems}
+                  onClick={toggleSelectAll}
                   className="text-xs font-semibold text-indigo-600 dark:text-indigo-300 hover:underline"
                 >
-                  Select All ({folders.length + files.length})
+                  {isAllSelected ? 'Deselect All' : `Select All (${totalItemCount})`}
                 </button>
                 <button
                   onClick={() => setSelectedItems([])}
@@ -2242,9 +2290,34 @@ function DriveDashboardContent() {
               {/* Folders */}
               {folders.length > 0 && (
                 <section>
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
-                    Folders
-                  </h2>
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                      Folders ({folders.length})
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allFoldersSelected = folders.every((f) => isItemSelected('folder', f.id));
+                        if (allFoldersSelected) {
+                          setSelectedItems((prev) => prev.filter((s) => s.type !== 'folder'));
+                        } else {
+                          const folderItems = folders.map((f) => ({ type: 'folder' as const, id: f.id }));
+                          setSelectedItems((prev) => {
+                            const withoutFolders = prev.filter((s) => s.type !== 'folder');
+                            return [...withoutFolders, ...folderItems];
+                          });
+                        }
+                      }}
+                      className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                    >
+                      <CheckSquare className="w-3.5 h-3.5" />
+                      <span>
+                        {folders.every((f) => isItemSelected('folder', f.id))
+                          ? 'Deselect Folders'
+                          : 'Select Folders'}
+                      </span>
+                    </button>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
                     {sortedFolders.map((folder) => (
                       <div
@@ -2424,9 +2497,34 @@ function DriveDashboardContent() {
               {/* Files */}
               {files.length > 0 && (
                 <section>
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
-                    Files
-                  </h2>
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                      Files ({files.length})
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allFilesSelected = files.every((f) => isItemSelected('file', f.id));
+                        if (allFilesSelected) {
+                          setSelectedItems((prev) => prev.filter((s) => s.type !== 'file'));
+                        } else {
+                          const fileItems = files.map((f) => ({ type: 'file' as const, id: f.id }));
+                          setSelectedItems((prev) => {
+                            const withoutFiles = prev.filter((s) => s.type !== 'file');
+                            return [...withoutFiles, ...fileItems];
+                          });
+                        }
+                      }}
+                      className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                    >
+                      <CheckSquare className="w-3.5 h-3.5" />
+                      <span>
+                        {files.every((f) => isItemSelected('file', f.id))
+                          ? 'Deselect Files'
+                          : 'Select All Files'}
+                      </span>
+                    </button>
+                  </div>
                   {layout === 'grid' ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                       {sortedFiles.map((file) => {

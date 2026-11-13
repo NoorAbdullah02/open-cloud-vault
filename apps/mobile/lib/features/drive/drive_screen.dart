@@ -66,15 +66,24 @@ class _DriveScreenState extends State<DriveScreen> {
     });
   }
 
-  void _selectAll() {
+  void _toggleSelectAll() {
     setState(() {
-      for (final f in _folders) {
-        _selectedKeys.add('folder:${f['id']}');
-      }
-      for (final f in _files) {
-        _selectedKeys.add('file:${f['id']}');
+      final total = _folders.length + _files.length;
+      if (_selectedKeys.length == total && total > 0) {
+        _selectedKeys.clear();
+      } else {
+        for (final f in _folders) {
+          _selectedKeys.add('folder:${f['id']}');
+        }
+        for (final f in _files) {
+          _selectedKeys.add('file:${f['id']}');
+        }
       }
     });
+  }
+
+  void _selectAll() {
+    _toggleSelectAll();
   }
 
   Future<void> _bulkAction(String action) async {
@@ -748,6 +757,8 @@ class _DriveScreenState extends State<DriveScreen> {
         return;
       } catch (_) {
         if (mounted) Navigator.of(context, rootNavigator: true).pop();
+        await _downloadAndOpen(file);
+        return;
       }
     }
 
@@ -860,7 +871,11 @@ class _DriveScreenState extends State<DriveScreen> {
           ),
         );
         return;
-      } catch (_) {}
+      } catch (_) {
+        if (mounted) Navigator.of(context, rootNavigator: true).pop();
+        await _downloadAndOpen(file);
+        return;
+      }
     }
 
     // 5. In-App Text / Markdown / Code Preview
@@ -899,7 +914,11 @@ class _DriveScreenState extends State<DriveScreen> {
           ),
         );
         return;
-      } catch (_) {}
+      } catch (_) {
+        if (mounted) Navigator.of(context, rootNavigator: true).pop();
+        await _downloadAndOpen(file);
+        return;
+      }
     }
 
     // Fallback for Video/Audio/Other -> download and open in native Android viewer
@@ -1213,50 +1232,37 @@ class _DriveScreenState extends State<DriveScreen> {
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
-          leading: canGoBack
+          leading: _selectedKeys.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Color(0xFF0F172A)),
-                  onPressed: _goBack,
+                  icon: const Icon(Icons.close, color: Color(0xFF0F172A)),
+                  onPressed: () => setState(() => _selectedKeys.clear()),
+                  tooltip: 'Cancel Selection',
                 )
-              : null,
-          title: const Text(
-            'NOOR DRIVE',
-            style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 18),
+              : (canGoBack
+                  ? IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Color(0xFF0F172A)),
+                      onPressed: _goBack,
+                    )
+                  : null),
+          title: Text(
+            _selectedKeys.isNotEmpty
+                ? '${_selectedKeys.length} selected'
+                : 'NOOR DRIVE',
+            style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 18),
           ),
           actions: [
-            IconButton(
-              icon: Icon(_isGrid ? Icons.view_list : Icons.grid_view, color: const Color(0xFF18181B)),
-              onPressed: () => setState(() => _isGrid = !_isGrid),
-              tooltip: 'Toggle Grid/List',
-            ),
-            IconButton(
-              icon: const Icon(Icons.create_new_folder_outlined, color: Color(0xFF18181B)),
-              onPressed: _createFolder,
-              tooltip: 'New Folder',
-            ),
-            IconButton(
-              icon: const Icon(Icons.drive_folder_upload_outlined, color: Color(0xFF18181B)),
-              onPressed: _uploadFolder,
-              tooltip: 'Upload Folder',
-            ),
             if (_selectedKeys.isNotEmpty) ...[
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: Text(
-                    '${_selectedKeys.length} selected',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF4F46E5),
-                    ),
-                  ),
-                ),
-              ),
               IconButton(
-                icon: const Icon(Icons.select_all, color: Color(0xFF4F46E5)),
-                onPressed: _selectAll,
-                tooltip: 'Select All',
+                icon: Icon(
+                  _selectedKeys.length == (_folders.length + _files.length) && (_folders.length + _files.length) > 0
+                      ? Icons.deselect
+                      : Icons.select_all,
+                  color: const Color(0xFF4F46E5),
+                ),
+                onPressed: _toggleSelectAll,
+                tooltip: _selectedKeys.length == (_folders.length + _files.length)
+                    ? 'Deselect All'
+                    : 'Select All',
               ),
               if (_view == 'trash') ...[
                 IconButton(
@@ -1285,18 +1291,28 @@ class _DriveScreenState extends State<DriveScreen> {
                   ),
                   tooltip: 'Move to Trash',
                 ),
-              IconButton(
-                icon: const Icon(Icons.close, color: Color(0xFF64748B)),
-                onPressed: () => setState(() => _selectedKeys.clear()),
-                tooltip: 'Clear Selection',
-              ),
             ] else ...[
+              IconButton(
+                icon: Icon(_isGrid ? Icons.view_list : Icons.grid_view, color: const Color(0xFF18181B)),
+                onPressed: () => setState(() => _isGrid = !_isGrid),
+                tooltip: 'Toggle Grid/List',
+              ),
               if (_files.isNotEmpty || _folders.isNotEmpty)
                 IconButton(
-                  icon: const Icon(Icons.checklist, color: Color(0xFF64748B)),
+                  icon: const Icon(Icons.checklist, color: Color(0xFF4F46E5)),
                   onPressed: _selectAll,
                   tooltip: 'Select All',
                 ),
+              IconButton(
+                icon: const Icon(Icons.create_new_folder_outlined, color: Color(0xFF18181B)),
+                onPressed: _createFolder,
+                tooltip: 'New Folder',
+              ),
+              IconButton(
+                icon: const Icon(Icons.drive_folder_upload_outlined, color: Color(0xFF18181B)),
+                onPressed: _uploadFolder,
+                tooltip: 'Upload Folder',
+              ),
               if (_view == 'trash' && (_files.isNotEmpty || _folders.isNotEmpty))
                 IconButton(
                   icon: const Icon(Icons.delete_sweep, color: Color(0xFFE11D48)),
@@ -1577,6 +1593,40 @@ class _DriveScreenState extends State<DriveScreen> {
                   ],
                 ),
               ),
+            if (_files.isNotEmpty || _folders.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${_folders.length} folders, ${_files.length} files',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                    ),
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      icon: Icon(
+                        _selectedKeys.length == (_folders.length + _files.length) && (_folders.length + _files.length) > 0
+                            ? Icons.check_box
+                            : Icons.check_box_outline_blank,
+                        size: 16,
+                        color: const Color(0xFF4F46E5),
+                      ),
+                      label: Text(
+                        _selectedKeys.length == (_folders.length + _files.length) && (_folders.length + _files.length) > 0
+                            ? 'Deselect All'
+                            : 'Select All',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF4F46E5)),
+                      ),
+                      onPressed: _toggleSelectAll,
+                    ),
+                  ],
+                ),
+              ),
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
@@ -1609,6 +1659,16 @@ class _DriveScreenState extends State<DriveScreen> {
                                     ),
                                     child: Stack(
                                       children: [
+                                        if (_selectedKeys.isNotEmpty)
+                                          Positioned(
+                                            top: 6,
+                                            left: 6,
+                                            child: Icon(
+                                              isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
+                                              size: 20,
+                                              color: isSelected ? const Color(0xFF4F46E5) : const Color(0xFF94A3B8),
+                                            ),
+                                          ),
                                         InkWell(
                                           borderRadius: BorderRadius.circular(16),
                                           onLongPress: () => _toggleSelect('folder', folder['id']),
@@ -1703,6 +1763,16 @@ class _DriveScreenState extends State<DriveScreen> {
                                   ),
                                   child: Stack(
                                     children: [
+                                      if (_selectedKeys.isNotEmpty)
+                                        Positioned(
+                                          top: 6,
+                                          left: 6,
+                                          child: Icon(
+                                            isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
+                                            size: 20,
+                                            color: isSelected ? const Color(0xFF4F46E5) : const Color(0xFF94A3B8),
+                                          ),
+                                        ),
                                       InkWell(
                                         borderRadius: BorderRadius.circular(16),
                                         onLongPress: () => _toggleSelect('file', file['id']),
@@ -1832,10 +1902,10 @@ class _DriveScreenState extends State<DriveScreen> {
                                       leading: Icon(
                                         _selectedKeys.contains('folder:${folder['id']}')
                                             ? Icons.check_circle
-                                            : Icons.folder,
+                                            : (_selectedKeys.isNotEmpty ? Icons.radio_button_unchecked : Icons.folder),
                                         color: _selectedKeys.contains('folder:${folder['id']}')
                                             ? const Color(0xFF4F46E5)
-                                            : const Color(0xFFF59E0B),
+                                            : (_selectedKeys.isNotEmpty ? const Color(0xFF94A3B8) : const Color(0xFFF59E0B)),
                                       ),
                                       title: Text(folder['name'], style: const TextStyle(fontWeight: FontWeight.w600)),
                                       onLongPress: () => _toggleSelect('folder', folder['id']),
@@ -1905,10 +1975,14 @@ class _DriveScreenState extends State<DriveScreen> {
                                       leading: Icon(
                                         _selectedKeys.contains('file:${file['id']}')
                                             ? Icons.check_circle
-                                            : (_getFileVisualInfo(file)['icon'] as IconData),
+                                            : (_selectedKeys.isNotEmpty
+                                                ? Icons.radio_button_unchecked
+                                                : (_getFileVisualInfo(file)['icon'] as IconData)),
                                         color: _selectedKeys.contains('file:${file['id']}')
                                             ? const Color(0xFF4F46E5)
-                                            : (_getFileVisualInfo(file)['color'] as Color),
+                                            : (_selectedKeys.isNotEmpty
+                                                ? const Color(0xFF94A3B8)
+                                                : (_getFileVisualInfo(file)['color'] as Color)),
                                       ),
                                       title: Text(file['name'], maxLines: 1, overflow: TextOverflow.ellipsis),
                                       subtitle: Text(

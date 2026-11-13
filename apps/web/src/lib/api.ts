@@ -89,10 +89,19 @@ export function getDownloadUrl(fileId: string, inline = false): string {
 }
 
 export async function fetchAuthorizedBlobUrl(fileId: string): Promise<string> {
-  const { accessToken } = getStoredTokens();
-  const res = await fetch(`${getApiUrl()}/drive/files/${fileId}/download?inline=true`, {
+  let { accessToken } = getStoredTokens();
+  let res = await fetch(`${getApiUrl()}/drive/files/${fileId}/download?inline=true`, {
     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
   });
+  if (res.status === 401) {
+    const refreshed = await tryRefreshTokens();
+    if (refreshed) {
+      accessToken = getStoredTokens().accessToken;
+      res = await fetch(`${getApiUrl()}/drive/files/${fileId}/download?inline=true`, {
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      });
+    }
+  }
   if (!res.ok) throw new Error('Failed to load file');
   const blob = await res.blob();
   return URL.createObjectURL(blob);
