@@ -504,7 +504,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
           'name': fileName,
           'sizeBytes': file['sizeBytes'],
           'mimeType': file['mimeType'] ?? '',
-          'extension': file['extension'] ?? fileName.split('.').pop(),
+          'extension': file['extension'] ?? (fileName.contains('.') ? fileName.split('.').last : ''),
           'createdAt': file['createdAt'],
           'localPath': savePath,
           'cachedAt': DateTime.now().toIso8601String(),
