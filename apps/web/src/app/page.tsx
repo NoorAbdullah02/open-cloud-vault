@@ -52,6 +52,8 @@ import {
   CheckSquare,
   MessageCircle,
   Mail,
+  Play,
+  QrCode,
 } from 'lucide-react';
 import {
   apiFetch,
@@ -217,6 +219,17 @@ const textSnippetCache = new Map<string, string>();
 const docPreviewCache = new Map<string, DocCardPreview>();
 const driveViewCache = new Map<string, { folders: any[]; files: any[]; breadcrumbs: any[] }>();
 
+function cleanTitleFromFileName(name?: string): string {
+  if (!name) return '';
+  const withoutExt = name.replace(/\.[^/.]+$/, '');
+  const cleaned = withoutExt.replace(/[_-]+/g, ' ').trim();
+  // Capitalize words cleanly
+  return cleaned
+    .split(' ')
+    .map((w) => (w.length > 0 ? w[0].toUpperCase() + w.slice(1) : ''))
+    .join(' ');
+}
+
 function FileThumbnail({
   fileId,
   mimeType,
@@ -242,7 +255,7 @@ function FileThumbnail({
   const m = (mimeType || '').toLowerCase();
   const isText =
     m.startsWith('text/') ||
-    ['md', 'txt', 'json', 'csv', 'log', 'ts', 'js', 'py', 'html', 'css'].includes(ext);
+    ['md', 'txt', 'json', 'csv', 'log', 'ts', 'js', 'py', 'html', 'css', 'sql', 'xml', 'yaml', 'yml'].includes(ext);
   const isPdf = m.includes('pdf') || ext === 'pdf';
   const isPptx =
     m.includes('presentation') ||
@@ -254,6 +267,14 @@ function FileThumbnail({
     m.includes('wordprocessingml') ||
     ext === 'docx' ||
     ext === 'doc';
+  const isSpreadsheet =
+    m.includes('spreadsheet') ||
+    m.includes('excel') ||
+    ext === 'xlsx' ||
+    ext === 'xls' ||
+    ext === 'csv';
+  const isVideo = m.startsWith('video/') || ['mp4', 'mov', 'webm', 'mkv', 'avi'].includes(ext);
+  const isAudio = m.startsWith('audio/') || ['mp3', 'wav', 'm4a', 'flac', 'aac', 'ogg'].includes(ext);
 
   useEffect(() => {
     if (!mimeType.startsWith('image/') && !isText && !isPdf && !isPptx && !isDocx) return;
@@ -387,78 +408,219 @@ function FileThumbnail({
     );
   }
 
-  if (docPreview?.type === 'pptx') {
+  // 1. PowerPoint / Presentation Preview Card
+  if (isPptx) {
+    const title = docPreview?.title || cleanTitleFromFileName(fileName) || 'PowerPoint Presentation';
     return (
-      <div className="w-full h-full bg-slate-900 text-white p-3 flex flex-col justify-between overflow-hidden select-none border-b border-orange-500/40">
+      <div className="w-full h-full bg-gradient-to-br from-slate-950 via-slate-900 to-amber-950/40 text-white p-3 flex flex-col justify-between overflow-hidden select-none border-b-2 border-orange-500 shadow-inner">
         <div className="flex items-center justify-between">
-          <span className="px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 font-bold text-[9px] uppercase tracking-wider flex items-center gap-1">
+          <span className="px-1.5 py-0.5 rounded bg-orange-500/25 text-orange-400 font-bold text-[9px] uppercase tracking-wider flex items-center gap-1 shadow-xs border border-orange-500/30">
             <Presentation className="w-2.5 h-2.5" /> SLIDE 1
           </span>
-          <span className="text-[9px] text-slate-400 font-mono">16:9</span>
+          <span className="text-[9px] text-slate-400 font-mono font-medium">16:9 HD</span>
         </div>
         <div className="my-auto py-1">
           <p className="text-xs font-bold text-white line-clamp-2 leading-tight">
-            {docPreview.title || 'PowerPoint Presentation'}
+            {title}
           </p>
-          {docPreview.snippet && (
+          {docPreview?.snippet ? (
             <p className="text-[10px] text-slate-300 line-clamp-2 mt-1 leading-snug">
               {docPreview.snippet}
             </p>
+          ) : (
+            <div className="space-y-1 mt-1.5 opacity-75">
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+                <div className="h-1.5 w-3/4 rounded bg-white/30" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+                <div className="h-1.5 w-1/2 rounded bg-white/20" />
+              </div>
+            </div>
           )}
         </div>
         <div className="flex items-center justify-between text-[8px] text-slate-400 border-t border-white/10 pt-1">
-          <span className="text-orange-400 font-medium">Presentation Slide</span>
+          <span className="text-orange-400 font-medium">PowerPoint Slide</span>
           <span>Open</span>
         </div>
       </div>
     );
   }
 
-  if (docPreview?.type === 'docx') {
+  // 2. Word Document Preview Card
+  if (isDocx) {
+    const title = docPreview?.title || cleanTitleFromFileName(fileName) || 'Word Document';
     return (
-      <div className="w-full h-full bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 p-3 flex flex-col justify-between overflow-hidden select-none border-b border-blue-500/30">
+      <div className="w-full h-full bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 p-3 flex flex-col justify-between overflow-hidden select-none border-b-2 border-blue-500 shadow-inner">
         <div className="flex items-center justify-between">
-          <span className="px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-600 dark:text-blue-400 font-bold text-[9px] uppercase tracking-wider flex items-center gap-1">
+          <span className="px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-600 dark:text-blue-400 font-bold text-[9px] uppercase tracking-wider flex items-center gap-1 shadow-xs border border-blue-500/20">
             <FileText className="w-2.5 h-2.5" /> DOCX
           </span>
           <span className="text-[9px] text-slate-400 font-mono">Page 1</span>
         </div>
         <div className="my-auto py-1">
           <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 leading-tight">
-            {docPreview.title || 'Word Document'}
+            {title}
           </p>
-          {docPreview.snippet && (
+          {docPreview?.snippet ? (
             <p className="text-[10px] text-slate-600 dark:text-slate-400 line-clamp-2 mt-1 leading-snug">
               {docPreview.snippet}
             </p>
+          ) : (
+            <div className="space-y-1.5 mt-1.5 opacity-60">
+              <div className="h-1.5 w-5/6 rounded bg-slate-300 dark:bg-slate-700" />
+              <div className="h-1.5 w-full rounded bg-slate-200 dark:bg-slate-800" />
+              <div className="h-1.5 w-2/3 rounded bg-slate-200 dark:bg-slate-800" />
+            </div>
           )}
         </div>
         <div className="flex items-center justify-between text-[8px] text-slate-400 border-t border-slate-200 dark:border-slate-800 pt-1">
-          <span className="text-blue-500 font-medium">Document Page</span>
+          <span className="text-blue-500 font-medium">Word Document</span>
           <span>Open</span>
         </div>
       </div>
     );
   }
 
-  if (src && isPdf) {
+  // 3. PDF Document Preview Card
+  if (isPdf) {
+    const title = cleanTitleFromFileName(fileName) || 'PDF Document';
     return (
-      <div className="w-full h-full flex items-center justify-center bg-white overflow-hidden">
-        <canvas
-          ref={pdfCanvasRef}
-          className={`w-full h-full object-cover object-top ${pdfReady ? 'block' : 'hidden'}`}
-        />
-        {!pdfReady && fallbackIcon}
+      <div className="w-full h-full bg-rose-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 p-3 flex flex-col justify-between overflow-hidden select-none border-b-2 border-rose-500 shadow-inner">
+        <div className="flex items-center justify-between">
+          <span className="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-600 dark:text-rose-400 font-bold text-[9px] uppercase tracking-wider flex items-center gap-1 shadow-xs border border-rose-500/20">
+            <FileText className="w-2.5 h-2.5" /> PDF
+          </span>
+          <span className="text-[9px] text-slate-400 font-mono">Vector • A4</span>
+        </div>
+        <div className="my-auto py-1">
+          <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 leading-tight">
+            {title}
+          </p>
+          <div className="space-y-1.5 mt-1.5 opacity-60">
+            <div className="h-1.5 w-4/5 rounded bg-rose-200 dark:bg-rose-950/60" />
+            <div className="h-1.5 w-full rounded bg-slate-200 dark:bg-slate-800" />
+            <div className="h-1.5 w-3/5 rounded bg-slate-200 dark:bg-slate-800" />
+          </div>
+        </div>
+        <div className="flex items-center justify-between text-[8px] text-slate-400 border-t border-slate-200 dark:border-slate-800 pt-1">
+          <span className="text-rose-500 font-medium">PDF Document</span>
+          <span>Open</span>
+        </div>
       </div>
     );
   }
 
-  if (snippet !== null) {
+  // 4. Excel / Spreadsheet Preview Card
+  if (isSpreadsheet) {
+    const title = cleanTitleFromFileName(fileName) || 'Spreadsheet';
     return (
-      <div className="w-full h-full p-3 bg-white/85 dark:bg-slate-900/80 text-left overflow-hidden select-none">
-        <pre className="text-[9px] leading-relaxed font-mono text-slate-600 dark:text-slate-300 whitespace-pre-wrap break-words">
-          {snippet}
+      <div className="w-full h-full bg-emerald-50/40 dark:bg-slate-900 text-slate-800 dark:text-slate-200 p-3 flex flex-col justify-between overflow-hidden select-none border-b-2 border-emerald-500 shadow-inner">
+        <div className="flex items-center justify-between">
+          <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold text-[9px] uppercase tracking-wider flex items-center gap-1 shadow-xs border border-emerald-500/20">
+            <FileSpreadsheet className="w-2.5 h-2.5" /> SHEET 1
+          </span>
+          <span className="text-[9px] text-slate-400 font-mono">XLSX</span>
+        </div>
+        <div className="my-auto py-1">
+          <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 leading-tight">
+            {title}
+          </p>
+          <div className="grid grid-cols-3 gap-1 mt-1.5 opacity-65">
+            <div className="h-2.5 rounded bg-emerald-500/20 text-[7px] text-center font-mono font-bold text-emerald-700 dark:text-emerald-400">A</div>
+            <div className="h-2.5 rounded bg-emerald-500/20 text-[7px] text-center font-mono font-bold text-emerald-700 dark:text-emerald-400">B</div>
+            <div className="h-2.5 rounded bg-emerald-500/20 text-[7px] text-center font-mono font-bold text-emerald-700 dark:text-emerald-400">C</div>
+            <div className="h-2.5 rounded bg-slate-200 dark:bg-slate-800" />
+            <div className="h-2.5 rounded bg-slate-200 dark:bg-slate-800" />
+            <div className="h-2.5 rounded bg-slate-200 dark:bg-slate-800" />
+          </div>
+        </div>
+        <div className="flex items-center justify-between text-[8px] text-slate-400 border-t border-slate-200 dark:border-slate-800 pt-1">
+          <span className="text-emerald-600 dark:text-emerald-400 font-medium">Workbook Table</span>
+          <span>Open</span>
+        </div>
+      </div>
+    );
+  }
+
+  // 5. Video Preview Card
+  if (isVideo) {
+    const title = cleanTitleFromFileName(fileName) || 'Video Media';
+    return (
+      <div className="w-full h-full bg-gradient-to-br from-slate-950 via-slate-900 to-purple-950/40 text-white p-3 flex flex-col justify-between overflow-hidden select-none border-b-2 border-purple-500 shadow-inner">
+        <div className="flex items-center justify-between">
+          <span className="px-1.5 py-0.5 rounded bg-purple-500/25 text-purple-400 font-bold text-[9px] uppercase tracking-wider flex items-center gap-1 shadow-xs border border-purple-500/30">
+            <Video className="w-2.5 h-2.5" /> VIDEO
+          </span>
+          <span className="text-[9px] text-slate-400 font-mono font-medium">HD</span>
+        </div>
+        <div className="my-auto flex flex-col items-center justify-center">
+          <div className="w-8 h-8 rounded-full bg-purple-500/20 border border-purple-400/40 flex items-center justify-center text-purple-300 shadow-md">
+            <Play className="w-4 h-4 fill-purple-400 text-purple-400 ml-0.5" />
+          </div>
+          <p className="text-[11px] font-semibold text-white/90 line-clamp-1 mt-1 text-center">
+            {title}
+          </p>
+        </div>
+        <div className="flex items-center justify-between text-[8px] text-slate-400 border-t border-white/10 pt-1">
+          <span className="text-purple-400 font-medium">Media Player</span>
+          <span>Play</span>
+        </div>
+      </div>
+    );
+  }
+
+  // 6. Audio Preview Card
+  if (isAudio) {
+    const title = cleanTitleFromFileName(fileName) || 'Audio Track';
+    return (
+      <div className="w-full h-full bg-gradient-to-br from-slate-950 via-slate-900 to-pink-950/40 text-white p-3 flex flex-col justify-between overflow-hidden select-none border-b-2 border-pink-500 shadow-inner">
+        <div className="flex items-center justify-between">
+          <span className="px-1.5 py-0.5 rounded bg-pink-500/25 text-pink-400 font-bold text-[9px] uppercase tracking-wider flex items-center gap-1 shadow-xs border border-pink-500/30">
+            <Music className="w-2.5 h-2.5" /> AUDIO
+          </span>
+          <span className="text-[9px] text-slate-400 font-mono font-medium">TRACK</span>
+        </div>
+        <div className="my-auto flex flex-col items-center justify-center">
+          <div className="flex items-end gap-1 h-5 my-1">
+            <span className="w-1 bg-pink-400 rounded-full h-2.5 animate-pulse" />
+            <span className="w-1 bg-pink-300 rounded-full h-5 animate-pulse" />
+            <span className="w-1 bg-pink-500 rounded-full h-3.5 animate-pulse" />
+            <span className="w-1 bg-pink-400 rounded-full h-4.5 animate-pulse" />
+            <span className="w-1 bg-pink-300 rounded-full h-2 animate-pulse" />
+          </div>
+          <p className="text-[11px] font-semibold text-white/90 line-clamp-1 text-center">
+            {title}
+          </p>
+        </div>
+        <div className="flex items-center justify-between text-[8px] text-slate-400 border-t border-white/10 pt-1">
+          <span className="text-pink-400 font-medium">Sound Track</span>
+          <span>Play</span>
+        </div>
+      </div>
+    );
+  }
+
+  // 7. Text / Code Preview Card
+  if (isText || snippet !== null) {
+    return (
+      <div className="w-full h-full p-2.5 bg-slate-900 text-slate-200 text-left overflow-hidden select-none font-mono flex flex-col justify-between border-b-2 border-slate-700">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-1">
+          <div className="flex gap-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          </div>
+          <span className="text-[8px] text-slate-400 uppercase font-semibold">.{ext || 'txt'}</span>
+        </div>
+        <pre className="text-[9px] leading-relaxed text-slate-300 whitespace-pre-wrap break-words overflow-hidden my-auto line-clamp-3">
+          {snippet || cleanTitleFromFileName(fileName) || '// Code snippet'}
         </pre>
+        <div className="text-[8px] text-slate-500 border-t border-slate-800 pt-0.5 flex justify-between">
+          <span>UTF-8 • Text</span>
+          <span>Open</span>
+        </div>
       </div>
     );
   }
@@ -568,6 +730,7 @@ function DriveDashboardContent() {
   const [shareExpiresHours, setShareExpiresHours] = useState<number>(0);
   const [shareLinks, setShareLinks] = useState<any[]>([]);
   const [creatingShare, setCreatingShare] = useState(false);
+  const [showShareQr, setShowShareQr] = useState<string | null>(null);
 
   // Storage Settings
   const [selectedBackend, setSelectedBackend] = useState<'LOCAL_DISK' | 'TELEGRAM_MTPROTO'>('TELEGRAM_MTPROTO');
@@ -2650,9 +2813,11 @@ function DriveDashboardContent() {
                                   }`}
                                 />
                               </button>
-                              <span className="absolute bottom-2 left-2.5 px-2 py-0.5 rounded-md bg-white/90 dark:bg-slate-900/90 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                                NOOR DRIVE
-                              </span>
+                              {['Image', 'Archive'].includes(visual.badge) && (
+                                <span className="absolute bottom-2 left-2.5 px-2 py-0.5 rounded-md bg-white/90 dark:bg-slate-900/90 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                                  NOOR DRIVE
+                                </span>
+                              )}
                             </div>
 
                             <div
@@ -3028,6 +3193,18 @@ function DriveDashboardContent() {
                         </button>
                       </>
                     )}
+                    <button
+                      onClick={() =>
+                        openShareModal(
+                          activeDetailItem.type,
+                          activeDetailItem.item.id,
+                          activeDetailItem.item.name,
+                        )
+                      }
+                      className="w-full py-2 px-3 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white font-semibold flex items-center justify-center gap-2 transition shadow-xs active:scale-95"
+                    >
+                      <MessageCircle className="w-4 h-4 fill-white/20" /> Share to WhatsApp / Apps
+                    </button>
                   </div>
                 </>
               ) : (
@@ -3843,6 +4020,50 @@ function DriveDashboardContent() {
                   <span>More Apps</span>
                 </button>
               </div>
+
+              {/* QR Code Toggle */}
+              <div className="flex justify-center pt-1.5">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (showShareQr) {
+                      setShowShareQr(null);
+                      return;
+                    }
+                    if (shareLinks.length > 0) {
+                      const url =
+                        typeof window !== 'undefined'
+                          ? `${window.location.origin}/share/${shareLinks[0].shareToken}`
+                          : `/share/${shareLinks[0].shareToken}`;
+                      setShowShareQr(url);
+                    } else {
+                      const url = await getOrCreateShareUrl();
+                      if (url) setShowShareQr(url);
+                    }
+                  }}
+                  disabled={creatingShare}
+                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1.5 py-1 transition disabled:opacity-60"
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span>{showShareQr ? 'Hide QR Code' : 'Show Mobile QR Code'}</span>
+                </button>
+              </div>
+
+              {/* QR Code Container */}
+              {showShareQr && (
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex flex-col items-center space-y-2 shadow-xs animate-in fade-in zoom-in-95">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                      showShareQr,
+                    )}`}
+                    alt="Share QR Code"
+                    className="w-36 h-36 rounded-xl border border-slate-100 dark:border-slate-700 p-1 bg-white shadow-xs"
+                  />
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center font-medium">
+                    Scan with WhatsApp or any phone camera to access instantly
+                  </p>
+                </div>
+              )}
             </div>
 
             {shareLinks.length > 0 && (
@@ -3868,6 +4089,13 @@ function DriveDashboardContent() {
                           {s.permission} • {s.accessCount} views
                         </p>
                       </div>
+                      <button
+                        onClick={() => setShowShareQr(showShareQr === fullUrl ? null : fullUrl)}
+                        title="Show QR Code"
+                        className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500"
+                      >
+                        <QrCode className="w-3.5 h-3.5" />
+                      </button>
                       <button
                         onClick={() => {
                           navigator.clipboard.writeText(fullUrl);
@@ -4122,6 +4350,16 @@ function DriveDashboardContent() {
                 <button
                   onClick={() => {
                     setContextMenu(null);
+                    openShareModal('file', file.id, file.name);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-emerald-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-[#25D366] transition"
+                >
+                  <MessageCircle className="w-4 h-4 text-[#25D366]" />
+                  <span>Share to WhatsApp</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setContextMenu(null);
                     handleStar('file', file.id);
                   }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
@@ -4222,6 +4460,16 @@ function DriveDashboardContent() {
                 >
                   <Share2 className="w-4 h-4 text-indigo-500" />
                   <span>Share link</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setContextMenu(null);
+                    openShareModal('folder', folder.id, folder.name);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-emerald-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-[#25D366] transition"
+                >
+                  <MessageCircle className="w-4 h-4 text-[#25D366]" />
+                  <span>Share to WhatsApp</span>
                 </button>
                 <button
                   onClick={() => {

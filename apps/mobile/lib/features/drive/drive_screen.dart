@@ -47,6 +47,7 @@ class _DriveScreenState extends State<DriveScreen> {
   final Map<String, Map<String, List<dynamic>>> _driveCache = {};
   final Set<String> _selectedKeys = {};
   Timer? _searchDebounce;
+  String? _authToken;
 
   @override
   void initState() {
@@ -274,6 +275,7 @@ class _DriveScreenState extends State<DriveScreen> {
   }
 
   Future<void> _loadDrive({bool silent = false}) async {
+    _authToken ??= await apiClient.storage.read(key: 'access_token');
     if (!silent) _selectedKeys.clear();
     final cacheKey = '$_view:${_folderId ?? 'root'}:$_search';
     final cached = _driveCache[cacheKey];
@@ -598,9 +600,15 @@ class _DriveScreenState extends State<DriveScreen> {
     }
   }
 
+  String _cleanDocTitle(String name) {
+    final withoutExt = name.replaceAll(RegExp(r'\.[^/.]+$'), '');
+    return withoutExt.replaceAll(RegExp(r'[_-]+'), ' ').trim();
+  }
+
   Map<String, dynamic> _getFileVisualInfo(dynamic file) {
     final mime = (file['mimeType'] ?? '') as String;
-    final ext = (file['extension'] ?? '').toString().toLowerCase();
+    final fileName = (file['name'] ?? '').toString();
+    final ext = (file['extension'] ?? (fileName.contains('.') ? fileName.split('.').last : '')).toString().toLowerCase();
 
     if (mime.startsWith('image/')) {
       return {'icon': Icons.image, 'color': const Color(0xFF0284C7), 'bg': const Color(0xFFF0F9FF), 'label': 'IMG'};
@@ -611,22 +619,310 @@ class _DriveScreenState extends State<DriveScreen> {
     if (mime.startsWith('audio/')) {
       return {'icon': Icons.audiotrack, 'color': const Color(0xFFDB2777), 'bg': const Color(0xFFFDF2F8), 'label': 'AUDIO'};
     }
-    if (ext == 'pptx' || ext == 'ppt' || mime.contains('presentationml')) {
+    if (ext == 'pptx' || ext == 'ppt' || mime.contains('presentationml') || mime.contains('powerpoint')) {
       return {'icon': Icons.slideshow, 'color': const Color(0xFFEA580C), 'bg': const Color(0xFFFFF7ED), 'label': 'PPTX'};
     }
-    if (ext == 'docx' || ext == 'doc' || mime.contains('wordprocessingml')) {
+    if (ext == 'docx' || ext == 'doc' || mime.contains('wordprocessingml') || mime.contains('word')) {
       return {'icon': Icons.description, 'color': const Color(0xFF2563EB), 'bg': const Color(0xFFEFF6FF), 'label': 'DOCX'};
     }
     if (ext == 'pdf' || mime.contains('pdf')) {
       return {'icon': Icons.picture_as_pdf, 'color': const Color(0xFFE11D48), 'bg': const Color(0xFFFFF1F2), 'label': 'PDF'};
     }
-    if (ext == 'xlsx' || ext == 'xls' || ext == 'csv') {
+    if (ext == 'xlsx' || ext == 'xls' || ext == 'csv' || mime.contains('spreadsheet') || mime.contains('excel')) {
       return {'icon': Icons.table_chart, 'color': const Color(0xFF059669), 'bg': const Color(0xFFECFDF5), 'label': 'SHEET'};
     }
     if (ext == 'zip' || ext == 'rar' || mime.contains('zip')) {
       return {'icon': Icons.folder_zip, 'color': const Color(0xFFD97706), 'bg': const Color(0xFFFFFBEB), 'label': 'ZIP'};
     }
     return {'icon': Icons.insert_drive_file, 'color': const Color(0xFF6366F1), 'bg': const Color(0xFFEEF2FF), 'label': ext.toUpperCase()};
+  }
+
+  Widget _buildFilePreview(dynamic file) {
+    final mime = (file['mimeType'] ?? '').toString().toLowerCase();
+    final fileName = (file['name'] ?? '').toString();
+    final ext = (file['extension'] ?? (fileName.contains('.') ? fileName.split('.').last : '')).toString().toLowerCase();
+    final isImage = mime.startsWith('image/');
+    final isPptx = ext == 'pptx' || ext == 'ppt' || mime.contains('presentation') || mime.contains('powerpoint');
+    final isDocx = ext == 'docx' || ext == 'doc' || mime.contains('word');
+    final isPdf = ext == 'pdf' || mime.contains('pdf');
+    final isSheet = ext == 'xlsx' || ext == 'xls' || ext == 'csv' || mime.contains('spreadsheet') || mime.contains('excel');
+
+    if (isImage) {
+      final imgUrl = '${ApiClient.baseUrl}/drive/files/${file['id']}/download?inline=true';
+      return SizedBox(
+        height: 94,
+        width: double.infinity,
+        child: Image.network(
+          imgUrl,
+          headers: _authToken != null ? {'Authorization': 'Bearer $_authToken'} : null,
+          fit: BoxFit.cover,
+          errorBuilder: (ctx, err, stack) => Container(
+            color: const Color(0xFFF0F9FF),
+            child: const Center(
+              child: Icon(Icons.image, size: 36, color: Color(0xFF0284C7)),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (isPptx) {
+      final title = _cleanDocTitle(fileName.isNotEmpty ? fileName : 'Presentation');
+      return Container(
+        height: 94,
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+          ),
+          border: Border(bottom: BorderSide(color: Color(0xFFEA580C), width: 2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: const Color(0x33F97316),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.slideshow, size: 10, color: Color(0xFFFB923C)),
+                      SizedBox(width: 3),
+                      Text(
+                        'SLIDE 1',
+                        style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFFFB923C)),
+                      ),
+                    ],
+                  ),
+                ),
+                const Text('16:9 HD', style: TextStyle(fontSize: 8, color: Colors.white38, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            Text(
+              title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white, height: 1.15),
+            ),
+            Row(
+              children: [
+                Container(width: 4, height: 4, decoration: const BoxDecoration(color: Color(0xFFF97316), shape: BoxShape.circle)),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Container(
+                    height: 3,
+                    decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Text('Open', style: TextStyle(fontSize: 8, color: Color(0xFFFB923C))),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (isDocx) {
+      final title = _cleanDocTitle(fileName.isNotEmpty ? fileName : 'Document');
+      return Container(
+        height: 94,
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: const BoxDecoration(
+          color: Color(0xFFF8FAFC),
+          border: Border(bottom: BorderSide(color: Color(0xFF2563EB), width: 2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: const Color(0x222563EB),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.description, size: 10, color: Color(0xFF2563EB)),
+                      SizedBox(width: 3),
+                      Text(
+                        'DOCX',
+                        style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                      ),
+                    ],
+                  ),
+                ),
+                const Text('Page 1', style: TextStyle(fontSize: 8, color: Color(0xFF94A3B8))),
+              ],
+            ),
+            Text(
+              title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF1E293B), height: 1.15),
+            ),
+            Column(
+              children: [
+                Container(height: 2.5, width: double.infinity, decoration: BoxDecoration(color: const Color(0xFFCBD5E1), borderRadius: BorderRadius.circular(2))),
+                const SizedBox(height: 3),
+                Container(height: 2.5, width: 70, decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(2))),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (isPdf) {
+      final title = _cleanDocTitle(fileName.isNotEmpty ? fileName : 'PDF Document');
+      return Container(
+        height: 94,
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: const BoxDecoration(
+          color: Color(0xFFFFF1F2),
+          border: Border(bottom: BorderSide(color: Color(0xFFE11D48), width: 2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: const Color(0x33E11D48),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.picture_as_pdf, size: 10, color: Color(0xFFE11D48)),
+                      SizedBox(width: 3),
+                      Text(
+                        'PDF',
+                        style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFFE11D48)),
+                      ),
+                    ],
+                  ),
+                ),
+                const Text('Vector', style: TextStyle(fontSize: 8, color: Color(0xFF94A3B8))),
+              ],
+            ),
+            Text(
+              title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF881337), height: 1.15),
+            ),
+            Column(
+              children: [
+                Container(height: 2.5, width: double.infinity, decoration: BoxDecoration(color: const Color(0xFFFECDD3), borderRadius: BorderRadius.circular(2))),
+                const SizedBox(height: 3),
+                Container(height: 2.5, width: 60, decoration: BoxDecoration(color: const Color(0xFFFFE4E6), borderRadius: BorderRadius.circular(2))),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (isSheet) {
+      final title = _cleanDocTitle(fileName.isNotEmpty ? fileName : 'Spreadsheet');
+      return Container(
+        height: 94,
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: const BoxDecoration(
+          color: Color(0xFFECFDF5),
+          border: Border(bottom: BorderSide(color: Color(0xFF059669), width: 2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: const Color(0x33059669),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.table_chart, size: 10, color: Color(0xFF059669)),
+                      SizedBox(width: 3),
+                      Text(
+                        'SHEET 1',
+                        style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFF059669)),
+                      ),
+                    ],
+                  ),
+                ),
+                const Text('Grid', style: TextStyle(fontSize: 8, color: Color(0xFF94A3B8))),
+              ],
+            ),
+            Text(
+              title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF064E3B), height: 1.15),
+            ),
+            Row(
+              children: [
+                for (int i = 0; i < 3; i++)
+                  Expanded(
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 3),
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFA7F3D0),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Fallback for audio, video, zip, others
+    final vis = _getFileVisualInfo(file);
+    return Container(
+      height: 94,
+      width: double.infinity,
+      color: vis['bg'] as Color,
+      child: Center(
+        child: Icon(
+          vis['icon'] as IconData,
+          size: 38,
+          color: vis['color'] as Color,
+        ),
+      ),
+    );
   }
 
   Future<void> _previewOrOpenFile(dynamic file) async {
@@ -1710,7 +2006,7 @@ class _DriveScreenState extends State<DriveScreen> {
                                 crossAxisCount: 2,
                                 crossAxisSpacing: 10,
                                 mainAxisSpacing: 10,
-                                childAspectRatio: 1.05,
+                                childAspectRatio: 0.88,
                               ),
                               itemCount: _folders.length + _files.length,
                               itemBuilder: (context, index) {
@@ -1854,51 +2150,50 @@ class _DriveScreenState extends State<DriveScreen> {
                                             _previewOrOpenFile(file);
                                           }
                                         },
-                                        child: Center(
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(12),
-                                            child: Column(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              children: [
-                                                Builder(builder: (_) {
-                                                  final vis = _getFileVisualInfo(file);
-                                                  return Container(
-                                                    width: 44,
-                                                    height: 44,
-                                                    decoration: BoxDecoration(
-                                                      color: vis['bg'] as Color,
-                                                      borderRadius: BorderRadius.circular(12),
-                                                    ),
-                                                    child: Center(
-                                                      child: Icon(
-                                                        vis['icon'] as IconData,
-                                                        size: 24,
-                                                        color: vis['color'] as Color,
-                                                      ),
-                                                    ),
-                                                  );
-                                                }),
-                                                const SizedBox(height: 8),
-                                                Text(
-                                                  file['name'],
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                                                ),
-                                                Text(
-                                                  _formatBytes(file['sizeBytes']),
-                                                  style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
-                                                ),
-                                                if (file['createdAt'] != null)
-                                                  Text(
-                                                    _formatDateTime(file['createdAt']),
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
-                                                    style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
-                                                  ),
-                                              ],
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            ClipRRect(
+                                              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                                              child: _buildFilePreview(file),
                                             ),
-                                          ),
+                                            Expanded(
+                                              child: Padding(
+                                                padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    Text(
+                                                      file['name'],
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                                                    ),
+                                                    Row(
+                                                      children: [
+                                                        Text(
+                                                          _formatBytes(file['sizeBytes']),
+                                                          style: const TextStyle(fontSize: 10.5, color: Color(0xFF64748B)),
+                                                        ),
+                                                        if (file['createdAt'] != null) ...[
+                                                          const Text(' • ', style: TextStyle(fontSize: 10.5, color: Color(0xFF94A3B8))),
+                                                          Expanded(
+                                                            child: Text(
+                                                              _formatDateTime(file['createdAt']),
+                                                              maxLines: 1,
+                                                              overflow: TextOverflow.ellipsis,
+                                                              style: const TextStyle(fontSize: 9.5, color: Color(0xFF94A3B8)),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ],
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                       Positioned(
@@ -2043,18 +2338,48 @@ class _DriveScreenState extends State<DriveScreen> {
                                       ),
                                     ),
                                     child: ListTile(
-                                      leading: Icon(
-                                        _selectedKeys.contains('file:${file['id']}')
-                                            ? Icons.check_circle
-                                            : (_selectedKeys.isNotEmpty
-                                                ? Icons.radio_button_unchecked
-                                                : (_getFileVisualInfo(file)['icon'] as IconData)),
-                                        color: _selectedKeys.contains('file:${file['id']}')
-                                            ? const Color(0xFF4F46E5)
-                                            : (_selectedKeys.isNotEmpty
-                                                ? const Color(0xFF94A3B8)
-                                                : (_getFileVisualInfo(file)['color'] as Color)),
-                                      ),
+                                      leading: _selectedKeys.contains('file:${file['id']}')
+                                          ? const Icon(Icons.check_circle, color: Color(0xFF4F46E5), size: 28)
+                                          : (_selectedKeys.isNotEmpty
+                                              ? const Icon(Icons.radio_button_unchecked, color: Color(0xFF94A3B8), size: 28)
+                                              : Builder(builder: (_) {
+                                                  final vis = _getFileVisualInfo(file);
+                                                  final mime = (file['mimeType'] ?? '').toString().toLowerCase();
+                                                  if (mime.startsWith('image/')) {
+                                                    final imgUrl = '${ApiClient.baseUrl}/drive/files/${file['id']}/download?inline=true';
+                                                    return ClipRRect(
+                                                      borderRadius: BorderRadius.circular(8),
+                                                      child: SizedBox(
+                                                        width: 40,
+                                                        height: 40,
+                                                        child: Image.network(
+                                                          imgUrl,
+                                                          headers: _authToken != null ? {'Authorization': 'Bearer $_authToken'} : null,
+                                                          fit: BoxFit.cover,
+                                                          errorBuilder: (_, __, ___) => Container(
+                                                            color: vis['bg'] as Color,
+                                                            child: Icon(vis['icon'] as IconData, size: 22, color: vis['color'] as Color),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
+                                                  return Container(
+                                                    width: 40,
+                                                    height: 40,
+                                                    decoration: BoxDecoration(
+                                                      color: vis['bg'] as Color,
+                                                      borderRadius: BorderRadius.circular(8),
+                                                    ),
+                                                    child: Center(
+                                                      child: Icon(
+                                                        vis['icon'] as IconData,
+                                                        size: 22,
+                                                        color: vis['color'] as Color,
+                                                      ),
+                                                    ),
+                                                  );
+                                                })),
                                       title: Text(file['name'], maxLines: 1, overflow: TextOverflow.ellipsis),
                                       subtitle: Text(
                                         '${_formatBytes(file['sizeBytes'])}${file['createdAt'] != null ? ' • ${_formatDateTime(file['createdAt'])}' : ''}',
