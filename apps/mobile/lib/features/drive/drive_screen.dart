@@ -27,6 +27,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
   String _view = 'my-drive';
   String? _folderId;
   String _search = '';
+  final TextEditingController _searchController = TextEditingController();
   bool _isGrid = false;
   bool _loading = true;
   Color _accentColor = const Color(0xFF18181B);
@@ -277,6 +278,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _realtimeSyncTimer?.cancel();
     _searchDebounce?.cancel();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -573,7 +575,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                   child: Container(
                     width: 40,
                     height: 4,
-                    margin: const EdgeInsets.bottom(16),
+                    margin: const EdgeInsets.only(bottom: 16),
                     decoration: BoxDecoration(
                       color: Colors.grey[300],
                       borderRadius: BorderRadius.circular(2),
@@ -701,7 +703,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                     child: Container(
                       width: 40,
                       height: 4,
-                      margin: const EdgeInsets.bottom(16),
+                      margin: const EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
                         color: Colors.grey[300],
                         borderRadius: BorderRadius.circular(2),
@@ -997,7 +999,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
               Container(
                 width: 40,
                 height: 4,
-                margin: const EdgeInsets.bottom(12),
+                margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(
                   color: Colors.grey[300],
                   borderRadius: BorderRadius.circular(2),
@@ -2676,6 +2678,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
             Padding(
               padding: const EdgeInsets.all(12),
               child: TextField(
+                controller: _searchController,
                 decoration: InputDecoration(
                   hintText: 'Search NOOR DRIVE...',
                   prefixIcon: const Icon(Icons.search),
