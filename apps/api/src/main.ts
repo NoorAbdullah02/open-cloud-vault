@@ -57,6 +57,19 @@ async function bootstrap() {
       } catch {}
     }, 60000);
   }
+
+  // Render Free Tier Keep-Alive safeguard:
+  // Ping public endpoint every 9 minutes to prevent 15-minute inactivity spin-down
+  const publicUrl = process.env.RENDER_EXTERNAL_URL || process.env.APP_URL || 'https://noor-cloud-vault.onrender.com';
+  if (process.env.NODE_ENV === 'production' && publicUrl) {
+    setInterval(() => {
+      fetch(`${publicUrl.replace(/\/$/, '')}/api/shares/app-release`)
+        .then((r) => {
+          if (r.ok) console.log(`[Keep-Alive] Self-ping successful (${r.status})`);
+        })
+        .catch(() => {});
+    }, 9 * 60 * 1000);
+  }
 }
 
 bootstrap();

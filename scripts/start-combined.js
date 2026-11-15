@@ -62,6 +62,21 @@ function proxyRequest(req, res, targetPort) {
     }
   });
 
+  // Cleanup immediately if client closes connection (e.g. video scrub/pause, abort)
+  res.on('close', () => {
+    if (!res.writableEnded) {
+      proxyReq.destroy();
+    }
+  });
+
+  req.on('aborted', () => {
+    proxyReq.destroy();
+  });
+
+  req.on('error', () => {
+    proxyReq.destroy();
+  });
+
   req.pipe(proxyReq, { end: true });
 }
 
