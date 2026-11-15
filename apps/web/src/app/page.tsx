@@ -2070,7 +2070,7 @@ function DriveDashboardContent() {
   const openShareModal = async (type: 'file' | 'folder', id: string, name: string) => {
     setShareModal({ type, id, name });
     setSharePermission(type === 'folder' ? 'EDITOR' : 'VIEWER');
-    setShareExpiresHours(0);
+    setShareExpiresHours(1440); // 2 Months default (60 days)
     try {
       const list = await apiFetch(`/shares?type=${type}&targetId=${id}`);
       setShareLinks(list || []);
@@ -5305,10 +5305,11 @@ function DriveDashboardContent() {
                     onChange={(e) => setShareExpiresHours(Number(e.target.value))}
                     className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-medium"
                   >
-                    <option value={0}>Never expires</option>
-                    <option value={24}>24 Hours</option>
+                    <option value={1440}>2 Months (60 Days - Default)</option>
+                    <option value={720}>30 Days (1 Month)</option>
                     <option value={168}>7 Days</option>
-                    <option value={720}>30 Days</option>
+                    <option value={24}>24 Hours</option>
+                    <option value={0}>Never expires</option>
                   </select>
                 </div>
               </div>

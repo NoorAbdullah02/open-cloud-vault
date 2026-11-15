@@ -42,9 +42,11 @@ export class SharesService {
     }
 
     const shareToken = crypto.randomBytes(24).toString('base64url');
+    // Default expiration is 2 months (60 days = 1440 hours) so links remain valid for 2 months
+    const hours = dto.expiresInHours !== undefined ? dto.expiresInHours : (60 * 24);
     let expiresAt: Date | null = null;
-    if (dto.expiresInHours && dto.expiresInHours > 0) {
-      expiresAt = new Date(Date.now() + dto.expiresInHours * 3600 * 1000);
+    if (hours > 0) {
+      expiresAt = new Date(Date.now() + hours * 3600 * 1000);
     }
 
     const share = await this.prisma.share.create({

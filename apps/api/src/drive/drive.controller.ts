@@ -91,6 +91,36 @@ export class DriveController {
     });
   }
 
+  @Get('items')
+  listItems(
+    @CurrentUser() user: AuthUser,
+    @Query('folderId') folderId?: string,
+    @Query('view') view?: any,
+    @Query('search') search?: string,
+    @Query('filterType') filterType?: any,
+    @Query('sizeMin') sizeMin?: string,
+    @Query('dateFilter') dateFilter?: any,
+  ) {
+    return this.driveService.listDrive(user.id, {
+      folderId,
+      view,
+      search,
+      filterType,
+      sizeMin,
+      dateFilter,
+    });
+  }
+
+  @Get('camera-folder')
+  getCameraFolder(@CurrentUser() user: AuthUser) {
+    return this.driveService.getOrCreateCameraUploadsFolder(user.id);
+  }
+
+  @Get('camera-uploads-folder')
+  getCameraUploadsFolder(@CurrentUser() user: AuthUser) {
+    return this.driveService.getOrCreateCameraUploadsFolder(user.id);
+  }
+
   @Post('folders')
   createFolder(
     @CurrentUser() user: AuthUser,

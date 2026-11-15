@@ -405,16 +405,39 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _uploadSingleFile(String path, String name, String? targetFolderId) async {
+  Future<void> _uploadSingleFile(
+    String? path,
+    String name,
+    String? targetFolderId, {
+    List<int>? bytes,
+  }) async {
     final startTime = DateTime.now();
     _uploadCancelToken = CancelToken();
-    final effectiveTarget = targetFolderId ?? (_view == 'vault' ? (_breadcrumbs.isNotEmpty ? _breadcrumbs.first['id'] : 'vault') : null);
-    final formData = FormData.fromMap({
-      'file': await MultipartFile.fromFile(path, filename: name),
-      if (effectiveTarget != null) 'folderId': effectiveTarget,
-      if (_view != null) 'view': _view,
+    final effectiveTarget = targetFolderId ??
+        (_view == 'vault'
+            ? (_breadcrumbs.isNotEmpty ? _breadcrumbs.first['id'] : 'vault')
+            : null);
+
+    MultipartFile multipartFile;
+    if (path != null && path.isNotEmpty && await File(path).exists()) {
+      multipartFile = await MultipartFile.fromFile(path, filename: name);
+    } else if (bytes != null && bytes.isNotEmpty) {
+      multipartFile = MultipartFile.fromBytes(bytes, filename: name);
+    } else {
+      throw Exception('Unable to access file data for "$name"');
+    }
+
+    final mapData = <String, dynamic>{
+      'file': multipartFile,
       'backend': 'TELEGRAM_MTPROTO',
-    });
+    };
+    if (effectiveTarget != null) {
+      mapData['folderId'] = effectiveTarget;
+    } else if (_view != null && _view != 'all' && _view != 'my-drive') {
+      mapData['view'] = _view;
+    }
+
+    final formData = FormData.fromMap(mapData);
 
     final res = await apiClient.dio.post(
       '/drive/upload',
@@ -567,6 +590,37 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     } catch (_) {}
   }
 
+  Future<String?> _getOrCreateCameraUploadsFolderId() async {
+    try {
+      final camRes = await apiClient.dio.get('/drive/camera-folder');
+      if (camRes.data is Map && camRes.data['id'] != null) {
+        return camRes.data['id'] as String;
+      }
+    } catch (_) {}
+
+    try {
+      final rootRes = await apiClient.dio.get('/drive');
+      if (rootRes.data is Map && rootRes.data['folders'] is List) {
+        for (final f in rootRes.data['folders']) {
+          if (f is Map && (f['name'] as String).toLowerCase() == 'camera uploads') {
+            return f['id'] as String;
+          }
+        }
+      }
+    } catch (_) {}
+
+    try {
+      final newFolderRes = await apiClient.dio.post('/drive/folders', data: {
+        'name': 'Camera Uploads',
+      });
+      if (newFolderRes.data is Map && newFolderRes.data['id'] != null) {
+        return newFolderRes.data['id'] as String;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
   Future<void> _triggerAutoSyncCheck() async {
     if (_uploadingName != null || !_autoSyncEnabled) return;
     try {
@@ -574,36 +628,17 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
       setState(() => _lastAutoSyncTime = now);
       await _saveAutoSyncSettings();
 
-      // Find or create 'Camera Uploads' folder
-      String? cameraUploadsFolderId;
-      try {
-        final rootRes = await apiClient.dio.get('/drive/items');
-        if (rootRes.data is Map && rootRes.data['folders'] is List) {
-          final List rootFolders = rootRes.data['folders'];
-          for (final f in rootFolders) {
-            if (f is Map && (f['name'] as String).toLowerCase() == 'camera uploads') {
-              cameraUploadsFolderId = f['id'] as String;
-              break;
-            }
-          }
-        }
-      } catch (_) {}
-
-      if (cameraUploadsFolderId == null) {
-        try {
-          final newFolderRes = await apiClient.dio.post('/drive/folders', data: {
-            'name': 'Camera Uploads',
-          });
-          if (newFolderRes.data is Map && newFolderRes.data['id'] != null) {
-            cameraUploadsFolderId = newFolderRes.data['id'] as String;
-          }
-        } catch (_) {}
-      }
+      // Find or create 'Camera Uploads' folder via canonical singleton
+      final cameraUploadsFolderId = await _getOrCreateCameraUploadsFolderId();
+      if (cameraUploadsFolderId == null) return;
 
       // Check camera roll directory for new images
       final List<File> candidateFiles = [];
       final List<String> cameraDirs = [
         '/storage/emulated/0/DCIM/Camera',
+        '/storage/emulated/0/DCIM/100ANDRO',
+        '/storage/emulated/0/DCIM',
+        '/storage/emulated/0/Pictures/Camera',
         '/storage/emulated/0/Pictures',
         '/sdcard/DCIM/Camera',
       ];
@@ -616,7 +651,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
             for (final entity in entities) {
               if (entity is File) {
                 final ext = entity.path.split('.').last.toLowerCase();
-                if (['jpg', 'jpeg', 'png', 'webp', 'heic', 'mp4'].contains(ext)) {
+                if (['jpg', 'jpeg', 'png', 'webp', 'heic', 'mp4', 'mov'].contains(ext)) {
                   candidateFiles.add(entity);
                 }
               }
@@ -625,11 +660,11 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
         }
       }
 
-      if (candidateFiles.isNotEmpty && cameraUploadsFolderId != null) {
+      if (candidateFiles.isNotEmpty) {
         candidateFiles.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
         final existingNames = <String>{};
         try {
-          final existingRes = await apiClient.dio.get('/drive/items?folderId=$cameraUploadsFolderId');
+          final existingRes = await apiClient.dio.get('/drive', queryParameters: {'folderId': cameraUploadsFolderId});
           if (existingRes.data is Map && existingRes.data['files'] is List) {
             for (final ef in existingRes.data['files']) {
               if (ef is Map && ef['name'] != null) {
@@ -1101,14 +1136,13 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _uploadFiles() async {
-    final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+    final result = await FilePicker.platform.pickFiles(allowMultiple: true, withData: true);
     if (result == null || result.files.isEmpty) return;
 
     try {
       final targetFolder = _folderId ?? (_view == 'vault' ? (_breadcrumbs.isNotEmpty ? _breadcrumbs.first['id'] : 'vault') : null);
       for (final f in result.files) {
-        if (f.path == null) continue;
-        await _uploadSingleFile(f.path!, f.name, targetFolder);
+        await _uploadSingleFile(f.path, f.name, targetFolder, bytes: f.bytes);
       }
       _showSnack('Uploaded to NOOR DRIVE!');
       await _loadDrive(silent: true);
@@ -1137,6 +1171,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.media,
         allowMultiple: true,
+        withData: true,
       );
       if (result == null || result.files.isEmpty) return;
 
@@ -1169,50 +1204,36 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
 
       if (proceed != true) return;
 
-      // Find or create "Camera Uploads" folder in root
-      String? cameraUploadsFolderId;
-      try {
-        final rootRes = await apiClient.dio.get('/drive/items');
-        if (rootRes.data is Map && rootRes.data['folders'] is List) {
-          final List rootFolders = rootRes.data['folders'];
-          for (final f in rootFolders) {
-            if (f is Map && (f['name'] as String).toLowerCase() == 'camera uploads') {
-              cameraUploadsFolderId = f['id'] as String;
-              break;
-            }
-          }
-        }
-      } catch (_) {}
-
+      // Find or create "Camera Uploads" folder via canonical singleton
+      final cameraUploadsFolderId = await _getOrCreateCameraUploadsFolderId();
       if (cameraUploadsFolderId == null) {
-        try {
-          final newFolderRes = await apiClient.dio.post('/drive/folders', data: {
-            'name': 'Camera Uploads',
-          });
-          if (newFolderRes.data is Map && newFolderRes.data['id'] != null) {
-            cameraUploadsFolderId = newFolderRes.data['id'] as String;
-          }
-        } catch (_) {}
+        _showSnack('Could not initialize "Camera Uploads" folder', isError: true);
+        return;
       }
 
       int successCount = 0;
+      String? lastError;
       for (int i = 0; i < result.files.length; i++) {
         final f = result.files[i];
-        if (f.path == null) continue;
         if (!mounted) break;
         setState(() {
           _uploadingName = '[${i + 1}/$selectedCount] ${f.name}';
         });
         try {
-          await _uploadSingleFile(f.path!, f.name, cameraUploadsFolderId);
+          await _uploadSingleFile(f.path, f.name, cameraUploadsFolderId, bytes: f.bytes);
           successCount++;
-        } catch (_) {
-          // Continue with remaining files even if one fails
+        } catch (e) {
+          lastError = e.toString();
+          debugPrint('Upload error for ${f.name}: $e');
         }
       }
 
       if (mounted) {
-        _showSnack('🎉 $successCount of $selectedCount media files backed up to "Camera Uploads"!');
+        if (successCount > 0) {
+          _showSnack('🎉 $successCount of $selectedCount media files backed up to "Camera Uploads"!');
+        } else if (lastError != null) {
+          _showSnack('Image backup failed: $lastError', isError: true);
+        }
         await _loadDrive(silent: true);
         await _loadUser();
       }
@@ -1378,7 +1399,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
       );
       if (customName == null || customName.isEmpty) return;
 
-      final picked = await FilePicker.platform.pickFiles(allowMultiple: true);
+      final picked = await FilePicker.platform.pickFiles(allowMultiple: true, withData: true);
       if (picked == null || picked.files.isEmpty) return;
 
       final effectiveParent = _folderId ?? (_view == 'vault' ? (_breadcrumbs.isNotEmpty ? _breadcrumbs.first['id'] : 'vault') : null);
@@ -1390,9 +1411,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
         });
         final rootFolderId = createdRoot.data['id'] as String;
         for (final pf in picked.files) {
-          if (pf.path != null) {
-            await _uploadSingleFile(pf.path!, pf.name, rootFolderId);
-          }
+          await _uploadSingleFile(pf.path, pf.name, rootFolderId, bytes: pf.bytes);
         }
         _showSnack('Folder "$customName" uploaded to NOOR DRIVE!');
         _driveCache.clear();
@@ -2514,7 +2533,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
 
   Future<void> _openShareDialog(String type, String id, String name) async {
     String permission = type == 'folder' ? 'EDITOR' : 'VIEWER';
-    int expiresHours = 0;
+    int expiresHours = 1440; // 2 Months default (60 days)
 
     final existingRes = await apiClient.dio.get('/shares', queryParameters: {
       'type': type,
@@ -2569,9 +2588,11 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                     value: expiresHours,
                     decoration: const InputDecoration(labelText: 'Expiration'),
                     items: const [
-                      DropdownMenuItem(value: 0, child: Text('Never expires')),
-                      DropdownMenuItem(value: 24, child: Text('24 Hours')),
+                      DropdownMenuItem(value: 1440, child: Text('2 Months (60 Days - Default)')),
+                      DropdownMenuItem(value: 720, child: Text('30 Days (1 Month)')),
                       DropdownMenuItem(value: 168, child: Text('7 Days')),
+                      DropdownMenuItem(value: 24, child: Text('24 Hours')),
+                      DropdownMenuItem(value: 0, child: Text('Never expires')),
                     ],
                     onChanged: (v) => setModalState(() => expiresHours = v!),
                   ),

@@ -91,7 +91,7 @@ export class SharesController {
       }
     } catch {}
     return {
-      version: 'v1.0.7',
+      version: 'v1.0.40',
       sizeBytes: 24734313,
       downloadUrl:
         'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.apk',
