@@ -160,7 +160,7 @@ export default function AudioPlayerBar({
   };
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-8 md:w-[480px] z-50 animate-in slide-in-from-bottom-5 duration-300">
+    <div className="fixed bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] md:bottom-4 left-4 right-4 md:left-auto md:right-8 md:w-[480px] z-40 animate-in slide-in-from-bottom-5 duration-300">
       <audio ref={audioRef} src={track.url} />
 
       {/* Playlist Queue Popover */}

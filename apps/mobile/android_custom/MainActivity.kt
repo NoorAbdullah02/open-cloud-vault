@@ -24,6 +24,14 @@ class MainActivity : FlutterFragmentActivity() {
                     result.success(ArrayList(sharedFiles))
                 }
                 "clearSharedFiles" -> {
+                    try {
+                        val cacheDir = File(cacheDir, "shared_incoming")
+                        if (cacheDir.exists()) {
+                            cacheDir.listFiles()?.forEach { it.delete() }
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                     sharedFiles.clear()
                     result.success(true)
                 }

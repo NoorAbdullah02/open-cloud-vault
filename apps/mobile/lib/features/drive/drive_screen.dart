@@ -1331,6 +1331,10 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
         try {
           await _uploadSingleFile(item.path, item.name, targetFolderId);
           success++;
+          try {
+            final f = File(item.path);
+            if (await f.exists()) await f.delete();
+          } catch (_) {}
         } catch (e) {
           debugPrint('Error uploading shared item ${item.name}: $e');
         }
@@ -2617,7 +2621,8 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
       final dir = await getTemporaryDirectory();
       final savePath = '${dir.path}/${file['name']}';
       await apiClient.dio.download('/drive/files/${file['id']}/download', savePath);
-      await OpenFilex.open(savePath);
+      final mime = (file['mimeType'] ?? '').toString();
+      await OpenFilex.open(savePath, type: mime.isNotEmpty ? mime : null);
     } catch (e) {
       _showSnack('Download failed: $e', isError: true);
     }
@@ -2691,7 +2696,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
         ),
       );
       _showSnack('Downloaded "${folder['name']}.zip"');
-      await OpenFilex.open(savePath);
+      await OpenFilex.open(savePath, type: 'application/zip');
     } catch (e) {
       _showSnack('Folder download failed: $e', isError: true);
     }
