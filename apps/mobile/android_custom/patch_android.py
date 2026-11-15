@@ -2,6 +2,7 @@
 import os
 import glob
 import shutil
+import xml.etree.ElementTree as ET
 
 def patch():
     manifest_path = "android/app/src/main/AndroidManifest.xml"
@@ -36,8 +37,10 @@ def patch():
     # Set app label
     content = content.replace('android:label="noor_drive_app"', 'android:label="NOOR DRIVE"')
 
-    # Set launchMode="singleTask"
-    if 'android:launchMode="singleTask"' not in content:
+    # Safely replace launchMode without creating duplicate attributes
+    if 'android:launchMode="singleTop"' in content:
+        content = content.replace('android:launchMode="singleTop"', 'android:launchMode="singleTask"')
+    elif 'android:launchMode' not in content:
         content = content.replace('<activity', '<activity android:launchMode="singleTask"')
 
     # Add Intent Filters for Receive Sharing (SEND & SEND_MULTIPLE)
@@ -61,19 +64,40 @@ def patch():
         if idx != -1:
             content = content[:idx + len(marker)] + share_filters + content[idx + len(marker):]
 
+    # Validate XML parsing
+    try:
+        ET.fromstring(content)
+        print("✅ AndroidManifest.xml passed XML structural validation!")
+    except Exception as e:
+        print(f"❌ XML validation failed: {e}")
+        raise e
+
     with open(manifest_path, "w", encoding="utf-8") as f:
         f.write(content)
     print("✅ Successfully patched AndroidManifest.xml with permissions and share intent filters!")
 
     # Copy custom MainActivity.kt
     custom_main = "android_custom/MainActivity.kt"
-    main_targets = glob.glob("android/app/src/**/MainActivity.kt", recursive=True)
-    if os.path.exists(custom_main) and main_targets:
-        target = main_targets[0]
-        shutil.copyfile(custom_main, target)
-        print(f"✅ Successfully copied {custom_main} to {target}!")
+    main_kt = glob.glob("android/app/src/**/MainActivity.kt", recursive=True)
+    main_java = glob.glob("android/app/src/**/MainActivity.java", recursive=True)
+    if os.path.exists(custom_main):
+        if main_kt:
+            shutil.copyfile(custom_main, main_kt[0])
+            print(f"✅ Successfully copied {custom_main} to {main_kt[0]}!")
+        elif main_java:
+            target_dir = os.path.dirname(main_java[0])
+            os.remove(main_java[0])
+            target_kt = os.path.join(target_dir, "MainActivity.kt")
+            shutil.copyfile(custom_main, target_kt)
+            print(f"✅ Replaced {main_java[0]} with {custom_main} at {target_kt}!")
+        else:
+            pkg_dir = "android/app/src/main/kotlin/com/noordrive/app"
+            os.makedirs(pkg_dir, exist_ok=True)
+            target = os.path.join(pkg_dir, "MainActivity.kt")
+            shutil.copyfile(custom_main, target)
+            print(f"✅ Placed {custom_main} into {target}!")
     else:
-        print("⚠️ Could not find custom MainActivity.kt or target MainActivity.kt")
+        print("⚠️ Could not find custom MainActivity.kt")
 
 if __name__ == "__main__":
     patch()

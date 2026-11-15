@@ -41,3 +41,4 @@ class SharingService {
     } catch (_) {}
   }
 }
+
