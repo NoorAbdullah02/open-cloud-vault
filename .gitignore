@@ -9,5 +9,6 @@ storage/chunks/*
 !storage/vault/.gitkeep
 !storage/chunks/.gitkeep
 *.log
+*.tsbuildinfo
 .DS_Store
 
