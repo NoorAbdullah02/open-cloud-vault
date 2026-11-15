@@ -2230,47 +2230,164 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
         );
         if (!mounted) return;
         final content = res.data?.toString() ?? '';
-        final lineCount = content.split('\n').length;
+        final textController = TextEditingController(text: content);
+        bool isEditing = false;
+        bool isSaving = false;
+
         showDialog(
           context: context,
-          builder: (_) => Dialog.fullscreen(
-            backgroundColor: const Color(0xFF0D1117),
-            child: Scaffold(
-              backgroundColor: const Color(0xFF0D1117),
-              appBar: AppBar(
-                backgroundColor: const Color(0xFF161B22),
-                foregroundColor: Colors.white,
-                title: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(file['name'], overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15)),
-                    Text('$lineCount lines • ${ext.toUpperCase()}', style: const TextStyle(fontSize: 11, color: Colors.white54, fontFamily: 'monospace')),
-                  ],
-                ),
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.copy),
-                    tooltip: 'Copy Code',
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: content));
-                      _showSnack('Copied to clipboard!');
-                    },
+          builder: (_) => StatefulBuilder(
+            builder: (dialogCtx, setDialogState) {
+              final currentText = textController.text;
+              final currentLines = currentText.split('\n').length;
+              final hasChanges = currentText != content;
+
+              return Dialog.fullscreen(
+                backgroundColor: const Color(0xFF0D1117),
+                child: Scaffold(
+                  backgroundColor: const Color(0xFF0D1117),
+                  appBar: AppBar(
+                    backgroundColor: const Color(0xFF161B22),
+                    foregroundColor: Colors.white,
+                    title: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                file['name'],
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            if (hasChanges) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: Colors.amber.withOpacity(0.4)),
+                                ),
+                                child: const Text(
+                                  'Unsaved',
+                                  style: TextStyle(fontSize: 10, color: Colors.amber, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        Text(
+                          '$currentLines lines • ${ext.toUpperCase()}${isEditing ? ' • Editing' : ''}',
+                          style: const TextStyle(fontSize: 11, color: Colors.white54, fontFamily: 'monospace'),
+                        ),
+                      ],
+                    ),
+                    actions: [
+                      if (isEditing) ...[
+                        if (isSaving)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            ),
+                          )
+                        else
+                          TextButton.icon(
+                            style: TextButton.styleFrom(foregroundColor: const Color(0xFF60A5FA)),
+                            icon: const Icon(Icons.save, size: 18),
+                            label: const Text('Save', style: TextStyle(fontWeight: FontWeight.bold)),
+                            onPressed: () async {
+                              try {
+                                setDialogState(() => isSaving = true);
+                                await apiClient.dio.put(
+                                  '/drive/files/${file['id']}/content',
+                                  data: {'content': textController.text},
+                                );
+                                setDialogState(() {
+                                  isSaving = false;
+                                  isEditing = false;
+                                });
+                                _showSnack('Saved changes to NOOR DRIVE! 💾');
+                                _loadDrive(silent: true);
+                              } catch (e) {
+                                setDialogState(() => isSaving = false);
+                                _showSnack('Failed to save file: $e', isError: true);
+                              }
+                            },
+                          ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          tooltip: 'Done Editing',
+                          onPressed: () {
+                            setDialogState(() => isEditing = false);
+                          },
+                        ),
+                      ] else ...[
+                        IconButton(
+                          icon: const Icon(Icons.edit_note, color: Color(0xFF60A5FA)),
+                          tooltip: 'Edit File',
+                          onPressed: () {
+                            setDialogState(() => isEditing = true);
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.copy),
+                          tooltip: 'Copy Code',
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: textController.text));
+                            _showSnack('Copied to clipboard!');
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.download),
+                          tooltip: 'Download File',
+                          onPressed: () => _downloadAndOpen(file),
+                        ),
+                      ],
+                    ],
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.download),
-                    tooltip: 'Download File',
-                    onPressed: () => _downloadAndOpen(file),
-                  ),
-                ],
-              ),
-              body: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: SelectableText(
-                  content,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 13, color: Color(0xFFE6EDF3), height: 1.5),
+                  body: isEditing
+                      ? Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: TextField(
+                            controller: textController,
+                            maxLines: null,
+                            expands: true,
+                            autofocus: true,
+                            keyboardType: TextInputType.multiline,
+                            onChanged: (_) => setDialogState(() {}),
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 13,
+                              color: Color(0xFFE6EDF3),
+                              height: 1.5,
+                            ),
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              hintText: 'Type your notes or code here...',
+                              hintStyle: TextStyle(color: Colors.white24),
+                            ),
+                          ),
+                        )
+                      : SingleChildScrollView(
+                          padding: const EdgeInsets.all(16),
+                          child: SelectableText(
+                            textController.text,
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 13,
+                              color: Color(0xFFE6EDF3),
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         );
         return;

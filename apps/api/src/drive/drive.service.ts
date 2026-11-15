@@ -761,6 +761,117 @@ export class DriveService {
     return this.serializeFile(updated);
   }
 
+  async updateTextContent(userId: string, fileId: string, content: string) {
+    const existingFile = await this.prisma.file.findUnique({
+      where: { id: fileId },
+      include: { storageObject: true },
+    });
+    if (!existingFile || existingFile.ownerId !== userId) {
+      throw new NotFoundException('Target file not found');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { quota: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const buffer = Buffer.from(content ?? '', 'utf8');
+    const checksumSha256 = crypto.createHash('sha256').update(buffer).digest('hex');
+    let backend = existingFile.storageObject?.backend || StorageBackend.LOCAL_DISK;
+
+    let storageObjectId: string;
+    const existingStorageObject = await this.prisma.storageObject.findFirst({
+      where: {
+        checksumSha256,
+        backend,
+      },
+    });
+
+    if (existingStorageObject) {
+      storageObjectId = existingStorageObject.id;
+    } else {
+      try {
+        const stored = await this.storage.storeFile(backend, {
+          buffer,
+          fileName: existingFile.name,
+          mimeType: existingFile.mimeType || 'text/plain',
+          sizeBytes: buffer.length,
+          checksumSha256,
+          targetChatId: user.telegramChatTarget || undefined,
+        });
+        storageObjectId = stored.storageObjectId;
+      } catch (storeErr: any) {
+        if (backend === StorageBackend.TELEGRAM_MTPROTO) {
+          this.logger.warn(
+            `Telegram upload failed for text update "${existingFile.name}" (${storeErr.message}). Falling back to LOCAL_DISK.`,
+          );
+          backend = StorageBackend.LOCAL_DISK;
+          const fallbackStored = await this.storage.storeFile(backend, {
+            buffer,
+            fileName: existingFile.name,
+            mimeType: existingFile.mimeType || 'text/plain',
+            sizeBytes: buffer.length,
+            checksumSha256,
+          });
+          storageObjectId = fallbackStored.storageObjectId;
+        } else {
+          throw storeErr;
+        }
+      }
+    }
+
+    // Save previous version in history
+    await this.prisma.fileVersion.create({
+      data: {
+        fileId: existingFile.id,
+        versionNumber: existingFile.version,
+        sizeBytes: existingFile.sizeBytes,
+        checksumSha256: existingFile.checksumSha256,
+        storageObjectId: existingFile.storageObjectId,
+      },
+    }).catch(() => {});
+
+    const nextVersion = existingFile.version + 1;
+    const updated = await this.prisma.file.update({
+      where: { id: fileId },
+      data: {
+        sizeBytes: BigInt(buffer.length),
+        checksumSha256,
+        storageObjectId,
+        version: nextVersion,
+        updatedAt: new Date(),
+      },
+      include: { storageObject: true },
+    });
+
+    // Update quota diff
+    const sizeDiff = BigInt(buffer.length) - existingFile.sizeBytes;
+    if (user.quota && sizeDiff !== BigInt(0)) {
+      await this.prisma.userQuota.update({
+        where: { userId },
+        data: { usedStorageBytes: { increment: sizeDiff } },
+      }).catch(() => {});
+    }
+
+    // Record activity
+    await this.prisma.activity.create({
+      data: {
+        userId,
+        fileId: existingFile.id,
+        action: 'UPDATE_CONTENT',
+        details: {
+          previousVersion: existingFile.version,
+          newVersion: nextVersion,
+          fileName: existingFile.name,
+          sizeBytes: buffer.length,
+        },
+      },
+    }).catch(() => {});
+
+    return this.serializeFile(updated);
+  }
+
   async moveItem(
     userId: string,
     type: 'file' | 'folder',

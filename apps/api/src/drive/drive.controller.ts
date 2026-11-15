@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Query,
@@ -145,6 +146,15 @@ export class DriveController {
     @Body('backend') backend?: StorageBackend,
   ) {
     return this.driveService.replaceFile(user.id, id, file, backend);
+  }
+
+  @Put('files/:id/content')
+  updateTextContent(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body('content') content: string,
+  ) {
+    return this.driveService.updateTextContent(user.id, id, content);
   }
 
   @Get('files/:id/download')

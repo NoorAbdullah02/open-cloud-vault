@@ -83,6 +83,7 @@ import CustomVideoPlayer from '@/components/CustomVideoPlayer';
 import AudioPlayerBar, { AudioTrack } from '@/components/AudioPlayerBar';
 import ZipViewer from '@/components/ZipViewer';
 import CodeViewer from '@/components/CodeViewer';
+import TextEditorViewer from '@/components/TextEditorViewer';
 import SpotlightPalette from '@/components/SpotlightPalette';
 
 type ViewMode = 'my-drive' | 'recent' | 'starred' | 'photos' | 'videos' | 'documents' | 'trash' | 'vault';
@@ -1682,6 +1683,37 @@ function DriveDashboardContent() {
       setIsReplacing(false);
       setTargetReplaceFile(null);
       if (replaceFileInputRef.current) replaceFileInputRef.current.value = '';
+    }
+  };
+
+  const handleSaveTextContent = async (fileId: string, newContent: string) => {
+    try {
+      showToast('Saving updated notes to NOOR DRIVE...');
+      const res = await apiFetch(`/drive/files/${fileId}/content`, {
+        method: 'PUT',
+        body: JSON.stringify({ content: newContent }),
+      });
+
+      // Clear caches
+      driveViewCache.clear();
+      textSnippetCache.delete(fileId);
+
+      // Update state in files
+      setFiles((prev) => prev.map((f) => (f.id === fileId ? { ...f, ...res } : f)));
+      setActiveDetailItem((prev) =>
+        prev && prev.item?.id === fileId ? { ...prev, item: { ...prev.item, ...res } } : prev,
+      );
+
+      // Update previewModal
+      setPreviewModal((prev) =>
+        prev && prev.file?.id === fileId ? { ...prev, textContent: newContent, file: { ...prev.file, ...res } } : prev,
+      );
+
+      showToast('Saved file to NOOR DRIVE! 💾', 'success');
+      loadDrive(true);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to save file', 'error');
+      throw err;
     }
   };
 
@@ -4681,10 +4713,14 @@ function DriveDashboardContent() {
                 onDownloadOriginal={() => handleDownload(previewModal.file)}
               />
             ) : previewModal.textContent !== undefined ? (
-              <CodeViewer
-                content={previewModal.textContent}
-                fileName={previewModal.file.name}
+              <TextEditorViewer
+                file={previewModal.file}
+                initialContent={previewModal.textContent}
+                onSave={async (newContent) => {
+                  await handleSaveTextContent(previewModal.file.id, newContent);
+                }}
                 onDownload={() => handleDownload(previewModal.file)}
+                onClose={() => setPreviewModal(null)}
               />
             ) : (
               <div className="text-white text-center space-y-3">
