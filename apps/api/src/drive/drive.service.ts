@@ -550,7 +550,11 @@ export class DriveService {
     });
   }
 
-  async getFileForDownload(userId: string, fileId: string) {
+  async getFileForDownload(
+    userId: string,
+    fileId: string,
+    range?: { start: number; end: number },
+  ) {
     const file = await this.prisma.file.findUnique({
       where: { id: fileId },
       include: { storageObject: true },
@@ -565,7 +569,7 @@ export class DriveService {
       data: { lastAccessedAt: new Date() },
     });
 
-    const stream = await this.storage.readFileStream(file.storageObjectId);
+    const stream = await this.storage.readFileStream(file.storageObjectId, range);
     return { file, stream };
   }
 

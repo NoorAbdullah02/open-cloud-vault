@@ -14,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart';
 import 'package:xml/xml.dart';
 import '../../core/api_client.dart';
 import '../../core/sharing_service.dart';
@@ -2237,7 +2238,28 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
       return;
     }
 
-    // 2. In-App PDF Preview
+    // 2. In-App Video & Audio Streaming Player
+    final isVideo = mime.startsWith('video/') ||
+        ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp', 'flv', 'wmv', 'ts'].contains(ext);
+    final isAudio = mime.startsWith('audio/') ||
+        ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'opus'].contains(ext);
+
+    if (isVideo || isAudio) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (_) => _MobileVideoPlayerDialog(
+          file: file,
+          isAudio: isAudio,
+          token: token,
+          authHeaders: authHeaders,
+          onDownloadAndOpen: () => _downloadAndOpen(file),
+        ),
+      );
+      return;
+    }
+
+    // 3. In-App PDF Preview
     if (mime.contains('pdf') || ext == 'pdf') {
       if (!mounted) return;
       showDialog(
@@ -4690,6 +4712,453 @@ class _MobileZoomableImageViewerState extends State<_MobileZoomableImageViewer>
           ),
         ),
       ],
+    );
+  }
+}
+
+class _MobileVideoPlayerDialog extends StatefulWidget {
+  final dynamic file;
+  final bool isAudio;
+  final String? token;
+  final Map<String, String>? authHeaders;
+  final VoidCallback onDownloadAndOpen;
+
+  const _MobileVideoPlayerDialog({
+    required this.file,
+    this.isAudio = false,
+    this.token,
+    this.authHeaders,
+    required this.onDownloadAndOpen,
+  });
+
+  @override
+  State<_MobileVideoPlayerDialog> createState() => _MobileVideoPlayerDialogState();
+}
+
+class _MobileVideoPlayerDialogState extends State<_MobileVideoPlayerDialog> {
+  late VideoPlayerController _controller;
+  bool _isInitialized = false;
+  bool _hasError = false;
+  String _errorMessage = '';
+  bool _showControls = true;
+  Timer? _controlsTimer;
+  bool _isDraggingSlider = false;
+  double _dragValue = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _initPlayer();
+  }
+
+  Future<void> _initPlayer() async {
+    final fileId = widget.file['id']?.toString() ?? '';
+    final tokenParam = widget.token != null ? '&token=${Uri.encodeComponent(widget.token!)}' : '';
+    final streamUrl = '${ApiClient.baseUrl}/drive/files/$fileId/download?inline=true$tokenParam';
+
+    try {
+      _controller = VideoPlayerController.networkUrl(
+        Uri.parse(streamUrl),
+        httpHeaders: widget.authHeaders ?? const {},
+      );
+
+      _controller.addListener(_videoListener);
+      await _controller.initialize();
+      if (!mounted) return;
+      setState(() {
+        _isInitialized = true;
+      });
+      await _controller.play();
+      _startControlsTimer();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _hasError = true;
+        _errorMessage = e.toString();
+      });
+    }
+  }
+
+  void _videoListener() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _startControlsTimer() {
+    _controlsTimer?.cancel();
+    if (_controller.value.isPlaying) {
+      _controlsTimer = Timer(const Duration(seconds: 4), () {
+        if (mounted && _controller.value.isPlaying && !_isDraggingSlider) {
+          setState(() {
+            _showControls = false;
+          });
+        }
+      });
+    }
+  }
+
+  void _togglePlayPause() {
+    if (_controller.value.isPlaying) {
+      _controller.pause();
+      setState(() {
+        _showControls = true;
+      });
+      _controlsTimer?.cancel();
+    } else {
+      _controller.play();
+      _startControlsTimer();
+    }
+  }
+
+  void _seekBy(int seconds) {
+    final current = _controller.value.position;
+    final total = _controller.value.duration;
+    final newPos = (current + Duration(seconds: seconds));
+    final clamped = newPos < Duration.zero
+        ? Duration.zero
+        : (newPos > total ? total : newPos);
+    _controller.seekTo(clamped);
+    _startControlsTimer();
+  }
+
+  String _formatDuration(Duration d) {
+    final hours = d.inHours;
+    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    if (hours > 0) {
+      return '$hours:$minutes:$seconds';
+    }
+    return '$minutes:$seconds';
+  }
+
+  @override
+  void dispose() {
+    _controlsTimer?.cancel();
+    _controller.removeListener(_videoListener);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fileName = widget.file['name']?.toString() ?? 'Media';
+
+    return Dialog.fullscreen(
+      backgroundColor: Colors.black,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.black.withOpacity(0.85),
+          foregroundColor: Colors.white,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                fileName,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                widget.isAudio ? 'Audio Player' : 'Video Player',
+                style: const TextStyle(fontSize: 11, color: Colors.white54),
+              ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.open_in_new),
+              tooltip: 'Open in External App',
+              onPressed: () {
+                Navigator.of(context).pop();
+                widget.onDownloadAndOpen();
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.download),
+              tooltip: 'Download',
+              onPressed: widget.onDownloadAndOpen,
+            ),
+          ],
+        ),
+        body: _hasError
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline, color: Colors.amber, size: 56),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Direct streaming not supported for this codec',
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'This video can be opened directly with your phone\'s media player (VLC, MX Player, Gallery) or downloaded.',
+                        style: TextStyle(color: Colors.white60, fontSize: 13),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF6366F1),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        icon: const Icon(Icons.play_circle_fill),
+                        label: const Text('Open with External Player'),
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          widget.onDownloadAndOpen();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : !_isInitialized
+                ? const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(color: Color(0xFF6366F1)),
+                        SizedBox(height: 16),
+                        Text('Buffering media stream...', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                      ],
+                    ),
+                  )
+                : GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      setState(() {
+                        _showControls = !_showControls;
+                      });
+                      if (_showControls) _startControlsTimer();
+                    },
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Video Surface or Audio Album Art
+                        if (widget.isAudio)
+                          Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 140,
+                                  height: 140,
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [Color(0xFF6366F1), Color(0xFF38BDF8)],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    borderRadius: BorderRadius.circular(32),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFF6366F1).withOpacity(0.4),
+                                        blurRadius: 28,
+                                        offset: const Offset(0, 10),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(Icons.music_note, color: Colors.white, size: 70),
+                                ),
+                                const SizedBox(height: 24),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                                  child: Text(
+                                    fileName,
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          Center(
+                            child: AspectRatio(
+                              aspectRatio: _controller.value.aspectRatio > 0
+                                  ? _controller.value.aspectRatio
+                                  : 16 / 9,
+                              child: VideoPlayer(_controller),
+                            ),
+                          ),
+
+                        // Buffering indicator on video
+                        if (_controller.value.isBuffering)
+                          const Center(
+                            child: CircularProgressIndicator(color: Colors.white),
+                          ),
+
+                        // Center Controls (Play, Pause, Skip)
+                        if (_showControls)
+                          Container(
+                            color: Colors.black38,
+                            child: Center(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    iconSize: 44,
+                                    color: Colors.white,
+                                    icon: const Icon(Icons.replay_10),
+                                    tooltip: 'Back 10s',
+                                    onPressed: () => _seekBy(-10),
+                                  ),
+                                  const SizedBox(width: 24),
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF6366F1),
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFF6366F1).withOpacity(0.5),
+                                          blurRadius: 18,
+                                        ),
+                                      ],
+                                    ),
+                                    child: IconButton(
+                                      iconSize: 52,
+                                      color: Colors.white,
+                                      icon: Icon(
+                                        _controller.value.isPlaying
+                                            ? Icons.pause
+                                            : Icons.play_arrow,
+                                      ),
+                                      onPressed: _togglePlayPause,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 24),
+                                  IconButton(
+                                    iconSize: 44,
+                                    color: Colors.white,
+                                    icon: const Icon(Icons.forward_10),
+                                    tooltip: 'Forward 10s',
+                                    onPressed: () => _seekBy(10),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                        // Bottom Controls Bar (Slider + Duration + Volume)
+                        if (_showControls)
+                          Positioned(
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [Colors.transparent, Colors.black87, Colors.black],
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                ),
+                              ),
+                              child: SafeArea(
+                                top: false,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Progress Slider
+                                    SliderTheme(
+                                      data: SliderTheme.of(context).copyWith(
+                                        activeTrackColor: const Color(0xFF6366F1),
+                                        inactiveTrackColor: Colors.white24,
+                                        thumbColor: const Color(0xFF6366F1),
+                                        trackHeight: 3.5,
+                                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                                      ),
+                                      child: Slider(
+                                        value: _isDraggingSlider
+                                            ? _dragValue
+                                            : _controller.value.position.inMilliseconds
+                                                .toDouble()
+                                                .clamp(
+                                                  0.0,
+                                                  _controller.value.duration.inMilliseconds.toDouble() > 0
+                                                      ? _controller.value.duration.inMilliseconds.toDouble()
+                                                      : 1.0,
+                                                ),
+                                        min: 0.0,
+                                        max: _controller.value.duration.inMilliseconds.toDouble() > 0
+                                            ? _controller.value.duration.inMilliseconds.toDouble()
+                                            : 1.0,
+                                        onChangeStart: (val) {
+                                          _isDraggingSlider = true;
+                                          _dragValue = val;
+                                          _controlsTimer?.cancel();
+                                        },
+                                        onChanged: (val) {
+                                          setState(() {
+                                            _dragValue = val;
+                                          });
+                                        },
+                                        onChangeEnd: (val) {
+                                          _isDraggingSlider = false;
+                                          _controller.seekTo(Duration(milliseconds: val.toInt()));
+                                          _startControlsTimer();
+                                        },
+                                      ),
+                                    ),
+                                    // Time & Volume Row
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          '${_formatDuration(_controller.value.position)} / ${_formatDuration(_controller.value.duration)}',
+                                          style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: 'monospace'),
+                                        ),
+                                        Row(
+                                          children: [
+                                            IconButton(
+                                              icon: Icon(
+                                                _controller.value.volume > 0
+                                                    ? Icons.volume_up
+                                                    : Icons.volume_off,
+                                                color: Colors.white,
+                                                size: 20,
+                                              ),
+                                              tooltip: 'Toggle Mute',
+                                              onPressed: () {
+                                                if (_controller.value.volume > 0) {
+                                                  _controller.setVolume(0.0);
+                                                } else {
+                                                  _controller.setVolume(1.0);
+                                                }
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+      ),
     );
   }
 }

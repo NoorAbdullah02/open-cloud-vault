@@ -48,6 +48,12 @@ export class LocalStorageProvider implements IStorageProvider {
     if (!fs.existsSync(fullPath)) {
       throw new NotFoundException('File object not found in local storage');
     }
+    if (params.range) {
+      return fs.createReadStream(fullPath, {
+        start: params.range.start,
+        end: params.range.end,
+      });
+    }
     return fs.createReadStream(fullPath);
   }
 

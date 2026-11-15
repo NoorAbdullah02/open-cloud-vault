@@ -91,7 +91,7 @@ export class SharesController {
       }
     } catch {}
     return {
-      version: 'v1.0.48',
+      version: 'v1.0.49',
       sizeBytes: 30597499,
       downloadUrl:
         'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.apk',
@@ -152,22 +152,55 @@ export class SharesController {
     @Res() res: Response,
     @Req() req: Request,
   ) {
-    const { file, stream } = await this.sharesService.downloadSharedFile(token, fileId, {
+    const meta = {
       ipAddress: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip,
       userAgent: req.headers['user-agent'],
       referer: (req.headers['referer'] || req.headers['referrer']) as string,
-    });
+    };
+    const fileRecord = await this.sharesService.downloadSharedFile(token, fileId, meta);
+    const file = fileRecord.file;
+    const totalSize = Number(file.sizeBytes);
     const disposition = inline === 'true' ? 'inline' : 'attachment';
     const accurateMime = getAccurateMimeType(file.extension || file.name.split('.').pop() || '', file.mimeType);
-    res.setHeader('Content-Type', accurateMime);
-    res.setHeader('Content-Length', file.sizeBytes.toString());
-    res.setHeader('Accept-Ranges', 'bytes');
     const safeAscii = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+    res.setHeader('Content-Type', accurateMime);
+    res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader(
       'Content-Disposition',
       `${disposition}; filename="${safeAscii}"; filename*=UTF-8''${encodeURIComponent(file.name)}`,
     );
-    stream.pipe(res);
+
+    const rangeHeader = req.headers.range;
+    if (rangeHeader && rangeHeader.startsWith('bytes=')) {
+      const parts = rangeHeader.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+
+      if (isNaN(start) || start >= totalSize || (parts[1] && (isNaN(end) || end < start || end >= totalSize))) {
+        res.setHeader('Content-Range', `bytes */${totalSize}`);
+        res.status(416).end();
+        return;
+      }
+
+      const chunkSize = end - start + 1;
+      res.status(206);
+      res.setHeader('Content-Range', `bytes ${start}-${end}/${totalSize}`);
+      res.setHeader('Content-Length', chunkSize.toString());
+      if (inline === 'true') {
+        res.setHeader('Cache-Control', 'private, max-age=3600');
+      }
+
+      const rangeStream = await this.sharesService.downloadSharedFile(token, fileId, meta, { start, end });
+      rangeStream.stream.pipe(res);
+      return;
+    }
+
+    res.setHeader('Content-Length', totalSize.toString());
+    if (inline === 'true') {
+      res.setHeader('Cache-Control', 'private, max-age=3600');
+    }
+    fileRecord.stream.pipe(res);
   }
 
   @Post('public/:token/upload')

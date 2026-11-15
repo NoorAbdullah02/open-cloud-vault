@@ -231,6 +231,11 @@ export class TelegramMtprotoProvider implements IStorageProvider {
     }
 
     const buffer = (await client.downloadMedia(message, {})) as Buffer;
+    if (params.range) {
+      const start = Math.max(0, params.range.start);
+      const end = Math.min(buffer.length - 1, params.range.end);
+      return Readable.from(buffer.subarray(start, end + 1));
+    }
     return Readable.from(buffer);
   }
 

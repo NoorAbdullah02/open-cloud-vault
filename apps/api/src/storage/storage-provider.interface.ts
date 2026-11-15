@@ -21,6 +21,7 @@ export interface GetObjectParams {
   objectKey: string;
   telegramMessageId?: number | null;
   telegramChatId?: string | null;
+  range?: { start: number; end: number };
 }
 
 export interface IStorageProvider {

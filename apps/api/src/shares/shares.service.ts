@@ -259,6 +259,7 @@ export class SharesService {
     token: string,
     fileId: string,
     meta?: { ipAddress?: string; userAgent?: string; referer?: string },
+    range?: { start: number; end: number },
   ) {
     const share = await this.validateShareToken(token);
 
@@ -283,18 +284,20 @@ export class SharesService {
       throw new ForbiddenException('Access denied');
     }
 
-    // Send email alert to admin that this shared file was downloaded
-    this.mail.sendShareAccessAlert({
-      itemType: 'file',
-      itemName: file.name,
-      itemSize: `${(Number(file.sizeBytes) / (1024 * 1024)).toFixed(2)} MB`,
-      ipAddress: meta?.ipAddress,
-      userAgent: meta?.userAgent,
-      referer: meta?.referer,
-      action: 'DOWNLOAD',
-    });
+    // Send email alert to admin that this shared file was downloaded (only for first request, not range chunks)
+    if (!range || range.start === 0) {
+      this.mail.sendShareAccessAlert({
+        itemType: 'file',
+        itemName: file.name,
+        itemSize: `${(Number(file.sizeBytes) / (1024 * 1024)).toFixed(2)} MB`,
+        ipAddress: meta?.ipAddress,
+        userAgent: meta?.userAgent,
+        referer: meta?.referer,
+        action: 'DOWNLOAD',
+      });
+    }
 
-    const stream = await this.storage.readFileStream(file.storageObjectId);
+    const stream = await this.storage.readFileStream(file.storageObjectId, range);
     return { file, stream };
   }
 

@@ -64,7 +64,10 @@ export class StorageService {
     return { storageObjectId: storageObject.id, result };
   }
 
-  async readFileStream(storageObjectId: string): Promise<NodeJS.ReadableStream> {
+  async readFileStream(
+    storageObjectId: string,
+    range?: { start: number; end: number },
+  ): Promise<NodeJS.ReadableStream> {
     const obj = await this.prisma.storageObject.findUnique({
       where: { id: storageObjectId },
     });
@@ -76,6 +79,7 @@ export class StorageService {
       objectKey: obj.objectKey,
       telegramMessageId: obj.telegramMessageId,
       telegramChatId: obj.telegramChatId,
+      range,
     };
     return provider.getObjectStream(params);
   }
