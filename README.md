@@ -98,13 +98,29 @@ All uploaded files stream directly through high-speed memory buffers to your pri
 * Files kept in Trash longer than 30 days are automatically purged from the database and Telegram cloud.
 * Dedicated **Empty Trash** and **Purge Expired Now** buttons for immediate storage reclamation.
 
+### 10. 📲 Android System Share Sheet Integration (Direct Gallery & File Uploads)
+* **Direct OS Share Target:** Share photos, 4K videos, documents, or APKs from **Gallery**, **Google Photos**, **Files Explorer**, or **WhatsApp** directly to NOOR DRIVE.
+* **Instant Ingestion Dialog:** Automatically captures incoming files via native Android `ACTION_SEND` and `ACTION_SEND_MULTIPLE` intent filters, presenting a confirmation bottom sheet with batch progress indicators.
+* **Camera Uploads Target:** Incoming shared files upload directly to your canonical `Camera Uploads` cloud folder with real-time progress feedback.
+
+### 11. 📱 Mobile-First Responsive Web UI & Touch Design
+* **Dedicated Mobile Bottom Navigation Bar:** High-performance bottom dock for instant navigation across *Files*, *Camera Uploads*, *Photos*, *Vault*, and *More*.
+* **Mobile Bottom Sheet Context Menus:** File options (preview, download, share, versions, rename, trash) appear as native-style bottom sheets optimized for one-handed thumb interaction.
+* **Safe-Area Inset Support:** CSS variables respect notch, dynamic island, and gesture bars across iOS Safari and Android Chrome (`env(safe-area-inset-bottom)`).
+* **Responsive Search & Dynamic Viewport Units:** Fast full-width search input and `100dvh` previews preventing mobile keyboard layout shifts.
+
+### 12. ⚡ High-Capacity Video Upload Engine & Zero-OOM Streaming
+* **Zero Out-Of-Memory (OOM) Protection:** Large video files stream directly from disk cache via `MultipartFile.fromFile` without buffering raw bytes into Dalvik RAM.
+* **Large Heap Android Support:** Configured with `android:largeHeap="true"` and `android:requestLegacyExternalStorage="true"` for multi-gigabyte video uploads.
+* **Throttled Looper UI:** Progress callbacks throttled to 250ms intervals to eliminate frame drops and ensure smooth 60fps responsiveness during intense uploads.
+
 ---
 
 ## 📱 Mobile App (Android & iOS)
 
 ### Android Installation
 1. Go to [Latest Release](https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest).
-2. Download **`noor-drive.apk`** (v1.0.41+).
+2. Download **`noor-drive.apk`** (v1.0.44+).
 3. Open the APK on your Android device to install.
 4. Future updates are detected automatically inside the app with a 1-tap in-app updater!
 
