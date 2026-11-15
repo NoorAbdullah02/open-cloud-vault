@@ -348,7 +348,7 @@ export default function PublicSharePage() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center flex-wrap gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => handlePrintShareFile(data.file)}

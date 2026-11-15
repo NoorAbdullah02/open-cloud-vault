@@ -2925,6 +2925,38 @@ function DriveDashboardContent() {
                 <ArrowUpDown className="w-3.5 h-3.5 text-indigo-500" />
                 <span className="capitalize">{sortBy}</span>
               </button>
+              {sortMenuOpen && (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute right-0 mt-1.5 w-44 py-1.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl z-50 text-xs text-slate-700 dark:text-slate-200 animate-in fade-in zoom-in-95"
+                >
+                  <p className="px-3 py-1 text-[10px] font-bold uppercase text-slate-400">Sort by</p>
+                  {[
+                    { id: 'date', label: 'Upload date' },
+                    { id: 'name', label: 'File name' },
+                    { id: 'size', label: 'File size' },
+                  ].map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => {
+                        if (sortBy === s.id) {
+                          setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+                        } else {
+                          setSortBy(s.id as any);
+                          setSortOrder('desc');
+                        }
+                        setSortMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 transition ${
+                        sortBy === s.id ? 'font-bold text-indigo-600 dark:text-indigo-400' : ''
+                      }`}
+                    >
+                      <span>{s.label}</span>
+                      {sortBy === s.id && <span>{sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -4419,7 +4451,7 @@ function DriveDashboardContent() {
       {/* Storage & Telegram Settings Modal */}
       {storageModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="animate-modal-pop w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-5">
+          <div className="animate-modal-pop w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-5 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold flex items-center gap-2">
                 <Database className="w-5 h-5 text-sky-500" /> Noor Cloud Storage
@@ -4530,7 +4562,7 @@ function DriveDashboardContent() {
       {/* Keyboard Shortcuts Modal */}
       {shortcutsModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="animate-modal-pop w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+          <div className="animate-modal-pop w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 flex items-center justify-center">
@@ -4607,7 +4639,7 @@ function DriveDashboardContent() {
 
         return (
           <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="animate-modal-pop w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-5">
+            <div className="animate-modal-pop w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-5 max-h-[85vh] overflow-y-auto">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
@@ -5077,7 +5109,7 @@ function DriveDashboardContent() {
       <label
         title="Upload File"
         style={{ backgroundColor: accentColor }}
-        className="md:hidden fixed bottom-6 right-6 z-30 w-14 h-14 rounded-2xl hover:opacity-90 text-white shadow-xl flex items-center justify-center active:scale-95 transition cursor-pointer select-none"
+        className={`md:hidden fixed ${activeAudioTrack ? 'bottom-32' : 'bottom-6'} right-6 z-30 w-14 h-14 rounded-2xl hover:opacity-90 text-white shadow-xl flex items-center justify-center active:scale-95 transition-all cursor-pointer select-none`}
       >
         <input
           type="file"
@@ -5098,7 +5130,7 @@ function DriveDashboardContent() {
       {/* Download App Modal */}
       {appDownloadModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/35 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="animate-modal-pop w-full max-w-lg bg-white/95 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[26px] p-6 shadow-[0_25px_70px_-15px_rgba(15,23,42,0.22)] space-y-5">
+          <div className="animate-modal-pop w-full max-w-lg bg-white/95 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[26px] p-6 shadow-[0_25px_70px_-15px_rgba(15,23,42,0.22)] space-y-5 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-zinc-900 text-white flex items-center justify-center shadow-sm">
@@ -5259,11 +5291,17 @@ function DriveDashboardContent() {
 
       {/* Google Drive Style Right-Click Context Menu */}
       {contextMenu && (
-        <div
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-          onClick={(e) => e.stopPropagation()}
-          className="fixed z-50 w-56 py-1.5 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800 shadow-2xl shadow-slate-900/20 text-slate-800 dark:text-slate-100 text-xs font-medium animate-in fade-in zoom-in-95 select-none"
-        >
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setContextMenu(null)}
+            onTouchStart={() => setContextMenu(null)}
+          />
+          <div
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+            className="fixed z-50 w-56 py-1.5 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800 shadow-2xl shadow-slate-900/20 text-slate-800 dark:text-slate-100 text-xs font-medium animate-in fade-in zoom-in-95 select-none"
+          >
           {contextMenu.target.type === 'blank' && (
             <div className="space-y-0.5 px-1.5">
               <button
@@ -5583,6 +5621,7 @@ function DriveDashboardContent() {
             );
           })()}
         </div>
+        </>
       )}
 
       {/* Storage Cleaner & Duplicate Finder Modal */}
