@@ -27,6 +27,7 @@ import {
   Eye,
   Edit3,
   RotateCcw,
+  Command,
   X,
   Check,
   Loader2,
@@ -82,6 +83,7 @@ import CustomVideoPlayer from '@/components/CustomVideoPlayer';
 import AudioPlayerBar, { AudioTrack } from '@/components/AudioPlayerBar';
 import ZipViewer from '@/components/ZipViewer';
 import CodeViewer from '@/components/CodeViewer';
+import SpotlightPalette from '@/components/SpotlightPalette';
 
 type ViewMode = 'my-drive' | 'recent' | 'starred' | 'photos' | 'videos' | 'documents' | 'trash' | 'vault';
 
@@ -909,6 +911,38 @@ function DriveDashboardContent() {
   // Keyboard Shortcuts Modal
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
 
+  // Spotlight Command Palette
+  const [spotlightOpen, setSpotlightOpen] = useState(false);
+
+  // Audio Continuous Playlist Queue
+  const [audioPlaylist, setAudioPlaylist] = useState<AudioTrack[]>([]);
+  const [audioCurrentIndex, setAudioCurrentIndex] = useState<number>(0);
+
+  // Color Tags for Files & Folders
+  const [colorTags, setColorTags] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    try {
+      const savedTags = localStorage.getItem('noor_color_tags');
+      if (savedTags) setColorTags(JSON.parse(savedTags));
+    } catch {}
+  }, []);
+
+  const setColorTag = (itemId: string, color: string | null) => {
+    setColorTags((prev) => {
+      const next = { ...prev };
+      if (!color) {
+        delete next[itemId];
+      } else {
+        next[itemId] = color;
+      }
+      try {
+        localStorage.setItem('noor_color_tags', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
   // Smart Folder & Batch Upload Confirmation Modal
   const [uploadConfirmBatch, setUploadConfirmBatch] = useState<{
     files: File[];
@@ -1181,6 +1215,7 @@ function DriveDashboardContent() {
         setSortMenuOpen(false);
         setInfoPanelOpen(false);
         setShortcutsModalOpen(false);
+        setSpotlightOpen(false);
         setUploadConfirmBatch(null);
         setPreviewModal(null);
         setShareModal(null);
@@ -1189,10 +1224,17 @@ function DriveDashboardContent() {
         setConfirmModal(null);
         setStorageModalOpen(false);
         setSecurityModalOpen(false);
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setSpotlightOpen((prev) => !prev);
       } else if (!isInput && e.key === '?') {
         setShortcutsModalOpen(true);
       } else if (!isInput && (e.key === 'i' || e.key === 'I')) {
         setInfoPanelOpen((prev) => !prev);
+      } else if (!isInput && e.key === '/') {
+        e.preventDefault();
+        const searchInput = document.querySelector('input[placeholder*="Search"]') as HTMLInputElement;
+        searchInput?.focus();
       } else if (!isInput && (e.metaKey || e.ctrlKey) && (e.key === 'a' || e.key === 'A')) {
         e.preventDefault();
         toggleSelectAllRef.current?.();
@@ -1641,6 +1683,33 @@ function DriveDashboardContent() {
       setTargetReplaceFile(null);
       if (replaceFileInputRef.current) replaceFileInputRef.current.value = '';
     }
+  };
+
+  const startAudioPlayback = (file: any) => {
+    const { accessToken } = getStoredTokens();
+    const tokenParam = accessToken ? `&token=${encodeURIComponent(accessToken)}` : '';
+    const allAudioFiles = sortedFiles.filter((f) => {
+      const fm = (f.mimeType || '').toLowerCase();
+      const fe = (f.extension || f.name.split('.').pop() || '').toLowerCase();
+      return (
+        fm.startsWith('audio/') ||
+        ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus', 'wma'].includes(fe)
+      );
+    });
+
+    const queueFiles = allAudioFiles.length > 0 ? allAudioFiles : [file];
+    const tracks: AudioTrack[] = queueFiles.map((f) => ({
+      id: f.id,
+      title: f.name,
+      url: `${getApiUrl()}/drive/files/${f.id}/download?inline=true${tokenParam}`,
+    }));
+
+    const foundIdx = tracks.findIndex((t) => t.id === file.id);
+    const selectedIdx = foundIdx !== -1 ? foundIdx : 0;
+
+    setAudioPlaylist(tracks);
+    setAudioCurrentIndex(selectedIdx);
+    setActiveAudioTrack(tracks[selectedIdx]);
   };
 
   const handlePreview = async (file: any, customImageFiles?: any[]) => {
@@ -2773,6 +2842,18 @@ function DriveDashboardContent() {
                 )}
               </div>
 
+              {/* Spotlight Command Palette (⌘K / Ctrl+K) */}
+              <button
+                type="button"
+                onClick={() => setSpotlightOpen(true)}
+                title="Spotlight Search & Quick Actions (⌘K)"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 transition shadow-xs"
+              >
+                <Command className="w-3.5 h-3.5 text-indigo-500" />
+                <span className="hidden lg:inline">Spotlight</span>
+                <kbd className="hidden sm:inline px-1 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-700 font-mono text-slate-500 dark:text-slate-400">⌘K</kbd>
+              </button>
+
               {/* Info Inspector Toggle */}
               <button
                 onClick={() => setInfoPanelOpen((prev) => !prev)}
@@ -2786,13 +2867,14 @@ function DriveDashboardContent() {
                 <Info className="w-4 h-4" />
               </button>
 
-              {/* Keyboard Shortcuts (?) */}
+              {/* Keyboard Shortcuts Cheat Sheet (?) */}
               <button
                 onClick={() => setShortcutsModalOpen(true)}
-                className="hidden xl:flex p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition shadow-xs"
-                title="Keyboard Shortcuts (?)"
+                className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 hover:text-indigo-600 transition shadow-xs"
+                title="Keyboard Shortcuts Cheat Sheet (?)"
               >
                 <Keyboard className="w-4 h-4" />
+                <span className="hidden xl:inline text-xs font-semibold">Shortcuts</span>
               </button>
 
               <button
@@ -3476,6 +3558,13 @@ function DriveDashboardContent() {
                                   title={folder.name}
                                 >
                                   <span>{folder.name}</span>
+                                  {colorTags[folder.id] && (
+                                    <span
+                                      className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs ring-1 ring-white dark:ring-slate-900"
+                                      style={{ backgroundColor: colorTags[folder.id] }}
+                                      title="Color tagged"
+                                    />
+                                  )}
                                   {isOpening && (
                                     <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 animate-pulse">
                                       <Loader2 className="w-3 h-3 animate-spin" /> Opening...
@@ -3612,12 +3701,21 @@ function DriveDashboardContent() {
                                 )}
                               </div>
                               <div className="min-w-0 flex-1">
-                                <span
-                                  className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 line-clamp-2 break-words break-all leading-snug block"
-                                  title={folder.name}
-                                >
-                                  {folder.name}
-                                </span>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span
+                                    className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 line-clamp-2 break-words break-all leading-snug block flex-1"
+                                    title={folder.name}
+                                  >
+                                    {folder.name}
+                                  </span>
+                                  {colorTags[folder.id] && (
+                                    <span
+                                      className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs ring-1 ring-white dark:ring-slate-900"
+                                      style={{ backgroundColor: colorTags[folder.id] }}
+                                      title="Color tagged"
+                                    />
+                                  )}
+                                </div>
                                 {isOpening && (
                                   <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 animate-pulse block mt-0.5">
                                     Opening...
@@ -3793,12 +3891,21 @@ function DriveDashboardContent() {
                               className="p-3.5 flex-1 flex flex-col justify-between cursor-pointer min-w-0"
                             >
                               <div className="mb-3 min-w-0">
-                                <p
-                                  className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate block w-full"
-                                  title={file.name}
-                                >
-                                  {file.name}
-                                </p>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <p
+                                    className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate block flex-1"
+                                    title={file.name}
+                                  >
+                                    {file.name}
+                                  </p>
+                                  {colorTags[file.id] && (
+                                    <span
+                                      className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs ring-1 ring-white dark:ring-slate-900"
+                                      style={{ backgroundColor: colorTags[file.id] }}
+                                      title="Color tagged"
+                                    />
+                                  )}
+                                </div>
                                 <p className="text-[11px] text-slate-400 mt-0.5">
                                   {formatBytes(file.sizeBytes)} • {visual.badge}
                                 </p>
@@ -3963,7 +4070,16 @@ function DriveDashboardContent() {
                                   className="py-3 px-4 flex items-center gap-3 font-medium cursor-pointer hover:text-indigo-600"
                                 >
                                   <div className={`p-2 rounded-xl ${visual.bg}`}>{visual.icon}</div>
-                                  <span className="truncate max-w-xs">{file.name}</span>
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="truncate max-w-xs">{file.name}</span>
+                                    {colorTags[file.id] && (
+                                      <span
+                                        className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs ring-1 ring-white dark:ring-slate-900"
+                                        style={{ backgroundColor: colorTags[file.id] }}
+                                        title="Color tagged"
+                                      />
+                                    )}
+                                  </div>
                                 </td>
                                 <td className="py-3 px-4 text-slate-500">{formatBytes(file.sizeBytes)}</td>
                                 <td className="py-3 px-4 text-slate-500 text-xs whitespace-nowrap">
@@ -4516,13 +4632,13 @@ function DriveDashboardContent() {
                 <button
                   type="button"
                   onClick={() => {
-                    setActiveAudioTrack({ url: previewModal.url!, title: previewModal.file.name });
+                    startAudioPlayback(previewModal.file);
                     setPreviewModal(null);
                   }}
-                  className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold flex items-center gap-2 transition"
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 hover:opacity-90 text-xs font-semibold flex items-center gap-2 transition shadow-md"
                 >
-                  <Music2 className="w-4 h-4 text-sky-400" />
-                  <span>Play in Background Mini-Player</span>
+                  <Music2 className="w-4 h-4 text-white" />
+                  <span>Play in Background Playlist (Auto-Play Next)</span>
                 </button>
               </div>
             ) : previewModal.file.mimeType.includes('pdf') ||
@@ -4697,53 +4813,141 @@ function DriveDashboardContent() {
         </div>
       )}
 
-      {/* Keyboard Shortcuts Modal */}
+      {/* Keyboard Shortcuts Cheat Sheet Modal */}
       {shortcutsModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="animate-modal-pop w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="animate-modal-pop w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-5 max-h-[88vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shadow-xs">
                   <Keyboard className="w-5 h-5" />
                 </div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">Keyboard Shortcuts</h3>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>Keyboard Shortcuts & Quick Actions</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400">Cheat Sheet</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Master NOOR DRIVE like a pro on Desktop & Web</p>
+                </div>
               </div>
               <button
                 onClick={() => setShortcutsModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs text-slate-700 dark:text-slate-300">
-              <div className="py-2.5 flex items-center justify-between">
-                <span>Show keyboard shortcuts</span>
-                <kbd className="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[11px] font-bold">?</kbd>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              {/* Global & Spotlight */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-2.5">
+                <div className="font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 uppercase text-[11px] tracking-wider">
+                  <Command className="w-3.5 h-3.5" /> Spotlight & Search
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Spotlight Command Palette</span>
+                  <kbd className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-xs border border-slate-200 dark:border-slate-600 font-mono font-bold text-[11px]">⌘K / Ctrl+K</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Focus Quick Search Bar</span>
+                  <kbd className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-xs border border-slate-200 dark:border-slate-600 font-mono font-bold text-[11px]">/</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Toggle Info Inspector</span>
+                  <kbd className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-xs border border-slate-200 dark:border-slate-600 font-mono font-bold text-[11px]">I</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Select All Items</span>
+                  <kbd className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-xs border border-slate-200 dark:border-slate-600 font-mono font-bold text-[11px]">⌘A / Ctrl+A</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Close Viewer / Modal</span>
+                  <kbd className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-xs border border-slate-200 dark:border-slate-600 font-mono font-bold text-[11px]">Esc</kbd>
+                </div>
               </div>
-              <div className="py-2.5 flex items-center justify-between">
-                <span>Toggle Info / Details inspector</span>
-                <kbd className="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[11px] font-bold">I</kbd>
+
+              {/* Video Player */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-2.5">
+                <div className="font-bold text-sky-600 dark:text-sky-400 flex items-center gap-1.5 uppercase text-[11px] tracking-wider">
+                  <Video className="w-3.5 h-3.5" /> Cinema Video Player
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Play / Pause</span>
+                  <kbd className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-xs border border-slate-200 dark:border-slate-600 font-mono font-bold text-[11px]">Space / K</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Seek ±5 Seconds</span>
+                  <kbd className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-xs border border-slate-200 dark:border-slate-600 font-mono font-bold text-[11px]">← / →</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Seek ±10 Seconds</span>
+                  <kbd className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-xs border border-slate-200 dark:border-slate-600 font-mono font-bold text-[11px]">J / L</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Toggle Fullscreen</span>
+                  <kbd className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-xs border border-slate-200 dark:border-slate-600 font-mono font-bold text-[11px]">F</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Mute / Unmute</span>
+                  <kbd className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-xs border border-slate-200 dark:border-slate-600 font-mono font-bold text-[11px]">M</kbd>
+                </div>
               </div>
-              <div className="py-2.5 flex items-center justify-between">
-                <span>Close modal / context menu</span>
-                <kbd className="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[11px] font-bold">Esc</kbd>
+
+              {/* Photo & Image Viewer */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-2.5">
+                <div className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 uppercase text-[11px] tracking-wider">
+                  <ImageIcon className="w-3.5 h-3.5" /> Photo & Gallery
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Next / Previous Image</span>
+                  <kbd className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-xs border border-slate-200 dark:border-slate-600 font-mono font-bold text-[11px]">← / →</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Rotate 90° Clockwise</span>
+                  <kbd className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-xs border border-slate-200 dark:border-slate-600 font-mono font-bold text-[11px]">R</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Flip Horizontally</span>
+                  <kbd className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-xs border border-slate-200 dark:border-slate-600 font-mono font-bold text-[11px]">H</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Zoom In / Out</span>
+                  <kbd className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-xs border border-slate-200 dark:border-slate-600 font-mono font-bold text-[11px]">+ / - / Scroll</kbd>
+                </div>
               </div>
-              <div className="py-2.5 flex items-center justify-between">
-                <span>Search files</span>
-                <kbd className="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[11px] font-bold">/</kbd>
+
+              {/* Audio & Documents */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-2.5">
+                <div className="font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5 uppercase text-[11px] tracking-wider">
+                  <Music2 className="w-3.5 h-3.5" /> Audio & Documents
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">PDF Inverted Night Mode</span>
+                  <span className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-xs border border-slate-200 dark:border-slate-600 text-[11px] font-semibold">Invert Button in PDF</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Audio Auto-Play Next</span>
+                  <span className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-xs border border-slate-200 dark:border-slate-600 text-[11px] font-semibold">Continuous Queue</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Color Tag File / Folder</span>
+                  <span className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-xs border border-slate-200 dark:border-slate-600 text-[11px] font-semibold">Right Click → Tag</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Auto-Lock Vault</span>
+                  <span className="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-xs border border-slate-200 dark:border-slate-600 text-[11px] font-semibold">10m idle / Switch tab</span>
+                </div>
               </div>
-              <div className="py-2.5 flex items-center justify-between">
-                <span>Right click on file / folder / space</span>
-                <span className="text-[11px] text-slate-400 font-medium">Context menu</span>
-              </div>
-              <div className="py-2.5 flex items-center justify-between">
-                <span>Double click file</span>
-                <span className="text-[11px] text-slate-400 font-medium">Preview file</span>
-              </div>
-              <div className="py-2.5 flex items-center justify-between">
-                <span>Double click folder</span>
-                <span className="text-[11px] text-slate-400 font-medium">Open folder</span>
-              </div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 text-indigo-900 dark:text-indigo-200 text-xs flex items-center justify-between">
+              <span>💡 Press <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-slate-800 font-mono font-bold shadow-xs">?</kbd> anywhere in NOOR DRIVE to reopen this Cheat Sheet.</span>
+              <button
+                onClick={() => setShortcutsModalOpen(false)}
+                className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition"
+              >
+                Got it!
+              </button>
             </div>
           </div>
         </div>
@@ -5596,6 +5800,46 @@ function DriveDashboardContent() {
                   <span>Replace File (Keep Link)</span>
                 </button>
                 <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+                <div className="px-3 py-1 text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                  Tag Color
+                </div>
+                <div className="px-2 py-1 flex items-center justify-between">
+                  {[
+                    { color: '#ef4444', label: 'Red' },
+                    { color: '#f59e0b', label: 'Amber' },
+                    { color: '#10b981', label: 'Green' },
+                    { color: '#3b82f6', label: 'Blue' },
+                    { color: '#8b5cf6', label: 'Purple' },
+                  ].map((t) => (
+                    <button
+                      key={t.color}
+                      type="button"
+                      title={t.label}
+                      onClick={() => {
+                        setColorTag(file.id, colorTags[file.id] === t.color ? null : t.color);
+                        setContextMenu(null);
+                      }}
+                      className={`w-5 h-5 rounded-full transition-transform hover:scale-125 flex items-center justify-center ${
+                        colorTags[file.id] === t.color ? 'ring-2 ring-offset-2 ring-indigo-500 scale-110' : ''
+                      }`}
+                      style={{ backgroundColor: t.color }}
+                    >
+                      {colorTags[file.id] === t.color && <Check className="w-3 h-3 text-white stroke-[3]" />}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    title="Clear Tag"
+                    onClick={() => {
+                      setColorTag(file.id, null);
+                      setContextMenu(null);
+                    }}
+                    className="w-5 h-5 rounded-full border border-dashed border-slate-400 hover:border-slate-600 dark:border-slate-600 dark:hover:border-slate-400 flex items-center justify-center text-slate-400 hover:text-slate-600 transition"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+                <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
                 {view === 'trash' ? (
                   <>
                     <button
@@ -5709,6 +5953,46 @@ function DriveDashboardContent() {
                   <Edit3 className="w-4 h-4 text-slate-500" />
                   <span>Rename</span>
                 </button>
+                <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+                <div className="px-3 py-1 text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                  Tag Color
+                </div>
+                <div className="px-2 py-1 flex items-center justify-between">
+                  {[
+                    { color: '#ef4444', label: 'Red' },
+                    { color: '#f59e0b', label: 'Amber' },
+                    { color: '#10b981', label: 'Green' },
+                    { color: '#3b82f6', label: 'Blue' },
+                    { color: '#8b5cf6', label: 'Purple' },
+                  ].map((t) => (
+                    <button
+                      key={t.color}
+                      type="button"
+                      title={t.label}
+                      onClick={() => {
+                        setColorTag(folder.id, colorTags[folder.id] === t.color ? null : t.color);
+                        setContextMenu(null);
+                      }}
+                      className={`w-5 h-5 rounded-full transition-transform hover:scale-125 flex items-center justify-center ${
+                        colorTags[folder.id] === t.color ? 'ring-2 ring-offset-2 ring-indigo-500 scale-110' : ''
+                      }`}
+                      style={{ backgroundColor: t.color }}
+                    >
+                      {colorTags[folder.id] === t.color && <Check className="w-3 h-3 text-white stroke-[3]" />}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    title="Clear Tag"
+                    onClick={() => {
+                      setColorTag(folder.id, null);
+                      setContextMenu(null);
+                    }}
+                    className="w-5 h-5 rounded-full border border-dashed border-slate-400 hover:border-slate-600 dark:border-slate-600 dark:hover:border-slate-400 flex items-center justify-center text-slate-400 hover:text-slate-600 transition"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
                 <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
                 {view === 'trash' ? (
                   <>
@@ -6302,7 +6586,37 @@ function DriveDashboardContent() {
       {/* Global Background Audio Player */}
       <AudioPlayerBar
         track={activeAudioTrack}
-        onClose={() => setActiveAudioTrack(null)}
+        playlist={audioPlaylist}
+        currentIndex={audioCurrentIndex}
+        onTrackChange={(nextTrack, nextIdx) => {
+          setActiveAudioTrack(nextTrack);
+          setAudioCurrentIndex(nextIdx);
+        }}
+        onClose={() => {
+          setActiveAudioTrack(null);
+          setAudioPlaylist([]);
+        }}
+      />
+
+      {/* Spotlight Command Palette (⌘K / Ctrl+K) */}
+      <SpotlightPalette
+        isOpen={spotlightOpen}
+        onClose={() => setSpotlightOpen(false)}
+        files={files}
+        folders={folders}
+        onNavigate={(newView, fId) => {
+          navigateDrive(newView, fId);
+        }}
+        onOpenFile={(f) => {
+          handlePreview(f);
+        }}
+        onNewFolder={() => setNewFolderOpen(true)}
+        onUpload={() => fileInputRef.current?.click()}
+        onToggleDarkMode={() => setDarkMode(!darkMode)}
+        darkMode={darkMode}
+        onLockVault={handleLogout}
+        onOpenAppDownload={() => setAppDownloadModalOpen(true)}
+        onOpenStorageCleaner={() => setStorageModalOpen(true)}
       />
 
       {/* Toast Notification */}

@@ -958,6 +958,148 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     }
   }
 
+  void _showShortcutsAndGesturesDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.75,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (_, scrollController) => ListView(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEF2FF),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.touch_app, color: Color(0xFF4F46E5)),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Shortcuts & Gestures Cheat Sheet',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        'Tips to navigate NOOR DRIVE faster on mobile',
+                        style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _buildGestureTile(
+              icon: Icons.photo_library_outlined,
+              title: 'Swipe Photos & Videos',
+              desc: 'In full-screen viewer, swipe left or right to seamlessly browse between photos and videos.',
+            ),
+            _buildGestureTile(
+              icon: Icons.pinch,
+              title: 'Pinch to Zoom',
+              desc: 'Double tap or pinch to zoom up to 5x on images, documents, and code files.',
+            ),
+            _buildGestureTile(
+              icon: Icons.touch_app_outlined,
+              title: 'Long Press for Multi-Select',
+              desc: 'Hold down on any file or folder to select multiple items for bulk download or delete.',
+            ),
+            _buildGestureTile(
+              icon: Icons.arrow_downward,
+              title: 'Pull Down to Refresh',
+              desc: 'Pull down on any drive screen to immediately sync recent uploads from other devices.',
+            ),
+            _buildGestureTile(
+              icon: Icons.lock_outline,
+              title: 'Auto-Lock Secret Vault',
+              desc: 'Secret Vault auto-locks immediately when you switch apps or leave the screen idle.',
+            ),
+            _buildGestureTile(
+              icon: Icons.music_note,
+              title: 'Background Audio Playback',
+              desc: 'Stream music with continuous playback and playback speed controls.',
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accentColor,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                ),
+                child: const Text('Got it!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGestureTile({required IconData icon, required String title, required String desc}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 20, color: const Color(0xFF4F46E5)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 2),
+                Text(desc, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), height: 1.3)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _uploadFiles() async {
     final result = await FilePicker.platform.pickFiles(allowMultiple: true);
     if (result == null || result.files.isEmpty) return;
@@ -3076,6 +3218,15 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                       onTap: () {
                         Navigator.pop(context);
                         _checkForAppUpdate(silent: false);
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.tips_and_updates_outlined, color: Color(0xFF6366F1)),
+                      title: const Text('Shortcuts & Gestures Guide', style: TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Touch gestures, secret vault & tricks', style: TextStyle(fontSize: 12)),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showShortcutsAndGesturesDialog();
                       },
                     ),
                   ],
