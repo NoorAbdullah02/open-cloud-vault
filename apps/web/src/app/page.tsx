@@ -959,7 +959,7 @@ function DriveDashboardContent() {
     name: string;
   } | null>(null);
   const [sharePermission, setSharePermission] = useState<'VIEWER' | 'EDITOR'>('VIEWER');
-  const [shareExpiresHours, setShareExpiresHours] = useState<number>(0);
+  const [shareExpiresHours, setShareExpiresHours] = useState<number>(1440);
   const [shareLinks, setShareLinks] = useState<any[]>([]);
   const [creatingShare, setCreatingShare] = useState(false);
   const [showShareQr, setShowShareQr] = useState<string | null>(null);
@@ -2089,7 +2089,7 @@ function DriveDashboardContent() {
           type: shareModal.type,
           targetId: shareModal.id,
           permission: sharePermission,
-          expiresInHours: shareExpiresHours > 0 ? shareExpiresHours : undefined,
+          expiresInHours: shareExpiresHours,
         }),
       });
       setShareLinks((prev) => [created, ...prev]);

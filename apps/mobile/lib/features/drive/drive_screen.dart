@@ -2552,7 +2552,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
         'type': type,
         'targetId': id,
         'permission': permission,
-        if (expiresHours > 0) 'expiresInHours': expiresHours,
+        'expiresInHours': expiresHours,
       });
       links.insert(0, res.data);
       final token = res.data['shareToken'];

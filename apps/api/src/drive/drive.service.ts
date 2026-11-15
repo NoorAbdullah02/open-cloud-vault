@@ -41,7 +41,7 @@ export class DriveService {
     userId: string,
     query: {
       folderId?: string;
-      view?: 'my-drive' | 'starred' | 'recent' | 'trash' | 'photos' | 'videos' | 'documents' | 'vault';
+      view?: 'my-drive' | 'starred' | 'recent' | 'trash' | 'photos' | 'videos' | 'documents' | 'vault' | 'camera' | 'camera-uploads';
       search?: string;
       filterType?: 'all' | 'pdf' | 'image' | 'video' | 'audio' | 'document' | 'archive';
       sizeMin?: string | number;
@@ -110,6 +110,17 @@ export class DriveService {
     const folderWhere: any = { ownerId: userId };
     const fileWhere: any = { ownerId: userId };
     let breadcrumbs: { id: string; name: string }[] = [];
+    let resolvedFolderId = folderId;
+    if (
+      resolvedFolderId === 'camera' ||
+      resolvedFolderId === 'camera-uploads' ||
+      resolvedFolderId === 'camera_uploads' ||
+      view === 'camera' ||
+      view === 'camera-uploads'
+    ) {
+      const camFolder = await this.getOrCreateCameraUploadsFolder(userId);
+      resolvedFolderId = camFolder.id;
+    }
 
     if (view === 'vault') {
       const vaultFolder = await this.getOrCreateVaultFolder(userId);
@@ -213,14 +224,14 @@ export class DriveService {
         },
       ];
     } else {
-      if (folderId) {
-        if (allVaultFolderIds.includes(folderId)) {
+      if (resolvedFolderId) {
+        if (allVaultFolderIds.includes(resolvedFolderId)) {
           throw new ForbiddenException('Access denied to private vault folder');
         }
         folderWhere.isTrash = false;
-        folderWhere.parentId = folderId;
+        folderWhere.parentId = resolvedFolderId;
         fileWhere.isTrash = false;
-        fileWhere.folderId = folderId;
+        fileWhere.folderId = resolvedFolderId;
       } else {
         folderWhere.isTrash = false;
         folderWhere.parentId = null;
@@ -276,8 +287,8 @@ export class DriveService {
       }),
     ]);
 
-    if (breadcrumbs.length === 0 && folderId) {
-      breadcrumbs = await this.buildBreadcrumbs(userId, folderId);
+    if (breadcrumbs.length === 0 && resolvedFolderId) {
+      breadcrumbs = await this.buildBreadcrumbs(userId, resolvedFolderId);
     }
 
     return {
@@ -310,7 +321,10 @@ export class DriveService {
     const cleanName = name.trim();
 
     // Singleton check: Prevent duplicate "Camera Uploads" folders at root
-    if (cleanName.toLowerCase() === 'camera uploads' && (!parentId || parentId === 'null')) {
+    if (
+      (cleanName.toLowerCase() === 'camera uploads' || cleanName.toLowerCase() === 'camera-uploads') &&
+      (!parentId || parentId === 'null')
+    ) {
       return this.getOrCreateCameraUploadsFolder(userId);
     }
 
@@ -373,7 +387,12 @@ export class DriveService {
     if (targetFolderId === 'vault' || (!targetFolderId && view === 'vault')) {
       const vaultFolder = await this.getOrCreateVaultFolder(userId);
       targetFolderId = vaultFolder.id;
-    } else if (targetFolderId === 'camera' || (!targetFolderId && view === 'camera')) {
+    } else if (
+      targetFolderId === 'camera' ||
+      targetFolderId === 'camera-uploads' ||
+      targetFolderId === 'camera_uploads' ||
+      (!targetFolderId && (view === 'camera' || view === 'camera-uploads'))
+    ) {
       const cameraFolder = await this.getOrCreateCameraUploadsFolder(userId);
       targetFolderId = cameraFolder.id;
     } else if (targetFolderId) {
