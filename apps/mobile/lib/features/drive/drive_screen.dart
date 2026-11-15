@@ -2127,6 +2127,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
         context: context,
         builder: (_) {
           int currentImageIdx = startIdx;
+          bool isZoomed = false;
           final pageController = PageController(initialPage: startIdx);
 
           return StatefulBuilder(
@@ -2157,10 +2158,12 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                     children: [
                       PageView.builder(
                         controller: pageController,
+                        physics: isZoomed ? const NeverScrollableScrollPhysics() : const BouncingScrollPhysics(),
                         itemCount: allImages.length,
                         onPageChanged: (idx) {
                           setDialogState(() {
                             currentImageIdx = idx;
+                            isZoomed = false;
                           });
                         },
                         itemBuilder: (ctx, idx) {
@@ -2169,6 +2172,13 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                           return _MobileZoomableImageViewer(
                             imageUrl: curUrl,
                             headers: authHeaders,
+                            onZoomChanged: (zoomed) {
+                              if (isZoomed != zoomed) {
+                                setDialogState(() {
+                                  isZoomed = zoomed;
+                                });
+                              }
+                            },
                           );
                         },
                       ),
@@ -4455,10 +4465,12 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
 class _MobileZoomableImageViewer extends StatefulWidget {
   final String imageUrl;
   final Map<String, String>? headers;
+  final ValueChanged<bool>? onZoomChanged;
 
   const _MobileZoomableImageViewer({
     required this.imageUrl,
     this.headers,
+    this.onZoomChanged,
   });
 
   @override
@@ -4486,6 +4498,7 @@ class _MobileZoomableImageViewerState extends State<_MobileZoomableImageViewer>
       setState(() {
         _currentScale = scale;
       });
+      widget.onZoomChanged?.call(scale > 1.05);
     }
   }
 
@@ -4501,7 +4514,7 @@ class _MobileZoomableImageViewerState extends State<_MobileZoomableImageViewer>
     _animationController?.dispose();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 240),
+      duration: const Duration(milliseconds: 250),
     );
     _animation = Matrix4Tween(
       begin: _transformationController.value,
@@ -4519,53 +4532,88 @@ class _MobileZoomableImageViewerState extends State<_MobileZoomableImageViewer>
 
   void _handleDoubleTap() {
     final currentScale = _transformationController.value.getMaxScaleOnAxis();
-    if (currentScale > 1.2) {
+    if (currentScale > 1.15) {
       _animateTo(Matrix4.identity());
+      widget.onZoomChanged?.call(false);
     } else {
-      final position = _doubleTapDetails?.localPosition ?? Offset.zero;
+      final pos = _doubleTapDetails?.localPosition ?? Offset.zero;
+      final x = -pos.dx * (2.5 - 1.0);
+      final y = -pos.dy * (2.5 - 1.0);
       final target = Matrix4.identity()
-        ..translate(-position.dx * 1.5, -position.dy * 1.5)
+        ..translate(x, y)
         ..scale(2.5);
       _animateTo(target);
+      widget.onZoomChanged?.call(true);
     }
   }
 
   void _zoomIn() {
     final scale = _transformationController.value.getMaxScaleOnAxis();
-    final targetScale = (scale * 1.4).clamp(0.6, 5.0);
+    final targetScale = (scale * 1.4).clamp(0.8, 6.0);
     final target = Matrix4.identity()..scale(targetScale);
     _animateTo(target);
+    widget.onZoomChanged?.call(targetScale > 1.05);
   }
 
   void _zoomOut() {
     final scale = _transformationController.value.getMaxScaleOnAxis();
-    final targetScale = (scale / 1.4).clamp(0.6, 5.0);
+    final targetScale = (scale / 1.4).clamp(0.8, 6.0);
     final target = targetScale <= 1.05 ? Matrix4.identity() : (Matrix4.identity()..scale(targetScale));
     _animateTo(target);
+    widget.onZoomChanged?.call(targetScale > 1.05);
   }
 
   void _resetZoom() {
     _animateTo(Matrix4.identity());
+    widget.onZoomChanged?.call(false);
   }
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        GestureDetector(
-          onDoubleTapDown: (d) => _doubleTapDetails = d,
-          onDoubleTap: _handleDoubleTap,
-          child: Center(
-            child: InteractiveViewer(
-              transformationController: _transformationController,
-              minScale: 0.5,
-              maxScale: 5.0,
+        InteractiveViewer(
+          transformationController: _transformationController,
+          clipBehavior: Clip.none,
+          panEnabled: true,
+          scaleEnabled: true,
+          minScale: 0.8,
+          maxScale: 6.0,
+          boundaryMargin: const EdgeInsets.all(250.0),
+          onInteractionStart: (_) {
+            widget.onZoomChanged?.call(true);
+          },
+          onInteractionEnd: (_) {
+            final scale = _transformationController.value.getMaxScaleOnAxis();
+            widget.onZoomChanged?.call(scale > 1.05);
+          },
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onDoubleTapDown: (details) => _doubleTapDetails = details,
+            onDoubleTap: _handleDoubleTap,
+            child: Container(
+              width: double.infinity,
+              height: double.infinity,
+              alignment: Alignment.center,
               child: Image.network(
                 widget.imageUrl,
                 headers: widget.headers,
+                fit: BoxFit.contain,
                 loadingBuilder: (_, child, progress) => progress == null
                     ? child
-                    : const CircularProgressIndicator(color: Colors.white),
+                    : const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
+                      ),
+                errorBuilder: (_, __, ___) => const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.broken_image, color: Colors.white54, size: 48),
+                      SizedBox(height: 8),
+                      Text('Failed to load image', style: TextStyle(color: Colors.white54)),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
