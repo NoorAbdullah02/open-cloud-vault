@@ -93,9 +93,9 @@ export class DriveController {
   @Post('folders')
   createFolder(
     @CurrentUser() user: AuthUser,
-    @Body() body: { name: string; parentId?: string },
+    @Body() body: { name: string; parentId?: string; view?: string },
   ) {
-    return this.driveService.createFolder(user.id, body.name, body.parentId);
+    return this.driveService.createFolder(user.id, body.name, body.parentId, body.view);
   }
 
   @Post('upload')
@@ -118,8 +118,9 @@ export class DriveController {
     @UploadedFile() file: Express.Multer.File,
     @Body('folderId') folderId?: string,
     @Body('backend') backend?: StorageBackend,
+    @Body('view') view?: string,
   ) {
-    return this.driveService.uploadFile(user.id, file, folderId, backend);
+    return this.driveService.uploadFile(user.id, file, folderId, backend, view);
   }
 
   @Post('files/:id/replace')

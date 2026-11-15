@@ -1262,10 +1262,11 @@ function DriveDashboardContent() {
       showToast(`Uploading ${arr.length} item${arr.length > 1 ? 's' : ''}...`);
 
       const folderCache = new Map<string, string>();
+      const baseFolder = folderId || (view === 'vault' ? (breadcrumbs[0]?.id || 'vault') : null);
       const resolveTargetFolder = async (relativePath?: string): Promise<string | null> => {
-        if (!relativePath || !relativePath.includes('/')) return folderId;
+        if (!relativePath || !relativePath.includes('/')) return baseFolder;
         const parts = relativePath.split('/').slice(0, -1);
-        let currentParent = folderId;
+        let currentParent = baseFolder;
         let builtPath = '';
         for (const part of parts) {
           builtPath = builtPath ? `${builtPath}/${part}` : part;
@@ -1274,7 +1275,7 @@ function DriveDashboardContent() {
           } else {
             const created = await apiFetch('/drive/folders', {
               method: 'POST',
-              body: JSON.stringify({ name: part, parentId: currentParent }),
+              body: JSON.stringify({ name: part, parentId: currentParent, view }),
             });
             folderCache.set(builtPath, created.id);
             currentParent = created.id;
@@ -1308,10 +1309,12 @@ function DriveDashboardContent() {
             | string
             | undefined;
           const targetFolderId = await resolveTargetFolder(relPath);
+          const effectiveFolderId = targetFolderId || (view === 'vault' ? (breadcrumbs[0]?.id || 'vault') : undefined);
 
           const formData = new FormData();
           formData.append('file', file);
-          if (targetFolderId) formData.append('folderId', targetFolderId);
+          if (effectiveFolderId) formData.append('folderId', effectiveFolderId);
+          if (view) formData.append('view', view);
           formData.append('backend', selectedBackend);
 
           const uploadRes = await uploadFileWithProgress(
@@ -1344,7 +1347,7 @@ function DriveDashboardContent() {
       loadDrive(true);
       loadUser();
     },
-    [folderId, selectedBackend, loadDrive, loadUser],
+    [folderId, selectedBackend, loadDrive, loadUser, view, breadcrumbs],
   );
 
   const handleUploadFiles = useCallback(
@@ -1391,14 +1394,16 @@ function DriveDashboardContent() {
     e.preventDefault();
     if (!newFolderName.trim()) return;
     try {
+      const effectiveParent = folderId || (view === 'vault' ? (breadcrumbs[0]?.id || 'vault') : null);
       const created = await apiFetch('/drive/folders', {
         method: 'POST',
-        body: JSON.stringify({ name: newFolderName.trim(), parentId: folderId }),
+        body: JSON.stringify({ name: newFolderName.trim(), parentId: effectiveParent, view }),
       });
       setFolders((prev) => [created, ...prev]);
       setNewFolderName('');
       setNewFolderOpen(false);
       showToast('Folder created');
+      driveViewCache.clear();
       loadDrive(true);
     } catch (err: any) {
       showToast(err.message, 'error');

@@ -55,27 +55,48 @@ export class DriveService {
       await this.purgeExpiredTrash(userId).catch(() => {});
     }
 
+    const allVaultFolderIds = await this.getAllVaultFolderIds(userId);
+
     if (query.search) {
       const term = query.search.trim();
+      const folderSearchWhere: any = {
+        ownerId: userId,
+        isTrash: false,
+        name: { contains: term, mode: 'insensitive' },
+      };
+      const fileSearchWhere: any = {
+        ownerId: userId,
+        isTrash: false,
+        OR: [
+          { name: { contains: term, mode: 'insensitive' } },
+          { extension: { contains: term, mode: 'insensitive' } },
+          { description: { contains: term, mode: 'insensitive' } },
+        ],
+      };
+
+      if (view === 'vault') {
+        folderSearchWhere.id = { in: allVaultFolderIds };
+        fileSearchWhere.folderId = { in: allVaultFolderIds };
+      } else {
+        folderSearchWhere.id = { notIn: allVaultFolderIds };
+        folderSearchWhere.name = { not: 'Secret Vault' };
+        fileSearchWhere.AND = [
+          {
+            OR: [
+              { folderId: null },
+              { folderId: { notIn: allVaultFolderIds } },
+            ],
+          },
+        ];
+      }
+
       const [folders, files] = await Promise.all([
         this.prisma.folder.findMany({
-          where: {
-            ownerId: userId,
-            isTrash: false,
-            name: { contains: term, mode: 'insensitive' },
-          },
+          where: folderSearchWhere,
           orderBy: { updatedAt: 'desc' },
         }),
         this.prisma.file.findMany({
-          where: {
-            ownerId: userId,
-            isTrash: false,
-            OR: [
-              { name: { contains: term, mode: 'insensitive' } },
-              { extension: { contains: term, mode: 'insensitive' } },
-              { description: { contains: term, mode: 'insensitive' } },
-            ],
-          },
+          where: fileSearchWhere,
           include: { storageObject: true, fileTags: { include: { tag: true } } },
           orderBy: { updatedAt: 'desc' },
         }),
@@ -89,30 +110,88 @@ export class DriveService {
 
     if (view === 'vault') {
       const vaultFolder = await this.getOrCreateVaultFolder(userId);
+      let activeFolderId = folderId;
+      if (activeFolderId && !allVaultFolderIds.includes(activeFolderId)) {
+        throw new ForbiddenException('Access denied to private vault folder');
+      }
+      if (!activeFolderId) {
+        activeFolderId = vaultFolder.id;
+      }
       folderWhere.isTrash = false;
-      folderWhere.parentId = vaultFolder.id;
+      folderWhere.parentId = activeFolderId;
       fileWhere.isTrash = false;
-      fileWhere.folderId = vaultFolder.id;
-      breadcrumbs = [{ id: vaultFolder.id, name: 'Secret Vault 🔒' }];
+      fileWhere.folderId = activeFolderId;
+      if (activeFolderId === vaultFolder.id) {
+        breadcrumbs = [{ id: vaultFolder.id, name: 'Secret Vault 🔒' }];
+      } else {
+        breadcrumbs = await this.buildBreadcrumbs(userId, activeFolderId);
+        if (breadcrumbs.length > 0 && breadcrumbs[0].id === vaultFolder.id) {
+          breadcrumbs[0].name = 'Secret Vault 🔒';
+        }
+      }
     } else if (view === 'trash') {
       folderWhere.isTrash = true;
+      folderWhere.id = { notIn: allVaultFolderIds };
+      folderWhere.name = { not: 'Secret Vault' };
       fileWhere.isTrash = true;
+      fileWhere.AND = [
+        {
+          OR: [
+            { folderId: null },
+            { folderId: { notIn: allVaultFolderIds } },
+          ],
+        },
+      ];
     } else if (view === 'starred') {
       folderWhere.isTrash = false;
       folderWhere.isStarred = true;
+      folderWhere.id = { notIn: allVaultFolderIds };
+      folderWhere.name = { not: 'Secret Vault' };
       fileWhere.isTrash = false;
       fileWhere.isStarred = true;
+      fileWhere.AND = [
+        {
+          OR: [
+            { folderId: null },
+            { folderId: { notIn: allVaultFolderIds } },
+          ],
+        },
+      ];
     } else if (view === 'recent') {
       folderWhere.id = '__none__'; // recent focuses on files
       fileWhere.isTrash = false;
+      fileWhere.AND = [
+        {
+          OR: [
+            { folderId: null },
+            { folderId: { notIn: allVaultFolderIds } },
+          ],
+        },
+      ];
     } else if (view === 'photos') {
       folderWhere.id = '__none__';
       fileWhere.isTrash = false;
       fileWhere.mimeType = { startsWith: 'image/' };
+      fileWhere.AND = [
+        {
+          OR: [
+            { folderId: null },
+            { folderId: { notIn: allVaultFolderIds } },
+          ],
+        },
+      ];
     } else if (view === 'videos') {
       folderWhere.id = '__none__';
       fileWhere.isTrash = false;
       fileWhere.mimeType = { startsWith: 'video/' };
+      fileWhere.AND = [
+        {
+          OR: [
+            { folderId: null },
+            { folderId: { notIn: allVaultFolderIds } },
+          ],
+        },
+      ];
     } else if (view === 'documents') {
       folderWhere.id = '__none__';
       fileWhere.isTrash = false;
@@ -122,14 +201,31 @@ export class DriveService {
         { mimeType: { contains: 'document' } },
         { mimeType: { contains: 'sheet' } },
       ];
+      fileWhere.AND = [
+        {
+          OR: [
+            { folderId: null },
+            { folderId: { notIn: allVaultFolderIds } },
+          ],
+        },
+      ];
     } else {
-      folderWhere.isTrash = false;
-      folderWhere.parentId = folderId;
-      if (!folderId) {
+      if (folderId) {
+        if (allVaultFolderIds.includes(folderId)) {
+          throw new ForbiddenException('Access denied to private vault folder');
+        }
+        folderWhere.isTrash = false;
+        folderWhere.parentId = folderId;
+        fileWhere.isTrash = false;
+        fileWhere.folderId = folderId;
+      } else {
+        folderWhere.isTrash = false;
+        folderWhere.parentId = null;
         folderWhere.name = { not: 'Secret Vault' };
+        folderWhere.id = { notIn: allVaultFolderIds };
+        fileWhere.isTrash = false;
+        fileWhere.folderId = null;
       }
-      fileWhere.isTrash = false;
-      fileWhere.folderId = folderId;
     }
 
     // Apply Smart Search Filters
@@ -203,13 +299,17 @@ export class DriveService {
     return crumbs;
   }
 
-  async createFolder(userId: string, name: string, parentId?: string) {
+  async createFolder(userId: string, name: string, parentId?: string, view?: string) {
     if (!name || !name.trim()) {
       throw new BadRequestException('Folder name is required');
     }
 
-    if (parentId) {
-      const parent = await this.prisma.folder.findUnique({ where: { id: parentId } });
+    let targetParentId = parentId;
+    if (targetParentId === 'vault' || (!targetParentId && view === 'vault')) {
+      const vaultFolder = await this.getOrCreateVaultFolder(userId);
+      targetParentId = vaultFolder.id;
+    } else if (targetParentId) {
+      const parent = await this.prisma.folder.findUnique({ where: { id: targetParentId } });
       if (!parent || parent.ownerId !== userId) {
         throw new NotFoundException('Parent folder not found');
       }
@@ -218,7 +318,7 @@ export class DriveService {
     const folder = await this.prisma.folder.create({
       data: {
         name: name.trim(),
-        parentId: parentId || null,
+        parentId: targetParentId || null,
         ownerId: userId,
       },
     });
@@ -239,6 +339,7 @@ export class DriveService {
     file: Express.Multer.File,
     folderId?: string,
     requestedBackend?: StorageBackend,
+    view?: string,
   ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
@@ -258,8 +359,12 @@ export class DriveService {
       }
     }
 
-    if (folderId) {
-      const folder = await this.prisma.folder.findUnique({ where: { id: folderId } });
+    let targetFolderId = folderId;
+    if (targetFolderId === 'vault' || (!targetFolderId && view === 'vault')) {
+      const vaultFolder = await this.getOrCreateVaultFolder(userId);
+      targetFolderId = vaultFolder.id;
+    } else if (targetFolderId) {
+      const folder = await this.prisma.folder.findUnique({ where: { id: targetFolderId } });
       if (!folder || folder.ownerId !== userId) {
         await fs.promises.unlink(file.path).catch(() => {});
         throw new NotFoundException('Target folder not found');
@@ -334,7 +439,7 @@ export class DriveService {
           sizeBytes: BigInt(file.size),
           checksumSha256,
           storageObjectId,
-          folderId: folderId || null,
+          folderId: targetFolderId || null,
           ownerId: userId,
         },
         include: { storageObject: true },
@@ -369,8 +474,8 @@ export class DriveService {
       // Send email alert to admin notification recipient
       const notifyEmail = process.env.ADMIN_NOTIFY_EMAIL || process.env.SUPER_ADMIN_EMAIL || user.email;
       if (notifyEmail) {
-        const folderName = folderId
-          ? (await this.prisma.folder.findUnique({ where: { id: folderId }, select: { name: true } }))?.name
+        const folderName = targetFolderId
+          ? (await this.prisma.folder.findUnique({ where: { id: targetFolderId }, select: { name: true } }))?.name
           : undefined;
         this.mail
           .sendUploadAlert({
@@ -873,8 +978,20 @@ export class DriveService {
   }
 
   async getDuplicates(userId: string) {
+    const allVaultFolderIds = await this.getAllVaultFolderIds(userId);
     const files = await this.prisma.file.findMany({
-      where: { ownerId: userId, isTrash: false },
+      where: {
+        ownerId: userId,
+        isTrash: false,
+        AND: [
+          {
+            OR: [
+              { folderId: null },
+              { folderId: { notIn: allVaultFolderIds } },
+            ],
+          },
+        ],
+      },
       include: { folder: true, storageObject: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -916,8 +1033,20 @@ export class DriveService {
   }
 
   async getLargeFiles(userId: string, limit = 50) {
+    const allVaultFolderIds = await this.getAllVaultFolderIds(userId);
     const files = await this.prisma.file.findMany({
-      where: { ownerId: userId, isTrash: false },
+      where: {
+        ownerId: userId,
+        isTrash: false,
+        AND: [
+          {
+            OR: [
+              { folderId: null },
+              { folderId: { notIn: allVaultFolderIds } },
+            ],
+          },
+        ],
+      },
       include: { folder: true, storageObject: true },
       orderBy: { sizeBytes: 'desc' },
       take: Number(limit) || 50,
@@ -966,6 +1095,26 @@ export class DriveService {
       });
     }
     return vaultFolder;
+  }
+
+  async getAllVaultFolderIds(userId: string): Promise<string[]> {
+    const vaultFolder = await this.getOrCreateVaultFolder(userId);
+    const vaultIds = new Set<string>([vaultFolder.id]);
+    const allFolders = await this.prisma.folder.findMany({
+      where: { ownerId: userId, isTrash: false },
+      select: { id: true, parentId: true },
+    });
+    let added = true;
+    while (added) {
+      added = false;
+      for (const f of allFolders) {
+        if (f.parentId && vaultIds.has(f.parentId) && !vaultIds.has(f.id)) {
+          vaultIds.add(f.id);
+          added = true;
+        }
+      }
+    }
+    return Array.from(vaultIds);
   }
 
   async moveToVault(userId: string, type: 'file' | 'folder', id: string) {

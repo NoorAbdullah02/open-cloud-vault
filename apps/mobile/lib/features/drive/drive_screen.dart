@@ -397,9 +397,11 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
   Future<void> _uploadSingleFile(String path, String name, String? targetFolderId) async {
     final startTime = DateTime.now();
     _uploadCancelToken = CancelToken();
+    final effectiveTarget = targetFolderId ?? (_view == 'vault' ? (_breadcrumbs.isNotEmpty ? _breadcrumbs.first['id'] : 'vault') : null);
     final formData = FormData.fromMap({
       'file': await MultipartFile.fromFile(path, filename: name),
-      if (targetFolderId != null) 'folderId': targetFolderId,
+      if (effectiveTarget != null) 'folderId': effectiveTarget,
+      if (_view != null) 'view': _view,
       'backend': 'TELEGRAM_MTPROTO',
     });
 
@@ -950,9 +952,10 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     if (result == null || result.files.isEmpty) return;
 
     try {
+      final targetFolder = _folderId ?? (_view == 'vault' ? (_breadcrumbs.isNotEmpty ? _breadcrumbs.first['id'] : 'vault') : null);
       for (final f in result.files) {
         if (f.path == null) continue;
-        await _uploadSingleFile(f.path!, f.name, _folderId);
+        await _uploadSingleFile(f.path!, f.name, targetFolder);
       }
       _showSnack('Uploaded to NOOR DRIVE!');
       await _loadDrive(silent: true);
@@ -1225,10 +1228,12 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
       final picked = await FilePicker.platform.pickFiles(allowMultiple: true);
       if (picked == null || picked.files.isEmpty) return;
 
+      final effectiveParent = _folderId ?? (_view == 'vault' ? (_breadcrumbs.isNotEmpty ? _breadcrumbs.first['id'] : 'vault') : null);
       try {
         final createdRoot = await apiClient.dio.post('/drive/folders', data: {
           'name': customName,
-          if (_folderId != null) 'parentId': _folderId,
+          if (effectiveParent != null) 'parentId': effectiveParent,
+          if (_view != null) 'view': _view,
         });
         final rootFolderId = createdRoot.data['id'] as String;
         for (final pf in picked.files) {
@@ -1254,10 +1259,12 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
       return;
     }
 
+    final effectiveParent = _folderId ?? (_view == 'vault' ? (_breadcrumbs.isNotEmpty ? _breadcrumbs.first['id'] : 'vault') : null);
     try {
       final createdRoot = await apiClient.dio.post('/drive/folders', data: {
         'name': rootName,
-        if (_folderId != null) 'parentId': _folderId,
+        if (effectiveParent != null) 'parentId': effectiveParent,
+        if (_view != null) 'view': _view,
       });
       final rootFolderId = createdRoot.data['id'] as String;
 
@@ -1283,6 +1290,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
               final subRes = await apiClient.dio.post('/drive/folders', data: {
                 'name': part,
                 'parentId': targetFolderId,
+                if (_view != null) 'view': _view,
               });
               targetFolderId = subRes.data['id'] as String;
               subfolderCache[built] = targetFolderId;
@@ -1332,15 +1340,18 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     if (name == null || name.isEmpty) return;
 
     try {
+      final effectiveParent = _folderId ?? (_view == 'vault' ? (_breadcrumbs.isNotEmpty ? _breadcrumbs.first['id'] : 'vault') : null);
       final res = await apiClient.dio.post('/drive/folders', data: {
         'name': name,
-        if (_folderId != null) 'parentId': _folderId,
+        if (effectiveParent != null) 'parentId': effectiveParent,
+        if (_view != null) 'view': _view,
       });
       if (mounted && res.data is Map) {
         setState(() {
           _folders = [res.data, ..._folders];
         });
       }
+      _driveCache.clear();
       _loadDrive(silent: true);
     } catch (e) {
       _showSnack('Could not create folder: $e', isError: true);
