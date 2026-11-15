@@ -336,30 +336,28 @@ export default function PublicSharePage() {
       <main className="max-w-5xl mx-auto p-4 md:p-8 space-y-6">
         {data.type === 'file' ? (
           <div className="space-y-4">
-            <div className="bg-white rounded-3xl border border-zinc-200/80 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-4 min-w-0">
+            <div className="bg-white rounded-3xl border border-zinc-200/80 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
                 <div className="w-12 h-12 rounded-2xl bg-zinc-100 text-zinc-700 flex items-center justify-center shrink-0">
                   <FileText className="w-6 h-6" />
                 </div>
-                <div className="min-w-0">
-                  <h1 className="text-base sm:text-lg font-bold text-zinc-900 truncate">
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-base sm:text-lg font-bold text-zinc-900 break-words line-clamp-2">
                     {data.file.name}
                   </h1>
-                  <p className="text-xs sm:text-sm text-zinc-500">
+                  <p className="text-xs sm:text-sm text-zinc-500 mt-0.5">
                     {formatBytes(data.file.sizeBytes)}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center flex-wrap gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => handlePrintShareFile(data.file)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-sm font-semibold shadow-xs flex items-center gap-1.5 transition border border-slate-200"
-                  title="Print File"
+              <div className="w-full sm:w-auto grid grid-cols-2 sm:flex items-center gap-2 shrink-0">
+                <a
+                  href={getDownloadLink(data.file.id, false)}
+                  download={data.file.name}
+                  className="col-span-2 sm:col-span-1 min-h-[44px] px-5 py-2.5 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-bold shadow-sm flex items-center justify-center gap-2 transition active:scale-[0.98]"
                 >
-                  <Printer className="w-4 h-4 text-slate-600" />
-                  <span>Print</span>
-                </button>
+                  <Download className="w-4 h-4" /> Download File
+                </a>
                 <button
                   type="button"
                   onClick={() => {
@@ -367,19 +365,21 @@ export default function PublicSharePage() {
                     const text = encodeURIComponent(`Check out "${data.file.name}" on NOOR DRIVE:\n${fullUrl}`);
                     window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
                   }}
-                  className="px-4 py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white text-sm font-semibold shadow-sm flex items-center gap-2 transition"
+                  className="min-h-[44px] px-3.5 py-2.5 rounded-2xl bg-[#25D366] hover:bg-[#20ba59] text-white text-xs sm:text-sm font-semibold shadow-xs flex items-center justify-center gap-1.5 transition active:scale-[0.98]"
                   title="Share to WhatsApp"
                 >
                   <MessageCircle className="w-4 h-4 fill-white/20" />
-                  <span className="hidden sm:inline">WhatsApp</span>
+                  <span>WhatsApp</span>
                 </button>
-                <a
-                  href={getDownloadLink(data.file.id, false)}
-                  download={data.file.name}
-                  className="px-5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-semibold shadow-sm flex items-center gap-2 transition"
+                <button
+                  type="button"
+                  onClick={() => handlePrintShareFile(data.file)}
+                  className="min-h-[44px] px-3.5 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs sm:text-sm font-semibold shadow-xs flex items-center justify-center gap-1.5 transition border border-slate-200 active:scale-[0.98]"
+                  title="Print File"
                 >
-                  <Download className="w-4 h-4" /> Download File
-                </a>
+                  <Printer className="w-4 h-4 text-slate-600" />
+                  <span>Print</span>
+                </button>
               </div>
             </div>
 
@@ -390,11 +390,11 @@ export default function PublicSharePage() {
               data.file.mimeType.includes('wordprocessingml') ||
               data.file.extension === 'pptx' ||
               data.file.mimeType.includes('presentationml')
-                ? 'h-[80dvh] flex flex-col'
-                : 'bg-white p-4 sm:p-6 flex items-center justify-center min-h-[420px]'
+                ? 'h-[75dvh] flex flex-col'
+                : 'bg-white p-3 sm:p-6 flex items-center justify-center min-h-[360px] sm:min-h-[420px]'
             }`}>
               {data.file.mimeType.startsWith('image/') ? (
-                <div className="w-full h-[75vh]">
+                <div className="w-full h-[65dvh] sm:h-[75dvh]">
                   <ZoomableImage
                     src={getDownloadLink(data.file.id, true)}
                     alt={data.file.name}
@@ -611,26 +611,26 @@ export default function PublicSharePage() {
                       <p className="text-sm font-semibold truncate">{file.name}</p>
                       <p className="text-xs text-slate-400">{formatBytes(file.sizeBytes)}</p>
                     </div>
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between pt-2.5 border-t border-slate-100 dark:border-slate-800 gap-1">
+                      <div className="flex items-center gap-1 sm:gap-2">
                         <button
                           onClick={() => openPreview(file)}
-                          className="text-xs font-semibold text-indigo-600 hover:underline flex items-center gap-1"
+                          className="min-h-[36px] px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-xs font-semibold text-indigo-600 flex items-center gap-1 transition"
                         >
                           <Eye className="w-3.5 h-3.5" /> Preview
                         </button>
                         <button
                           onClick={() => handlePrintShareFile(file)}
-                          className="text-xs font-semibold text-emerald-600 hover:underline flex items-center gap-1"
+                          className="min-h-[36px] px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 flex items-center gap-1 transition"
                           title="Print File"
                         >
-                          <Printer className="w-3.5 h-3.5" /> Print
+                          <Printer className="w-3.5 h-3.5" />
                         </button>
                       </div>
                       <a
                         href={getDownloadLink(file.id, false)}
                         download={file.name}
-                        className="text-xs font-semibold text-sky-600 hover:underline flex items-center gap-1"
+                        className="min-h-[36px] px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold flex items-center gap-1 transition shadow-xs"
                       >
                         <Download className="w-3.5 h-3.5" /> Download
                       </a>

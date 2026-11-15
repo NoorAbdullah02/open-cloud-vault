@@ -7,6 +7,7 @@ import {
   Folder as FolderIcon,
   FileText,
   Image as ImageIcon,
+  Camera,
   Video,
   Music,
   Archive,
@@ -86,7 +87,7 @@ import CodeViewer from '@/components/CodeViewer';
 import TextEditorViewer from '@/components/TextEditorViewer';
 import SpotlightPalette from '@/components/SpotlightPalette';
 
-type ViewMode = 'my-drive' | 'recent' | 'starred' | 'photos' | 'videos' | 'documents' | 'trash' | 'vault';
+type ViewMode = 'my-drive' | 'recent' | 'starred' | 'photos' | 'videos' | 'documents' | 'trash' | 'vault' | 'camera' | 'camera-uploads';
 
 function formatBytes(bytesStr: string | number) {
   const bytes = Number(bytesStr || 0);
@@ -2728,32 +2729,32 @@ function DriveDashboardContent() {
         {/* Crisp White Top Header */}
         <header className="px-4 md:px-8 py-3 border-b border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl sticky top-0 z-30 space-y-2.5 sm:space-y-0">
           <div className="flex items-center justify-between gap-2 sm:gap-3">
-            <div className="flex items-center gap-2.5 flex-1 max-w-xl min-w-0">
+            <div className="flex items-center gap-2 sm:gap-2.5 flex-1 max-w-xl min-w-0">
               <button
                 onClick={() => setSidebarOpen(true)}
                 className="md:hidden p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0"
+                aria-label="Open menu"
               >
                 <Menu className="w-5 h-5" />
               </button>
-              <span
-                onClick={() => {
-                  setSearch('');
-                  navigateDrive('my-drive', null);
-                }}
-                className="sm:hidden font-extrabold text-sm tracking-tight text-zinc-900 dark:text-white cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors whitespace-nowrap shrink-0"
-                title="Go to NOOR DRIVE Root (/)"
-              >
-                NOOR DRIVE
-              </span>
-              <div className="relative flex-1 hidden sm:block">
-                <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+              <div className="relative flex-1 min-w-0">
+                <Search className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-slate-400 absolute left-3 sm:left-4 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search files, folders, extensions..."
-                  className="w-full pl-11 pr-4 py-2.5 rounded-2xl bg-slate-100/80 dark:bg-slate-800/80 border border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-indigo-500/40 focus:shadow-sm text-sm focus:outline-none transition"
+                  placeholder="Search files, folders..."
+                  className="w-full pl-8 sm:pl-11 pr-7 sm:pr-4 py-1.5 sm:py-2.5 rounded-xl sm:rounded-2xl bg-slate-100/90 dark:bg-slate-800/90 border border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-indigo-500/40 text-xs sm:text-sm focus:outline-none transition"
                 />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -5488,7 +5489,7 @@ function DriveDashboardContent() {
       <label
         title="Upload File"
         style={{ backgroundColor: accentColor }}
-        className={`md:hidden fixed ${activeAudioTrack ? 'bottom-32' : 'bottom-6'} right-6 z-30 w-14 h-14 rounded-2xl hover:opacity-90 text-white shadow-xl flex items-center justify-center active:scale-95 transition-all cursor-pointer select-none`}
+        className={`md:hidden fixed ${activeAudioTrack ? 'bottom-36' : 'bottom-20'} right-5 z-30 w-14 h-14 rounded-2xl hover:opacity-90 text-white shadow-xl flex items-center justify-center active:scale-95 transition-all cursor-pointer select-none`}
       >
         <input
           type="file"
@@ -5505,6 +5506,85 @@ function DriveDashboardContent() {
         />
         <Upload className="w-6 h-6" />
       </label>
+
+      {/* Mobile-First Native Bottom Navigation Bar */}
+      <nav
+        aria-label="Mobile Navigation"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200/80 dark:border-slate-800 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]"
+      >
+        <div className="grid grid-cols-5 items-center">
+          <button
+            type="button"
+            onClick={() => navigateDrive('my-drive', null)}
+            className={`flex flex-col items-center justify-center py-1 px-1 rounded-xl transition ${
+              view === 'my-drive' && !folderId
+                ? 'text-indigo-600 dark:text-indigo-400 font-bold'
+                : 'text-slate-500 dark:text-slate-400 font-medium hover:text-slate-800'
+            }`}
+          >
+            <div className={`p-1 rounded-xl ${view === 'my-drive' && !folderId ? 'bg-indigo-50 dark:bg-indigo-950/60' : ''}`}>
+              <HardDrive className="w-5 h-5" />
+            </div>
+            <span className="text-[10px] tracking-tight mt-0.5">Files</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigateDrive('camera' as any, null)}
+            className={`flex flex-col items-center justify-center py-1 px-1 rounded-xl transition ${
+              view === 'camera' || (breadcrumbs.length > 0 && breadcrumbs[breadcrumbs.length - 1].name.toLowerCase() === 'camera uploads')
+                ? 'text-indigo-600 dark:text-indigo-400 font-bold'
+                : 'text-slate-500 dark:text-slate-400 font-medium hover:text-slate-800'
+            }`}
+          >
+            <div className={`p-1 rounded-xl ${view === 'camera' ? 'bg-indigo-50 dark:bg-indigo-950/60' : ''}`}>
+              <Camera className="w-5 h-5" />
+            </div>
+            <span className="text-[10px] tracking-tight mt-0.5">Camera</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigateDrive('photos', null)}
+            className={`flex flex-col items-center justify-center py-1 px-1 rounded-xl transition ${
+              view === 'photos'
+                ? 'text-indigo-600 dark:text-indigo-400 font-bold'
+                : 'text-slate-500 dark:text-slate-400 font-medium hover:text-slate-800'
+            }`}
+          >
+            <div className={`p-1 rounded-xl ${view === 'photos' ? 'bg-indigo-50 dark:bg-indigo-950/60' : ''}`}>
+              <ImageIcon className="w-5 h-5" />
+            </div>
+            <span className="text-[10px] tracking-tight mt-0.5">Photos</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigateDrive('vault', null)}
+            className={`flex flex-col items-center justify-center py-1 px-1 rounded-xl transition ${
+              view === 'vault'
+                ? 'text-amber-600 dark:text-amber-400 font-bold'
+                : 'text-slate-500 dark:text-slate-400 font-medium hover:text-slate-800'
+            }`}
+          >
+            <div className={`p-1 rounded-xl ${view === 'vault' ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-600' : ''}`}>
+              <Lock className="w-5 h-5" />
+            </div>
+            <span className="text-[10px] tracking-tight mt-0.5">Vault</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="flex flex-col items-center justify-center py-1 px-1 rounded-xl text-slate-500 dark:text-slate-400 font-medium hover:text-slate-800 transition"
+          >
+            <div className="p-1 rounded-xl">
+              <Menu className="w-5 h-5" />
+            </div>
+            <span className="text-[10px] tracking-tight mt-0.5">More</span>
+          </button>
+        </div>
+      </nav>
 
       {/* Download App Modal */}
       {appDownloadModalOpen && (
@@ -5677,10 +5757,14 @@ function DriveDashboardContent() {
             onTouchStart={() => setContextMenu(null)}
           />
           <div
-            style={{ top: contextMenu.y, left: contextMenu.x }}
             onClick={(e) => e.stopPropagation()}
-            className="fixed z-50 w-56 py-1.5 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800 shadow-2xl shadow-slate-900/20 text-slate-800 dark:text-slate-100 text-xs font-medium animate-in fade-in zoom-in-95 select-none"
+            style={{
+              top: typeof window !== 'undefined' && window.innerWidth >= 640 ? contextMenu.y : undefined,
+              left: typeof window !== 'undefined' && window.innerWidth >= 640 ? Math.min(contextMenu.x, window.innerWidth - 240) : undefined,
+            }}
+            className="fixed z-50 max-sm:inset-x-0 max-sm:bottom-0 max-sm:w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:p-4 max-sm:max-h-[80dvh] max-sm:overflow-y-auto max-sm:shadow-2xl sm:w-56 sm:py-1.5 sm:rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800 text-slate-800 dark:text-slate-100 text-xs font-medium animate-in fade-in select-none pb-[max(1rem,env(safe-area-inset-bottom,0px))]"
           >
+            <div className="sm:hidden w-12 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-3 shrink-0" />
           {contextMenu.target.type === 'blank' && (
             <div className="space-y-0.5 px-1.5">
               <button

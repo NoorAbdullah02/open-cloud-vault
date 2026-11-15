@@ -16,6 +16,7 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:xml/xml.dart';
 import '../../core/api_client.dart';
+import '../../core/sharing_service.dart';
 
 class DriveScreen extends StatefulWidget {
   const DriveScreen({super.key});
@@ -73,6 +74,15 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     _loadDrive();
     _checkForAppUpdate(silent: true);
 
+    const MethodChannel('com.noordrive.app/sharing').setMethodCallHandler((call) async {
+      if (call.method == 'onFilesShared') {
+        _checkIncomingSharedFiles();
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkIncomingSharedFiles();
+    });
+
     // Real-Time Sync Engine: 4s background refresh
     _realtimeSyncTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (mounted && _uploadingName == null && _view != 'offline') {
@@ -83,6 +93,9 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkIncomingSharedFiles();
+    }
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       if (_vaultUnlocked) {
         setState(() {
@@ -439,24 +452,30 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
 
     final formData = FormData.fromMap(mapData);
 
+    DateTime lastProgressTime = DateTime.now();
     final res = await apiClient.dio.post(
       '/drive/upload',
       data: formData,
       cancelToken: _uploadCancelToken,
       onSendProgress: (sent, total) {
         if (!mounted) return;
-        final elapsed = DateTime.now().difference(startTime).inMilliseconds / 1000.0;
-        final speed = elapsed > 0.1 ? sent / elapsed : 0.0;
-        final remaining = (total - sent).clamp(0, total);
-        final eta = speed > 0 ? (remaining / speed).ceil() : 0;
-        setState(() {
-          _uploadingName = name;
-          _uploadLoaded = sent;
-          _uploadTotal = total;
-          _uploadSpeed = speed;
-          _uploadEtaSeconds = eta;
-          _syncingDrive = total > 0 && sent >= total;
-        });
+        final now = DateTime.now();
+        final isDone = total > 0 && sent >= total;
+        if (isDone || now.difference(lastProgressTime).inMilliseconds >= 250) {
+          lastProgressTime = now;
+          final elapsed = now.difference(startTime).inMilliseconds / 1000.0;
+          final speed = elapsed > 0.1 ? sent / elapsed : 0.0;
+          final remaining = (total - sent).clamp(0, total);
+          final eta = speed > 0 ? (remaining / speed).ceil() : 0;
+          setState(() {
+            _uploadingName = name;
+            _uploadLoaded = sent;
+            _uploadTotal = total;
+            _uploadSpeed = speed;
+            _uploadEtaSeconds = eta;
+            _syncingDrive = isDone;
+          });
+        }
       },
     );
 
@@ -1136,7 +1155,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _uploadFiles() async {
-    final result = await FilePicker.platform.pickFiles(allowMultiple: true, withData: true);
+    final result = await FilePicker.platform.pickFiles(allowMultiple: true, withData: false);
     if (result == null || result.files.isEmpty) return;
 
     try {
@@ -1166,12 +1185,183 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     }
   }
 
+  bool _isCheckingSharedFiles = false;
+
+  Future<void> _checkIncomingSharedFiles() async {
+    if (_isCheckingSharedFiles || !mounted) return;
+    _isCheckingSharedFiles = true;
+    try {
+      final shared = await SharingService.getSharedFiles();
+      if (shared.isEmpty) return;
+
+      final count = shared.length;
+      final targetFolderId = await _getOrCreateCameraUploadsFolderId();
+
+      if (!mounted) return;
+      final proceed = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (ctx) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEEF2FF),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(Icons.share, color: Color(0xFF4F46E5)),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Upload $count Shared Item(s)',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Received from phone Gallery / Files app',
+                          style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 180),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  itemCount: shared.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, idx) {
+                    final item = shared[idx];
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        item.mimeType.startsWith('video/')
+                            ? Icons.video_file
+                            : item.mimeType.startsWith('image/')
+                                ? Icons.image
+                                : Icons.insert_drive_file,
+                        color: const Color(0xFF4F46E5),
+                      ),
+                      title: Text(item.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      subtitle: Text(item.mimeType, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onPressed: () {
+                        SharingService.clearSharedFiles();
+                        Navigator.pop(ctx, false);
+                      },
+                      child: const Text('Dismiss'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF4F46E5),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onPressed: () => Navigator.pop(ctx, true),
+                      icon: const Icon(Icons.cloud_upload),
+                      label: Text('Upload Now ($count)'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (proceed != true) {
+        await SharingService.clearSharedFiles();
+        return;
+      }
+
+      int success = 0;
+      for (int i = 0; i < shared.length; i++) {
+        final item = shared[i];
+        if (!mounted) break;
+        setState(() {
+          _uploadingName = '[${i + 1}/$count] ${item.name}';
+        });
+        try {
+          await _uploadSingleFile(item.path, item.name, targetFolderId);
+          success++;
+        } catch (e) {
+          debugPrint('Error uploading shared item ${item.name}: $e');
+        }
+      }
+
+      await SharingService.clearSharedFiles();
+      if (mounted && success > 0) {
+        _showSnack('🎉 $success of $count shared files uploaded to Camera Uploads!');
+        await _loadDrive(silent: true);
+        await _loadUser();
+      }
+    } catch (e) {
+      debugPrint('Error in _checkIncomingSharedFiles: $e');
+    } finally {
+      _isCheckingSharedFiles = false;
+      if (mounted) {
+        setState(() {
+          _uploadingName = null;
+          _syncingDrive = false;
+          _uploadCancelToken = null;
+        });
+      }
+    }
+  }
+
   Future<void> _backupGalleryPhotos() async {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.media,
         allowMultiple: true,
-        withData: true,
+        withData: false,
       );
       if (result == null || result.files.isEmpty) return;
 
@@ -1399,7 +1589,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
       );
       if (customName == null || customName.isEmpty) return;
 
-      final picked = await FilePicker.platform.pickFiles(allowMultiple: true, withData: true);
+      final picked = await FilePicker.platform.pickFiles(allowMultiple: true, withData: false);
       if (picked == null || picked.files.isEmpty) return;
 
       final effectiveParent = _folderId ?? (_view == 'vault' ? (_breadcrumbs.isNotEmpty ? _breadcrumbs.first['id'] : 'vault') : null);
@@ -3166,42 +3356,82 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                 onPressed: () => setState(() => _isGrid = !_isGrid),
                 tooltip: 'Toggle Grid/List',
               ),
-              if (_files.isNotEmpty || _folders.isNotEmpty)
-                IconButton(
-                  icon: const Icon(Icons.select_all, color: Color(0xFF4F46E5)),
-                  onPressed: _selectAll,
-                  tooltip: 'Select All',
-                ),
               IconButton(
                 icon: const Icon(Icons.photo_library_outlined, color: Color(0xFF18181B)),
                 onPressed: _backupGalleryPhotos,
-                tooltip: 'Backup Gallery (Camera Uploads)',
+                tooltip: 'Backup Media (Camera Uploads)',
               ),
-              IconButton(
-                icon: const Icon(Icons.create_new_folder_outlined, color: Color(0xFF18181B)),
-                onPressed: _createFolder,
-                tooltip: 'New Folder',
-              ),
-              IconButton(
-                icon: const Icon(Icons.drive_folder_upload_outlined, color: Color(0xFF18181B)),
-                onPressed: _uploadFolder,
-                tooltip: 'Upload Folder',
-              ),
-              if (_view == 'trash' && (_files.isNotEmpty || _folders.isNotEmpty))
-                IconButton(
-                  icon: const Icon(Icons.delete_sweep, color: Color(0xFFE11D48)),
-                  onPressed: () => _confirmAction(
-                    title: 'Empty Trash?',
-                    message: 'All trashed items will be permanently deleted.',
-                    confirmText: 'Empty Trash',
-                    onConfirm: _emptyTrash,
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert, color: Color(0xFF18181B)),
+                onSelected: (val) {
+                  if (val == 'select_all') _selectAll();
+                  if (val == 'new_folder') _createFolder();
+                  if (val == 'upload_folder') _uploadFolder();
+                  if (val == 'lock_vault') _lockVault();
+                  if (val == 'empty_trash') {
+                    _confirmAction(
+                      title: 'Empty Trash?',
+                      message: 'All trashed items will be permanently deleted.',
+                      confirmText: 'Empty Trash',
+                      onConfirm: _emptyTrash,
+                    );
+                  }
+                },
+                itemBuilder: (ctx) => [
+                  if (_files.isNotEmpty || _folders.isNotEmpty)
+                    const PopupMenuItem(
+                      value: 'select_all',
+                      child: Row(
+                        children: [
+                          Icon(Icons.select_all, size: 18, color: Color(0xFF4F46E5)),
+                          SizedBox(width: 10),
+                          Text('Select All'),
+                        ],
+                      ),
+                    ),
+                  const PopupMenuItem(
+                    value: 'new_folder',
+                    child: Row(
+                      children: [
+                        Icon(Icons.create_new_folder_outlined, size: 18, color: Color(0xFF18181B)),
+                        SizedBox(width: 10),
+                        Text('New Folder'),
+                      ],
+                    ),
                   ),
-                  tooltip: 'Empty Trash',
-                ),
-              IconButton(
-                icon: const Icon(Icons.lock_outline, color: Color(0xFF64748B)),
-                onPressed: _lockVault,
-                tooltip: 'Lock Vault',
+                  const PopupMenuItem(
+                    value: 'upload_folder',
+                    child: Row(
+                      children: [
+                        Icon(Icons.drive_folder_upload_outlined, size: 18, color: Color(0xFF18181B)),
+                        SizedBox(width: 10),
+                        Text('Upload Folder'),
+                      ],
+                    ),
+                  ),
+                  if (_vaultUnlocked)
+                    const PopupMenuItem(
+                      value: 'lock_vault',
+                      child: Row(
+                        children: [
+                          Icon(Icons.lock_outline, size: 18, color: Color(0xFFE11D48)),
+                          SizedBox(width: 10),
+                          Text('Lock Vault'),
+                        ],
+                      ),
+                    ),
+                  if (_view == 'trash' && (_files.isNotEmpty || _folders.isNotEmpty))
+                    const PopupMenuItem(
+                      value: 'empty_trash',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_sweep, size: 18, color: Color(0xFFE11D48)),
+                          SizedBox(width: 10),
+                          Text('Empty Trash'),
+                        ],
+                      ),
+                    ),
+                ],
               ),
             ],
           ],

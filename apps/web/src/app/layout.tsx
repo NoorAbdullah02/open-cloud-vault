@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
 
@@ -11,6 +11,17 @@ export const metadata: Metadata = {
   title: 'NOOR DRIVE — Personal Cloud Vault',
   description: 'Private multi-platform cloud storage ecosystem',
   manifest: '/manifest.webmanifest',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f8fafc' },
+    { media: '(prefers-color-scheme: dark)', color: '#0b0f17' },
+  ],
 };
 
 export default function RootLayout({
