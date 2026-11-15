@@ -1323,7 +1323,31 @@ export class DriveService {
 
   async moveToVault(userId: string, type: 'file' | 'folder', id: string) {
     const vault = await this.getOrCreateVaultFolder(userId);
-    return this.moveItem(userId, type, id, vault.id);
+    const moved = await this.moveItem(userId, type, id, vault.id);
+
+    // Immediately revoke any existing public shares for this item and its descendants
+    try {
+      if (type === 'file') {
+        await this.prisma.share.updateMany({
+          where: { fileId: id, isRevoked: false },
+          data: { isRevoked: true },
+        });
+      } else {
+        const allVaultFolderIds = await this.getAllVaultFolderIds(userId);
+        await this.prisma.share.updateMany({
+          where: {
+            isRevoked: false,
+            OR: [
+              { folderId: { in: allVaultFolderIds } },
+              { file: { folderId: { in: allVaultFolderIds } } },
+            ],
+          },
+          data: { isRevoked: true },
+        });
+      }
+    } catch {}
+
+    return moved;
   }
 
   async moveFromVault(userId: string, type: 'file' | 'folder', id: string) {

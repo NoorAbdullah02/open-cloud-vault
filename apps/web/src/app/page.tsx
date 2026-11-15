@@ -2069,6 +2069,10 @@ function DriveDashboardContent() {
   };
 
   const openShareModal = async (type: 'file' | 'folder', id: string, name: string) => {
+    if (view === 'vault') {
+      showToast('Items inside Secret Vault are strictly private and cannot be shared publicly', 'error');
+      return;
+    }
     setShareModal({ type, id, name });
     setSharePermission(type === 'folder' ? 'EDITOR' : 'VIEWER');
     setShareExpiresHours(1440); // 2 Months default (60 days)
@@ -3966,13 +3970,15 @@ function DriveDashboardContent() {
                                   >
                                     <Download className="w-3.5 h-3.5" />
                                   </button>
-                                  <button
-                                    onClick={() => openShareModal('file', file.id, file.name)}
-                                    title="Share"
-                                    className="p-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-500 hover:text-indigo-600 transition"
-                                  >
-                                    <Share2 className="w-3.5 h-3.5" />
-                                  </button>
+                                  {view !== 'vault' && (
+                                    <button
+                                      onClick={() => openShareModal('file', file.id, file.name)}
+                                      title="Share"
+                                      className="p-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-500 hover:text-indigo-600 transition"
+                                    >
+                                      <Share2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() =>
                                       setRenameModal({ type: 'file', id: file.id, name: file.name })
@@ -4149,13 +4155,15 @@ function DriveDashboardContent() {
                                   >
                                     <Download className="w-4 h-4" />
                                   </button>
-                                  <button
-                                    onClick={() => openShareModal('file', file.id, file.name)}
-                                    title="Share"
-                                    className="p-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-500 hover:text-indigo-600 transition"
-                                  >
-                                    <Share2 className="w-3.5 h-3.5" />
-                                  </button>
+                                  {view !== 'vault' && (
+                                    <button
+                                      onClick={() => openShareModal('file', file.id, file.name)}
+                                      title="Share"
+                                      className="p-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-500 hover:text-indigo-600 transition"
+                                    >
+                                      <Share2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() =>
                                       setRenameModal({ type: 'file', id: file.id, name: file.name })
@@ -4337,18 +4345,20 @@ function DriveDashboardContent() {
                         </button>
                       </>
                     )}
-                    <button
-                      onClick={() =>
-                        openShareModal(
-                          activeDetailItem.type,
-                          activeDetailItem.item.id,
-                          activeDetailItem.item.name,
-                        )
-                      }
-                      className="w-full py-2 px-3 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white font-semibold flex items-center justify-center gap-2 transition shadow-xs active:scale-95"
-                    >
-                      <MessageCircle className="w-4 h-4 fill-white/20" /> Share to WhatsApp / Apps
-                    </button>
+                    {view !== 'vault' && (
+                      <button
+                        onClick={() =>
+                          openShareModal(
+                            activeDetailItem.type,
+                            activeDetailItem.item.id,
+                            activeDetailItem.item.name,
+                          )
+                        }
+                        className="w-full py-2 px-3 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white font-semibold flex items-center justify-center gap-2 transition shadow-xs active:scale-95"
+                      >
+                        <MessageCircle className="w-4 h-4 fill-white/20" /> Share to WhatsApp / Apps
+                      </button>
+                    )}
                   </div>
                 </>
               ) : (
@@ -5870,26 +5880,30 @@ function DriveDashboardContent() {
                   <Printer className="w-4 h-4 text-emerald-500" />
                   <span>Print</span>
                 </button>
-                <button
-                  onClick={() => {
-                    setContextMenu(null);
-                    openShareModal('file', file.id, file.name);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
-                >
-                  <Share2 className="w-4 h-4 text-indigo-500" />
-                  <span>Share link</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setContextMenu(null);
-                    openShareModal('file', file.id, file.name);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-emerald-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-[#25D366] transition"
-                >
-                  <MessageCircle className="w-4 h-4 text-[#25D366]" />
-                  <span>Share to WhatsApp</span>
-                </button>
+                {view !== 'vault' && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setContextMenu(null);
+                        openShareModal('file', file.id, file.name);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
+                    >
+                      <Share2 className="w-4 h-4 text-indigo-500" />
+                      <span>Share link</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setContextMenu(null);
+                        openShareModal('file', file.id, file.name);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-emerald-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-[#25D366] transition"
+                    >
+                      <MessageCircle className="w-4 h-4 text-[#25D366]" />
+                      <span>Share to WhatsApp</span>
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={() => {
                     setContextMenu(null);
@@ -6034,26 +6048,30 @@ function DriveDashboardContent() {
                   <Download className="w-4 h-4 text-sky-500" />
                   <span>Download (.zip)</span>
                 </button>
-                <button
-                  onClick={() => {
-                    setContextMenu(null);
-                    openShareModal('folder', folder.id, folder.name);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
-                >
-                  <Share2 className="w-4 h-4 text-indigo-500" />
-                  <span>Share link</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setContextMenu(null);
-                    openShareModal('folder', folder.id, folder.name);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-emerald-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-[#25D366] transition"
-                >
-                  <MessageCircle className="w-4 h-4 text-[#25D366]" />
-                  <span>Share to WhatsApp</span>
-                </button>
+                {view !== 'vault' && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setContextMenu(null);
+                        openShareModal('folder', folder.id, folder.name);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
+                    >
+                      <Share2 className="w-4 h-4 text-indigo-500" />
+                      <span>Share link</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setContextMenu(null);
+                        openShareModal('folder', folder.id, folder.name);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-emerald-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-[#25D366] transition"
+                    >
+                      <MessageCircle className="w-4 h-4 text-[#25D366]" />
+                      <span>Share to WhatsApp</span>
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={() => {
                     setContextMenu(null);

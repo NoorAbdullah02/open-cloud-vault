@@ -11,6 +11,14 @@ export const metadata: Metadata = {
   title: 'NOOR DRIVE — Personal Cloud Vault',
   description: 'Private multi-platform cloud storage ecosystem',
   manifest: '/manifest.webmanifest',
+  robots: {
+    index: false,
+    follow: false,
+    noarchive: true,
+    nosnippet: true,
+    noimageindex: true,
+    nocache: true,
+  },
 };
 
 export const viewport: Viewport = {

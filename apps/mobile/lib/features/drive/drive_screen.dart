@@ -2737,6 +2737,10 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _openShareDialog(String type, String id, String name) async {
+    if (_view == 'vault') {
+      _showSnack('Items inside Secret Vault are strictly private and cannot be shared.', isError: true);
+      return;
+    }
     String permission = type == 'folder' ? 'EDITOR' : 'VIEWER';
     int expiresHours = 1440; // 2 Months default (60 days)
 
@@ -3990,12 +3994,13 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                                       PopupMenuItem(value: 'restore', child: Text('Restore')),
                                                       PopupMenuItem(value: 'delete', child: Text('Delete Forever')),
                                                     ]
-                                                  : const [
-                                                      PopupMenuItem(value: 'download', child: Text('Download (.zip)')),
-                                                      PopupMenuItem(value: 'share', child: Text('Share')),
-                                                      PopupMenuItem(value: 'rename', child: Text('Rename')),
-                                                      PopupMenuItem(value: 'star', child: Text('Star / Unstar')),
-                                                      PopupMenuItem(value: 'trash', child: Text('Move to Trash')),
+                                                  : [
+                                                      const PopupMenuItem(value: 'download', child: Text('Download (.zip)')),
+                                                      if (_view != 'vault')
+                                                        const PopupMenuItem(value: 'share', child: Text('Share')),
+                                                      const PopupMenuItem(value: 'rename', child: Text('Rename')),
+                                                      const PopupMenuItem(value: 'star', child: Text('Star / Unstar')),
+                                                      const PopupMenuItem(value: 'trash', child: Text('Move to Trash')),
                                                     ],
                                             ),
                                           ),
@@ -4178,7 +4183,8 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                                     ),
                                                     const PopupMenuItem(value: 'download', child: Text('Download & Open')),
                                                     const PopupMenuItem(value: 'save_device', child: Text('Save to Device / SSD')),
-                                                    const PopupMenuItem(value: 'share', child: Text('Share')),
+                                                    if (_view != 'vault')
+                                                      const PopupMenuItem(value: 'share', child: Text('Share')),
                                                     PopupMenuItem(
                                                       value: 'print',
                                                       child: Row(
@@ -4267,12 +4273,13 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                                 PopupMenuItem(value: 'restore', child: Text('Restore')),
                                                 PopupMenuItem(value: 'delete', child: Text('Delete Forever')),
                                               ]
-                                            : const [
-                                                PopupMenuItem(value: 'download', child: Text('Download (.zip)')),
-                                                PopupMenuItem(value: 'share', child: Text('Share')),
-                                                PopupMenuItem(value: 'rename', child: Text('Rename')),
-                                                PopupMenuItem(value: 'star', child: Text('Star / Unstar')),
-                                                PopupMenuItem(value: 'trash', child: Text('Move to Trash')),
+                                            : [
+                                                const PopupMenuItem(value: 'download', child: Text('Download (.zip)')),
+                                                if (_view != 'vault')
+                                                  const PopupMenuItem(value: 'share', child: Text('Share')),
+                                                const PopupMenuItem(value: 'rename', child: Text('Rename')),
+                                                const PopupMenuItem(value: 'star', child: Text('Star / Unstar')),
+                                                const PopupMenuItem(value: 'trash', child: Text('Move to Trash')),
                                               ],
                                       ),
                                     ),
@@ -4432,8 +4439,9 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                                   ),
                                                 ),
                                                 const PopupMenuItem(value: 'download', child: Text('Download & Open')),
-                                                    const PopupMenuItem(value: 'save_device', child: Text('Save to Device / SSD')),
-                                                const PopupMenuItem(value: 'share', child: Text('Share')),
+                                                const PopupMenuItem(value: 'save_device', child: Text('Save to Device / SSD')),
+                                                if (_view != 'vault')
+                                                  const PopupMenuItem(value: 'share', child: Text('Share')),
                                                 PopupMenuItem(
                                                   value: 'print',
                                                   child: Row(

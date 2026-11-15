@@ -24,6 +24,30 @@ export class SharesService {
     private readonly mail: MailService,
   ) {}
 
+  private async getAllVaultFolderIds(userId: string): Promise<string[]> {
+    const vaultFolder = await this.prisma.folder.findFirst({
+      where: { ownerId: userId, name: 'Secret Vault', parentId: null },
+      select: { id: true },
+    });
+    if (!vaultFolder) return [];
+    const vaultIds = new Set<string>([vaultFolder.id]);
+    const allFolders = await this.prisma.folder.findMany({
+      where: { ownerId: userId, isTrash: false },
+      select: { id: true, parentId: true },
+    });
+    let added = true;
+    while (added) {
+      added = false;
+      for (const f of allFolders) {
+        if (f.parentId && vaultIds.has(f.parentId) && !vaultIds.has(f.id)) {
+          vaultIds.add(f.id);
+          added = true;
+        }
+      }
+    }
+    return Array.from(vaultIds);
+  }
+
   async createShare(
     ownerId: string,
     dto: {
@@ -33,12 +57,19 @@ export class SharesService {
       expiresInHours?: number;
     },
   ) {
+    const allVaultFolderIds = await this.getAllVaultFolderIds(ownerId);
     if (dto.type === 'file') {
       const file = await this.prisma.file.findUnique({ where: { id: dto.targetId } });
       if (!file || file.ownerId !== ownerId) throw new NotFoundException('File not found');
+      if (file.folderId && allVaultFolderIds.includes(file.folderId)) {
+        throw new ForbiddenException('Items inside Secret Vault are strictly private and cannot be shared publicly');
+      }
     } else {
       const folder = await this.prisma.folder.findUnique({ where: { id: dto.targetId } });
       if (!folder || folder.ownerId !== ownerId) throw new NotFoundException('Folder not found');
+      if (allVaultFolderIds.includes(folder.id)) {
+        throw new ForbiddenException('Secret Vault folders are strictly private and cannot be shared publicly');
+      }
     }
 
     const shareToken = crypto.randomBytes(24).toString('base64url');
@@ -117,6 +148,15 @@ export class SharesService {
     if (share.expiresAt && share.expiresAt < new Date()) {
       throw new ForbiddenException('This share link has expired');
     }
+
+    const allVaultFolderIds = await this.getAllVaultFolderIds(share.ownerId);
+    if (share.fileId && share.file?.folderId && allVaultFolderIds.includes(share.file.folderId)) {
+      throw new ForbiddenException('This item is strictly private in Secret Vault and cannot be accessed publicly');
+    }
+    if (share.folderId && allVaultFolderIds.includes(share.folderId)) {
+      throw new ForbiddenException('This item is strictly private in Secret Vault and cannot be accessed publicly');
+    }
+
     return share;
   }
 
@@ -227,6 +267,11 @@ export class SharesService {
       include: { storageObject: true },
     });
     if (!file || file.isTrash) throw new NotFoundException('File not found');
+
+    const allVaultFolderIds = await this.getAllVaultFolderIds(share.ownerId);
+    if (file.folderId && allVaultFolderIds.includes(file.folderId)) {
+      throw new ForbiddenException('This file is strictly private in Secret Vault and cannot be downloaded');
+    }
 
     if (share.fileId) {
       if (share.fileId !== fileId) throw new ForbiddenException('Access denied');
