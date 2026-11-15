@@ -117,6 +117,24 @@ function formatDateTime(iso?: string) {
   });
 }
 
+function isPrintableFile(file: any): boolean {
+  if (!file) return false;
+  const mime = (file.mimeType || '').toLowerCase();
+  const ext = (file.extension || file.name?.split('.').pop() || '').toLowerCase().replace(/^\./, '').trim();
+  if (
+    mime.startsWith('video/') ||
+    mime.startsWith('audio/') ||
+    mime.includes('zip') ||
+    mime.includes('tar') ||
+    mime.includes('compressed') ||
+    mime.includes('archive') ||
+    ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp', 'flv', 'wmv', 'ts', 'ogv', 'mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'opus', 'wma', 'zip', 'rar', '7z', 'tar', 'gz', 'iso'].includes(ext)
+  ) {
+    return false;
+  }
+  return true;
+}
+
 function getFileVisual(mime: string, extension?: string, name?: string) {
   const ext = (extension || name?.split('.').pop() || '').toLowerCase().replace(/^\./, '').trim();
   const m = (mime || '').toLowerCase();
@@ -4449,12 +4467,14 @@ function DriveDashboardContent() {
                         >
                           <Download className="w-4 h-4" /> Download
                         </button>
-                        <button
-                          onClick={() => handlePrint(activeDetailItem.item)}
-                          className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold flex items-center justify-center gap-2 transition"
-                        >
-                          <Printer className="w-4 h-4 text-emerald-500" /> Print File
-                        </button>
+                        {isPrintableFile(activeDetailItem.item) && (
+                          <button
+                            onClick={() => handlePrint(activeDetailItem.item)}
+                            className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold flex items-center justify-center gap-2 transition"
+                          >
+                            <Printer className="w-4 h-4 text-emerald-500" /> Print File
+                          </button>
+                        )}
                         <button
                           onClick={() => triggerReplaceFile(activeDetailItem.item)}
                           className="w-full py-2 px-3 rounded-xl bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 dark:hover:bg-violet-900/50 text-violet-700 dark:text-violet-300 font-semibold flex items-center justify-center gap-2 transition"
@@ -4672,16 +4692,18 @@ function DriveDashboardContent() {
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() =>
-                  handlePrint(previewModal.file, previewModal.url, previewModal.textContent)
-                }
-                className="px-3 sm:px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-xs sm:text-sm font-medium flex items-center gap-1.5"
-                title="Print File"
-              >
-                <Printer className="w-4 h-4 text-emerald-400" />
-                <span className="hidden sm:inline">Print</span>
-              </button>
+              {isPrintableFile(previewModal.file) && (
+                <button
+                  onClick={() =>
+                    handlePrint(previewModal.file, previewModal.url, previewModal.textContent)
+                  }
+                  className="px-3 sm:px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-xs sm:text-sm font-medium flex items-center gap-1.5"
+                  title="Print File"
+                >
+                  <Printer className="w-4 h-4 text-emerald-400" />
+                  <span className="hidden sm:inline">Print</span>
+                </button>
+              )}
               <button
                 onClick={() => handleDownload(previewModal.file)}
                 className="px-3 sm:px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-xs sm:text-sm font-medium flex items-center gap-1.5"
@@ -6004,16 +6026,18 @@ function DriveDashboardContent() {
                   <Download className="w-4 h-4 text-sky-500" />
                   <span>Download</span>
                 </button>
-                <button
-                  onClick={() => {
-                    setContextMenu(null);
-                    handlePrint(file);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
-                >
-                  <Printer className="w-4 h-4 text-emerald-500" />
-                  <span>Print</span>
-                </button>
+                {isPrintableFile(file) && (
+                  <button
+                    onClick={() => {
+                      setContextMenu(null);
+                      handlePrint(file);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition"
+                  >
+                    <Printer className="w-4 h-4 text-emerald-500" />
+                    <span>Print</span>
+                  </button>
+                )}
                 {view !== 'vault' && (
                   <>
                     <button

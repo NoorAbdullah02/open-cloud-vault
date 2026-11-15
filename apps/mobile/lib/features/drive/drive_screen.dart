@@ -2661,7 +2661,30 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     }
   }
 
+  bool _isPrintableFile(dynamic file) {
+    if (file == null) return false;
+    final mime = (file['mimeType'] ?? '').toString().toLowerCase();
+    final name = (file['name'] ?? '').toString().toLowerCase();
+    final ext = (file['extension'] ?? (name.contains('.') ? name.split('.').last : '')).toString().toLowerCase().replaceAll(RegExp(r'^\.'), '');
+
+    // Videos, Audios, and Archives are never printable
+    if (mime.startsWith('video/') ||
+        mime.startsWith('audio/') ||
+        mime.contains('zip') ||
+        mime.contains('tar') ||
+        mime.contains('compressed') ||
+        mime.contains('archive') ||
+        ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp', 'flv', 'wmv', 'ts', 'ogv', 'mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'opus', 'wma', 'zip', 'rar', '7z', 'tar', 'gz', 'iso'].contains(ext)) {
+      return false;
+    }
+    return true;
+  }
+
   Future<void> _printFile(dynamic file) async {
+    if (!_isPrintableFile(file)) {
+      _showSnack('Printing is not supported for video or media files.', isError: true);
+      return;
+    }
     try {
       _showSnack('Preparing "${file['name']}" for printing...');
       final dir = await getTemporaryDirectory();
@@ -4208,16 +4231,17 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                                     const PopupMenuItem(value: 'save_device', child: Text('Save to Device / SSD')),
                                                     if (_view != 'vault')
                                                       const PopupMenuItem(value: 'share', child: Text('Share')),
-                                                    PopupMenuItem(
-                                                      value: 'print',
-                                                      child: Row(
-                                                        children: const [
-                                                          Icon(Icons.print, size: 16, color: Color(0xFF64748B)),
-                                                          SizedBox(width: 8),
-                                                          Text('Print File'),
-                                                        ],
+                                                    if (_isPrintableFile(file))
+                                                      PopupMenuItem(
+                                                        value: 'print',
+                                                        child: Row(
+                                                          children: const [
+                                                            Icon(Icons.print, size: 16, color: Color(0xFF64748B)),
+                                                            SizedBox(width: 8),
+                                                            Text('Print File'),
+                                                          ],
+                                                        ),
                                                       ),
-                                                    ),
                                                     PopupMenuItem(value: 'rename', child: Text('Rename')),
                                                     PopupMenuItem(value: 'star', child: Text('Star / Unstar')),
                                                     PopupMenuItem(value: 'trash', child: Text('Move to Trash')),
@@ -4466,16 +4490,17 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                                 const PopupMenuItem(value: 'save_device', child: Text('Save to Device / SSD')),
                                                 if (_view != 'vault')
                                                   const PopupMenuItem(value: 'share', child: Text('Share')),
-                                                PopupMenuItem(
-                                                  value: 'print',
-                                                  child: Row(
-                                                    children: const [
-                                                      Icon(Icons.print, size: 16, color: Color(0xFF64748B)),
-                                                      SizedBox(width: 8),
-                                                      Text('Print File'),
-                                                    ],
+                                                if (_isPrintableFile(file))
+                                                  PopupMenuItem(
+                                                    value: 'print',
+                                                    child: Row(
+                                                      children: const [
+                                                        Icon(Icons.print, size: 16, color: Color(0xFF64748B)),
+                                                        SizedBox(width: 8),
+                                                        Text('Print File'),
+                                                      ],
+                                                    ),
                                                   ),
-                                                ),
                                                 PopupMenuItem(value: 'rename', child: Text('Rename')),
                                                 PopupMenuItem(value: 'star', child: Text('Star / Unstar')),
                                                 PopupMenuItem(value: 'trash', child: Text('Move to Trash')),

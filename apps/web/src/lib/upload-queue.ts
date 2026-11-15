@@ -96,3 +96,4 @@ export async function clearPendingUploads(): Promise<void> {
     console.warn('[NOOR DRIVE] Failed to clear pending uploads:', err);
   }
 }
+

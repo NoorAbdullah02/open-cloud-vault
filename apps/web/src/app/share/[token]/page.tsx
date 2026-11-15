@@ -38,6 +38,24 @@ function formatBytes(bytesStr: string | number) {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
 
+function isPrintableFile(file: any): boolean {
+  if (!file) return false;
+  const mime = (file.mimeType || '').toLowerCase();
+  const ext = (file.extension || file.name?.split('.').pop() || '').toLowerCase().replace(/^\./, '').trim();
+  if (
+    mime.startsWith('video/') ||
+    mime.startsWith('audio/') ||
+    mime.includes('zip') ||
+    mime.includes('tar') ||
+    mime.includes('compressed') ||
+    mime.includes('archive') ||
+    ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp', 'flv', 'wmv', 'ts', 'ogv', 'mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'opus', 'wma', 'zip', 'rar', '7z', 'tar', 'gz', 'iso'].includes(ext)
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export default function PublicSharePage() {
   const params = useParams();
   const token = params.token as string;
@@ -383,15 +401,17 @@ export default function PublicSharePage() {
                   <MessageCircle className="w-4 h-4 fill-white/20" />
                   <span>WhatsApp</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => handlePrintShareFile(data.file)}
-                  className="min-h-[44px] px-3.5 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs sm:text-sm font-semibold shadow-xs flex items-center justify-center gap-1.5 transition border border-slate-200 active:scale-[0.98]"
-                  title="Print File"
-                >
-                  <Printer className="w-4 h-4 text-slate-600" />
-                  <span>Print</span>
-                </button>
+                {isPrintableFile(data.file) && (
+                  <button
+                    type="button"
+                    onClick={() => handlePrintShareFile(data.file)}
+                    className="min-h-[44px] px-3.5 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs sm:text-sm font-semibold shadow-xs flex items-center justify-center gap-1.5 transition border border-slate-200 active:scale-[0.98]"
+                    title="Print File"
+                  >
+                    <Printer className="w-4 h-4 text-slate-600" />
+                    <span>Print</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -631,13 +651,15 @@ export default function PublicSharePage() {
                         >
                           <Eye className="w-3.5 h-3.5" /> Preview
                         </button>
-                        <button
-                          onClick={() => handlePrintShareFile(file)}
-                          className="min-h-[36px] px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 flex items-center gap-1 transition"
-                          title="Print File"
-                        >
-                          <Printer className="w-3.5 h-3.5" />
-                        </button>
+                        {isPrintableFile(file) && (
+                          <button
+                            onClick={() => handlePrintShareFile(file)}
+                            className="min-h-[36px] px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 flex items-center gap-1 transition"
+                            title="Print File"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                       <a
                         href={getDownloadLink(file.id, false)}
@@ -660,13 +682,15 @@ export default function PublicSharePage() {
           <div className="flex items-center justify-between text-white pb-4">
             <span className="font-semibold truncate">{previewFile.name}</span>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => handlePrintShareFile(previewFile)}
-                className="px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-sm font-medium flex items-center gap-1.5"
-                title="Print File"
-              >
-                <Printer className="w-4 h-4" /> Print
-              </button>
+              {isPrintableFile(previewFile) && (
+                <button
+                  onClick={() => handlePrintShareFile(previewFile)}
+                  className="px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-sm font-medium flex items-center gap-1.5"
+                  title="Print File"
+                >
+                  <Printer className="w-4 h-4" /> Print
+                </button>
+              )}
               <a
                 href={getDownloadLink(previewFile.id, false)}
                 download={previewFile.name}
