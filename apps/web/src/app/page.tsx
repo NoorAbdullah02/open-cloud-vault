@@ -53,6 +53,7 @@ import {
   Presentation,
   FileSpreadsheet,
   AlertCircle,
+  AlertTriangle,
   Layers,
   CheckSquare,
   MinusSquare,
@@ -86,6 +87,13 @@ import ZipViewer from '@/components/ZipViewer';
 import CodeViewer from '@/components/CodeViewer';
 import TextEditorViewer from '@/components/TextEditorViewer';
 import SpotlightPalette from '@/components/SpotlightPalette';
+import {
+  savePendingUpload,
+  removePendingUpload,
+  getPendingUploads,
+  clearPendingUploads,
+  PendingUploadItem,
+} from '@/lib/upload-queue';
 
 type ViewMode = 'my-drive' | 'recent' | 'starred' | 'photos' | 'videos' | 'documents' | 'trash' | 'vault' | 'camera' | 'camera-uploads';
 
@@ -745,6 +753,7 @@ function DriveDashboardContent() {
   const [uploadingFiles, setUploadingFiles] = useState<
     { id: string; name: string; progress: UploadProgressInfo; controller: AbortController }[]
   >([]);
+  const [interruptedUploads, setInterruptedUploads] = useState<PendingUploadItem[]>([]);
 
   // Modals
   const [newFolderOpen, setNewFolderOpen] = useState(false);
@@ -1209,6 +1218,37 @@ function DriveDashboardContent() {
     };
   }, []);
 
+  // Accidental Page Refresh / Tab Close Prevention while Uploading
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (uploadingFiles.length > 0) {
+        e.preventDefault();
+        e.returnValue = 'Uploads are currently in progress. If you leave or reload the page, the upload will be cancelled.';
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [uploadingFiles.length]);
+
+  // Check for interrupted uploads from previous session / page refresh
+  useEffect(() => {
+    getPendingUploads()
+      .then((pending) => {
+        if (pending && pending.length > 0) {
+          const valid = pending.filter(
+            (p) => p.file && Date.now() - p.addedAt < 24 * 60 * 60 * 1000,
+          );
+          if (valid.length > 0) {
+            setInterruptedUploads(valid);
+          } else {
+            clearPendingUploads().catch(() => {});
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const isInput = (e.target as HTMLElement)?.closest('input, textarea, [contenteditable="true"]');
@@ -1351,8 +1391,26 @@ function DriveDashboardContent() {
       console.log('[NOOR DRIVE] Executing pipeline for', arr.length, 'files');
       showToast(`Uploading ${arr.length} item${arr.length > 1 ? 's' : ''}...`);
 
+      // Persist files in IndexedDB queue so refresh or crash can be recovered
+      for (const file of arr) {
+        const queueId = `${file.name}-${file.size}-${(file as any).lastModified || Date.now()}`;
+        const relPath = ((file as any)._relativePath || (file as any).webkitRelativePath) as string | undefined;
+        savePendingUpload({
+          id: queueId,
+          name: file.name,
+          file,
+          targetFolderId: folderId,
+          view,
+          backend: selectedBackend,
+          relativePath: relPath,
+          addedAt: Date.now(),
+        }).catch(() => {});
+      }
+
       const folderCache = new Map<string, string>();
+      const inFlightFolders = new Map<string, Promise<string>>();
       const baseFolder = folderId || (view === 'vault' ? (breadcrumbs[0]?.id || 'vault') : null);
+
       const resolveTargetFolder = async (relativePath?: string): Promise<string | null> => {
         if (!relativePath || !relativePath.includes('/')) return baseFolder;
         const parts = relativePath.split('/').slice(0, -1);
@@ -1362,83 +1420,120 @@ function DriveDashboardContent() {
           builtPath = builtPath ? `${builtPath}/${part}` : part;
           if (folderCache.has(builtPath)) {
             currentParent = folderCache.get(builtPath)!;
+          } else if (inFlightFolders.has(builtPath)) {
+            currentParent = await inFlightFolders.get(builtPath)!;
           } else {
-            const created = await apiFetch('/drive/folders', {
-              method: 'POST',
-              body: JSON.stringify({ name: part, parentId: currentParent, view }),
-            });
-            folderCache.set(builtPath, created.id);
-            currentParent = created.id;
+            const creationPromise = (async () => {
+              const created = await apiFetch('/drive/folders', {
+                method: 'POST',
+                body: JSON.stringify({ name: part, parentId: currentParent, view }),
+              });
+              folderCache.set(builtPath, created.id);
+              return created.id;
+            })();
+            inFlightFolders.set(builtPath, creationPromise);
+            currentParent = await creationPromise;
           }
         }
         return currentParent;
       };
 
-      for (const file of arr) {
-        const uploadId = `${file.name}-${Date.now()}-${Math.random()}`;
-        const controller = new AbortController();
-        setUploadingFiles((prev) => [
-          ...prev,
-          {
-            id: uploadId,
-            name: file.name,
-            controller,
-            progress: {
-              loadedBytes: 0,
-              totalBytes: file.size,
-              percent: 0,
-              speedBytesPerSec: 0,
-              etaSeconds: 0,
-              phase: 'uploading',
+      // Concurrently upload up to 3 files simultaneously for maximum throughput
+      const CONCURRENCY_LIMIT = 3;
+      let currentIndex = 0;
+
+      const uploadWorker = async () => {
+        while (currentIndex < arr.length) {
+          const fileIndex = currentIndex++;
+          const file = arr[fileIndex];
+          const queueId = `${file.name}-${file.size}-${(file as any).lastModified || Date.now()}`;
+          const uploadId = `${file.name}-${Date.now()}-${Math.random()}`;
+          const controller = new AbortController();
+
+          setUploadingFiles((prev) => [
+            ...prev,
+            {
+              id: uploadId,
+              name: file.name,
+              controller,
+              progress: {
+                loadedBytes: 0,
+                totalBytes: file.size,
+                percent: 0,
+                speedBytesPerSec: 0,
+                etaSeconds: 0,
+                phase: 'uploading',
+              },
             },
-          },
-        ]);
+          ]);
 
-        try {
-          const relPath = ((file as any)._relativePath || (file as any).webkitRelativePath) as
-            | string
-            | undefined;
-          const targetFolderId = await resolveTargetFolder(relPath);
-          const effectiveFolderId = targetFolderId || (view === 'vault' ? (breadcrumbs[0]?.id || 'vault') : undefined);
+          try {
+            const relPath = ((file as any)._relativePath || (file as any).webkitRelativePath) as
+              | string
+              | undefined;
+            const targetFolderId = await resolveTargetFolder(relPath);
+            const effectiveFolderId = targetFolderId || (view === 'vault' ? (breadcrumbs[0]?.id || 'vault') : undefined);
 
-          const formData = new FormData();
-          formData.append('file', file);
-          if (effectiveFolderId) formData.append('folderId', effectiveFolderId);
-          if (view) formData.append('view', view);
-          formData.append('backend', selectedBackend);
+            const formData = new FormData();
+            formData.append('file', file);
+            if (effectiveFolderId) formData.append('folderId', effectiveFolderId);
+            if (view) formData.append('view', view);
+            formData.append('backend', selectedBackend);
 
-          const uploadRes = await uploadFileWithProgress(
-            formData,
-            (progress) => {
-              setUploadingFiles((prev) =>
-                prev.map((u) => (u.id === uploadId ? { ...u, progress } : u)),
-              );
-            },
-            controller.signal,
-          );
-          if (uploadRes?.isDeduplicated) {
-            showToast(`⚡ Instant 0ms upload: "${file.name}" deduplicated via SHA-256 (0 bytes transferred)!`);
-          } else {
-            showToast(`✅ Upload complete: "${file.name}" saved to NOOR DRIVE`);
+            const uploadRes = await uploadFileWithProgress(
+              formData,
+              (progress) => {
+                setUploadingFiles((prev) =>
+                  prev.map((u) => (u.id === uploadId ? { ...u, progress } : u)),
+                );
+              },
+              controller.signal,
+            );
+            if (uploadRes?.isDeduplicated) {
+              showToast(`⚡ Instant 0ms upload: "${file.name}" deduplicated via SHA-256 (0 bytes transferred)!`);
+            } else {
+              showToast(`✅ Upload complete: "${file.name}" saved to NOOR DRIVE`);
+            }
+            notifyUploadComplete(file.name, uploadRes?.isDeduplicated);
+            await removePendingUpload(queueId).catch(() => {});
+          } catch (err: any) {
+            console.error('[NOOR DRIVE] Upload error for file', file.name, err);
+            if (err.message === 'Upload cancelled') {
+              showToast(`Cancelled "${file.name}"`, 'error');
+              await removePendingUpload(queueId).catch(() => {});
+            } else {
+              showToast(`${file.name}: ${err.message}`, 'error');
+            }
+          } finally {
+            setUploadingFiles((prev) => prev.filter((u) => u.id !== uploadId));
           }
-          notifyUploadComplete(file.name, uploadRes?.isDeduplicated);
-        } catch (err: any) {
-          console.error('[NOOR DRIVE] Upload error for file', file.name, err);
-          if (err.message === 'Upload cancelled') {
-            showToast(`Cancelled "${file.name}"`, 'error');
-          } else {
-            showToast(`${file.name}: ${err.message}`, 'error');
-          }
-        } finally {
-          setUploadingFiles((prev) => prev.filter((u) => u.id !== uploadId));
         }
-      }
+      };
+
+      const workerCount = Math.min(CONCURRENCY_LIMIT, arr.length);
+      await Promise.all(Array.from({ length: workerCount }, () => uploadWorker()));
+
       driveViewCache.clear();
       loadDrive(true);
       loadUser();
     },
     [folderId, selectedBackend, loadDrive, loadUser, view, breadcrumbs],
   );
+
+  const handleResumeInterruptedUploads = useCallback(() => {
+    const filesToUpload = interruptedUploads.map((item) => item.file).filter(Boolean);
+    setInterruptedUploads([]);
+    clearPendingUploads().catch(() => {});
+    if (filesToUpload.length > 0) {
+      showToast(`Resuming ${filesToUpload.length} interrupted upload${filesToUpload.length > 1 ? 's' : ''}...`);
+      executeUploadPipeline(filesToUpload);
+    }
+  }, [interruptedUploads, executeUploadPipeline]);
+
+  const handleDismissInterruptedUploads = useCallback(() => {
+    setInterruptedUploads([]);
+    clearPendingUploads().catch(() => {});
+  }, []);
 
   const handleUploadFiles = useCallback(
     async (fileList: FileList | File[]) => {
@@ -3361,9 +3456,48 @@ function DriveDashboardContent() {
             )}
           </div>
 
+          {/* Interrupted Upload Recovery Banner (after refresh or browser restart) */}
+          {interruptedUploads.length > 0 && (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+              <div className="flex items-center gap-3 min-w-0">
+                <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 dark:text-white truncate">
+                    Interrupted upload detected ({interruptedUploads.length} file{interruptedUploads.length > 1 ? 's' : ''})
+                  </p>
+                  <p className="text-xs text-slate-500 truncate">
+                    Upload was stopped when the page was refreshed. Click Resume to continue uploading.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={handleResumeInterruptedUploads}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold flex items-center gap-1.5 transition shadow-sm"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Resume Upload
+                </button>
+                <button
+                  onClick={handleDismissInterruptedUploads}
+                  className="px-3 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Active Uploads Banner with MB, Speed, and ETA */}
           {uploadingFiles.length > 0 && (
             <div className="space-y-2.5">
+              <div className="flex items-center justify-between text-xs font-medium text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 px-3.5 py-2 rounded-xl border border-amber-200 dark:border-amber-800/40 shadow-xs">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 animate-pulse" />
+                  <span>
+                    Upload in progress ({uploadingFiles.length} file{uploadingFiles.length > 1 ? 's' : ''}) — please keep this tab open and do not refresh or close.
+                  </span>
+                </div>
+              </div>
               {uploadingFiles.map((u) => (
                 <div
                   key={u.id}

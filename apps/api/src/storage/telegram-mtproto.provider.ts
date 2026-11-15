@@ -7,6 +7,7 @@ import { Readable, PassThrough } from 'stream';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import bigInt from 'big-integer';
 import {
   GetObjectParams,
   IStorageProvider,
@@ -230,13 +231,73 @@ export class TelegramMtprotoProvider implements IStorageProvider {
       throw new BadRequestException('File not found in Telegram vault');
     }
 
-    const buffer = (await client.downloadMedia(message, {})) as Buffer;
-    if (params.range) {
-      const start = Math.max(0, params.range.start);
-      const end = Math.min(buffer.length - 1, params.range.end);
-      return Readable.from(buffer.subarray(start, end + 1));
+    const start = params.range ? Math.max(0, params.range.start) : 0;
+    const requestedBytes = params.range ? params.range.end - start + 1 : undefined;
+
+    // High performance streaming: Use iterDownload for instant chunk delivery & range streaming
+    try {
+      const passThrough = new PassThrough();
+      // 4096 is MIN_CHUNK_SIZE for GramJS offset alignment
+      const alignedStart = start - (start % 4096);
+      const leadingSkip = start - alignedStart;
+
+      (async () => {
+        try {
+          let sentBytes = 0;
+          for await (const chunk of client.iterDownload({
+            file: message.media,
+            offset: bigInt(alignedStart),
+            requestSize: 512 * 1024,
+          })) {
+            let bufferChunk: Buffer = chunk as Buffer;
+            if (leadingSkip > 0 && sentBytes === 0) {
+              bufferChunk = bufferChunk.subarray(leadingSkip);
+            }
+            if (requestedBytes !== undefined) {
+              const remaining = requestedBytes - sentBytes;
+              if (remaining <= 0) break;
+              if (bufferChunk.length > remaining) {
+                bufferChunk = bufferChunk.subarray(0, remaining);
+              }
+            }
+            sentBytes += bufferChunk.length;
+            const canContinue = passThrough.write(bufferChunk);
+            if (!canContinue) {
+              await new Promise((resolve) => passThrough.once('drain', resolve));
+            }
+            if (requestedBytes !== undefined && sentBytes >= requestedBytes) {
+              break;
+            }
+          }
+          passThrough.end();
+        } catch (streamErr) {
+          this.logger.warn(`iterDownload streaming failed, falling back to downloadMedia: ${streamErr}`);
+          try {
+            const buffer = (await client.downloadMedia(message, {})) as Buffer;
+            if (params.range) {
+              const subStart = Math.max(0, params.range.start);
+              const subEnd = Math.min(buffer.length - 1, params.range.end);
+              passThrough.end(buffer.subarray(subStart, subEnd + 1));
+            } else {
+              passThrough.end(buffer);
+            }
+          } catch (fallbackErr) {
+            passThrough.destroy(fallbackErr as Error);
+          }
+        }
+      })();
+
+      return passThrough;
+    } catch (e: any) {
+      this.logger.warn(`Could not start iterDownload stream: ${e.message}, falling back to downloadMedia`);
+      const buffer = (await client.downloadMedia(message, {})) as Buffer;
+      if (params.range) {
+        const subStart = Math.max(0, params.range.start);
+        const subEnd = Math.min(buffer.length - 1, params.range.end);
+        return Readable.from(buffer.subarray(subStart, subEnd + 1));
+      }
+      return Readable.from(buffer);
     }
-    return Readable.from(buffer);
   }
 
   async deleteObject(params: GetObjectParams): Promise<void> {

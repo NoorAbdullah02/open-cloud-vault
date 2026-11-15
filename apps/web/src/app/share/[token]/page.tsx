@@ -110,6 +110,18 @@ export default function PublicSharePage() {
   }, [loadShare]);
 
   useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (uploading) {
+        e.preventDefault();
+        e.returnValue = 'Upload in progress. If you leave or reload the page, the upload will be cancelled.';
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [uploading]);
+
+  useEffect(() => {
     if (data?.type !== 'folder' || data?.permission !== 'EDITOR') return;
     const prevent = (e: DragEvent) => e.preventDefault();
     const handleWindowDrop = (e: DragEvent) => {

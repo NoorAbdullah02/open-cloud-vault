@@ -91,7 +91,7 @@ export class SharesController {
       }
     } catch {}
     return {
-      version: 'v1.0.50',
+      version: 'v1.0.51',
       sizeBytes: 30597499,
       downloadUrl:
         'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.apk',
@@ -157,8 +157,18 @@ export class SharesController {
       userAgent: req.headers['user-agent'],
       referer: (req.headers['referer'] || req.headers['referrer']) as string,
     };
-    const fileRecord = await this.sharesService.downloadSharedFile(token, fileId, meta);
-    const file = fileRecord.file;
+    const rangeHeader = req.headers.range;
+    let parsedRange: { start: number; end: number } | undefined;
+    if (rangeHeader && rangeHeader.startsWith('bytes=')) {
+      const parts = rangeHeader.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : undefined;
+      if (!isNaN(start)) {
+        parsedRange = { start, end: end !== undefined && !isNaN(end) ? end : -1 };
+      }
+    }
+
+    const file = await this.sharesService.getSharedFileRecord(token, fileId, meta, parsedRange);
     const totalSize = Number(file.sizeBytes);
     const disposition = inline === 'true' ? 'inline' : 'attachment';
     const accurateMime = getAccurateMimeType(file.extension || file.name.split('.').pop() || '', file.mimeType);
@@ -166,12 +176,12 @@ export class SharesController {
 
     res.setHeader('Content-Type', accurateMime);
     res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Connection', 'keep-alive');
     res.setHeader(
       'Content-Disposition',
       `${disposition}; filename="${safeAscii}"; filename*=UTF-8''${encodeURIComponent(file.name)}`,
     );
 
-    const rangeHeader = req.headers.range;
     if (rangeHeader && rangeHeader.startsWith('bytes=')) {
       const parts = rangeHeader.replace(/bytes=/, '').split('-');
       const start = parseInt(parts[0], 10);
@@ -191,8 +201,8 @@ export class SharesController {
         res.setHeader('Cache-Control', 'private, max-age=3600');
       }
 
-      const rangeStream = await this.sharesService.downloadSharedFile(token, fileId, meta, { start, end });
-      rangeStream.stream.pipe(res);
+      const rangeStream = await this.sharesService.getSharedFileStream(file.storageObjectId, { start, end });
+      rangeStream.pipe(res);
       return;
     }
 
@@ -200,7 +210,8 @@ export class SharesController {
     if (inline === 'true') {
       res.setHeader('Cache-Control', 'private, max-age=3600');
     }
-    fileRecord.stream.pipe(res);
+    const fullStream = await this.sharesService.getSharedFileStream(file.storageObjectId);
+    fullStream.pipe(res);
   }
 
   @Post('public/:token/upload')

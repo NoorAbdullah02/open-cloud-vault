@@ -120,7 +120,7 @@ All uploaded files stream directly through high-speed memory buffers to your pri
 
 ### Android Installation
 1. Go to [Latest Release](https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest).
-2. Download **`noor-drive.apk`** (v1.0.50+).
+2. Download **`noor-drive.apk`** (v1.0.51+).
 3. Open the APK on your Android device to install.
 4. Future updates are detected automatically inside the app with a 1-tap in-app updater!
 

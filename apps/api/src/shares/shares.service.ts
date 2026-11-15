@@ -255,7 +255,7 @@ export class SharesService {
     throw new NotFoundException('Shared resource not found');
   }
 
-  async downloadSharedFile(
+  async getSharedFileRecord(
     token: string,
     fileId: string,
     meta?: { ipAddress?: string; userAgent?: string; referer?: string },
@@ -284,7 +284,7 @@ export class SharesService {
       throw new ForbiddenException('Access denied');
     }
 
-    // Send email alert to admin that this shared file was downloaded (only for first request, not range chunks)
+    // Send email alert to admin only for initial download, not repeated range chunks
     if (!range || range.start === 0) {
       this.mail.sendShareAccessAlert({
         itemType: 'file',
@@ -297,14 +297,28 @@ export class SharesService {
       });
     }
 
-    const stream = await this.storage.readFileStream(file.storageObjectId, range);
+    return file;
+  }
+
+  async getSharedFileStream(storageObjectId: string, range?: { start: number; end: number }) {
+    return this.storage.readFileStream(storageObjectId, range);
+  }
+
+  async downloadSharedFile(
+    token: string,
+    fileId: string,
+    meta?: { ipAddress?: string; userAgent?: string; referer?: string },
+    range?: { start: number; end: number },
+  ) {
+    const file = await this.getSharedFileRecord(token, fileId, meta, range);
+    const stream = await this.getSharedFileStream(file.storageObjectId, range);
     return { file, stream };
   }
 
   private computeFileSha256(filePath: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const hash = crypto.createHash('sha256');
-      const stream = fs.createReadStream(filePath);
+      const stream = fs.createReadStream(filePath, { highWaterMark: 1024 * 1024 });
       stream.on('data', (chunk) => hash.update(chunk));
       stream.on('end', () => resolve(hash.digest('hex')));
       stream.on('error', reject);

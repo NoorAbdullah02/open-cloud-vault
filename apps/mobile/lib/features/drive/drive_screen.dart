@@ -4765,7 +4765,7 @@ class _MobileVideoPlayerDialogState extends State<_MobileVideoPlayerDialog> {
       );
 
       _controller.addListener(_videoListener);
-      await _controller.initialize();
+      await _controller.initialize().timeout(const Duration(seconds: 15));
       if (!mounted) return;
       setState(() {
         _isInitialized = true;

@@ -28,12 +28,23 @@ export class LocalStorageProvider implements IStorageProvider {
 
   async putObject(input: PutObjectInput): Promise<StoredObjectResult> {
     const objectKey = `${crypto.randomUUID()}.bin`;
+    await fs.promises.mkdir(this.basePath, { recursive: true });
     const destPath = path.join(this.basePath, objectKey);
 
     if (input.buffer) {
       await fs.promises.writeFile(destPath, input.buffer);
     } else if (input.tempFilePath) {
-      await fs.promises.copyFile(input.tempFilePath, destPath);
+      try {
+        // Fast instant atomic rename (0ms inode move) if on same filesystem
+        await fs.promises.rename(input.tempFilePath, destPath);
+      } catch (err: any) {
+        if (err?.code === 'EXDEV') {
+          await fs.promises.copyFile(input.tempFilePath, destPath);
+          await fs.promises.unlink(input.tempFilePath).catch(() => {});
+        } else {
+          throw err;
+        }
+      }
     }
 
     return {
@@ -48,13 +59,14 @@ export class LocalStorageProvider implements IStorageProvider {
     if (!fs.existsSync(fullPath)) {
       throw new NotFoundException('File object not found in local storage');
     }
+    const streamOptions: { highWaterMark: number; start?: number; end?: number } = {
+      highWaterMark: 1024 * 1024, // 1MB buffer for high-throughput downloads
+    };
     if (params.range) {
-      return fs.createReadStream(fullPath, {
-        start: params.range.start,
-        end: params.range.end,
-      });
+      streamOptions.start = params.range.start;
+      streamOptions.end = params.range.end;
     }
-    return fs.createReadStream(fullPath);
+    return fs.createReadStream(fullPath, streamOptions);
   }
 
   async deleteObject(params: GetObjectParams): Promise<void> {

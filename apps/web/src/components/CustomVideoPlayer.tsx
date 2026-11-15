@@ -327,6 +327,7 @@ export default function CustomVideoPlayer({
         src={src}
         onClick={togglePlay}
         playsInline
+        preload="metadata"
         className="w-full max-h-[80vh] object-contain cursor-pointer"
       />
 

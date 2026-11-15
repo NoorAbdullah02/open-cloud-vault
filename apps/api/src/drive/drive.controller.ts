@@ -195,8 +195,7 @@ export class DriveController {
     @Res() res: Response,
     @Req() req: Request,
   ) {
-    const fileRecord = await this.driveService.getFileForDownload(user.id, id);
-    const file = fileRecord.file;
+    const file = await this.driveService.getFileRecord(user.id, id);
     const totalSize = Number(file.sizeBytes);
     const disposition = inline === 'true' ? 'inline' : 'attachment';
     const accurateMime = getAccurateMimeType(
@@ -207,6 +206,7 @@ export class DriveController {
 
     res.setHeader('Content-Type', accurateMime);
     res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Connection', 'keep-alive');
     res.setHeader(
       'Content-Disposition',
       `${disposition}; filename="${safeAscii}"; filename*=UTF-8''${encodeURIComponent(file.name)}`,
@@ -232,8 +232,8 @@ export class DriveController {
         res.setHeader('Cache-Control', 'private, max-age=3600');
       }
 
-      const rangeStream = await this.driveService.getFileForDownload(user.id, id, { start, end });
-      rangeStream.stream.pipe(res);
+      const rangeStream = await this.driveService.getFileStream(file.storageObjectId, { start, end });
+      rangeStream.pipe(res);
       return;
     }
 
@@ -241,7 +241,8 @@ export class DriveController {
     if (inline === 'true') {
       res.setHeader('Cache-Control', 'private, max-age=3600');
     }
-    fileRecord.stream.pipe(res);
+    const fullStream = await this.driveService.getFileStream(file.storageObjectId);
+    fullStream.pipe(res);
   }
 
   @Post('cleanup/run')

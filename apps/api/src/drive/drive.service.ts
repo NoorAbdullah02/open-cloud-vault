@@ -550,18 +550,14 @@ export class DriveService {
   private computeFileSha256(filePath: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const hash = crypto.createHash('sha256');
-      const stream = fs.createReadStream(filePath);
+      const stream = fs.createReadStream(filePath, { highWaterMark: 1024 * 1024 });
       stream.on('data', (chunk) => hash.update(chunk));
       stream.on('end', () => resolve(hash.digest('hex')));
       stream.on('error', reject);
     });
   }
 
-  async getFileForDownload(
-    userId: string,
-    fileId: string,
-    range?: { start: number; end: number },
-  ) {
+  async getFileRecord(userId: string, fileId: string) {
     const file = await this.prisma.file.findUnique({
       where: { id: fileId },
       include: { storageObject: true },
@@ -571,12 +567,28 @@ export class DriveService {
       throw new ForbiddenException('You do not have access to this file');
     }
 
-    await this.prisma.file.update({
-      where: { id: fileId },
-      data: { lastAccessedAt: new Date() },
-    });
+    // Update lastAccessedAt asynchronously in background so range requests are zero latency
+    this.prisma.file
+      .update({
+        where: { id: fileId },
+        data: { lastAccessedAt: new Date() },
+      })
+      .catch(() => {});
 
-    const stream = await this.storage.readFileStream(file.storageObjectId, range);
+    return file;
+  }
+
+  async getFileStream(storageObjectId: string, range?: { start: number; end: number }) {
+    return this.storage.readFileStream(storageObjectId, range);
+  }
+
+  async getFileForDownload(
+    userId: string,
+    fileId: string,
+    range?: { start: number; end: number },
+  ) {
+    const file = await this.getFileRecord(userId, fileId);
+    const stream = await this.getFileStream(file.storageObjectId, range);
     return { file, stream };
   }
 
