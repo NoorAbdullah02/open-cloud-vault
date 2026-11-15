@@ -15,15 +15,27 @@ const apiEntry = fs.existsSync(path.join(rootDir, 'apps/api/dist/src/main.js'))
   ? 'apps/api/dist/src/main.js'
   : 'apps/api/dist/main.js';
 
-// 1. Start NestJS API on internal port 4000
-const apiProc = spawn('node', [apiEntry], {
+// Render Free Tier 512MB RAM Optimization:
+// 1. Start NestJS API with strict 180MB heap limit and exposed GC
+const apiProc = spawn('node', ['--max-old-space-size=180', '--expose-gc', apiEntry], {
   cwd: rootDir,
   env: { ...process.env, PORT: String(API_PORT), API_PORT: String(API_PORT) },
   stdio: 'inherit',
 });
 
-// 2. Start Next.js Web on internal port 3001
-const webProc = spawn('npx', ['next', 'start', '-p', String(WEB_PORT), '-H', '127.0.0.1'], {
+// 2. Start Next.js Web on internal port 3001 (direct node without npx wrapper to save 30MB)
+const nextBin = [
+  path.join(rootDir, 'apps/web/node_modules/next/dist/bin/next'),
+  path.join(rootDir, 'node_modules/next/dist/bin/next'),
+].find((p) => fs.existsSync(p));
+
+const webArgs = nextBin
+  ? ['--max-old-space-size=160', nextBin, 'start', '-p', String(WEB_PORT), '-H', '127.0.0.1']
+  : ['next', 'start', '-p', String(WEB_PORT), '-H', '127.0.0.1'];
+
+const webCmd = nextBin ? 'node' : 'npx';
+
+const webProc = spawn(webCmd, webArgs, {
   cwd: path.join(rootDir, 'apps/web'),
   env: { ...process.env, PORT: String(WEB_PORT) },
   stdio: 'inherit',

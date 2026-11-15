@@ -48,6 +48,15 @@ async function bootstrap() {
   const port = parseInt(process.env.PORT || process.env.API_PORT || '4000', 10);
   await app.listen(port, '0.0.0.0');
   console.log(`Noor Drive API running on http://localhost:${port}/api`);
+
+  // Render Free Tier 512MB RAM optimization: Automatically reclaim unused memory
+  if (typeof (global as any).gc === 'function') {
+    setInterval(() => {
+      try {
+        (global as any).gc();
+      } catch {}
+    }, 60000);
+  }
 }
 
 bootstrap();
