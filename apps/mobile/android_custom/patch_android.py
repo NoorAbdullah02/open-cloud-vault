@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os
 import glob
-import shutil
+import re
 import xml.etree.ElementTree as ET
 
 def patch():
@@ -37,11 +37,11 @@ def patch():
     # Set app label
     content = content.replace('android:label="noor_drive_app"', 'android:label="NOOR DRIVE"')
 
-    # Safely replace launchMode without creating duplicate attributes
-    if 'android:launchMode="singleTop"' in content:
-        content = content.replace('android:launchMode="singleTop"', 'android:launchMode="singleTask"')
+    # Keep singleTop launchMode (Flutter default & safest for activity restoration)
+    if 'android:launchMode="singleTask"' in content:
+        content = content.replace('android:launchMode="singleTask"', 'android:launchMode="singleTop"')
     elif 'android:launchMode' not in content:
-        content = content.replace('<activity', '<activity android:launchMode="singleTask"')
+        content = content.replace('<activity', '<activity android:launchMode="singleTop"')
 
     # Add Intent Filters for Receive Sharing (SEND & SEND_MULTIPLE)
     share_filters = """
@@ -76,26 +76,45 @@ def patch():
         f.write(content)
     print("✅ Successfully patched AndroidManifest.xml with permissions and share intent filters!")
 
-    # Copy custom MainActivity.kt
+    # Copy custom MainActivity.kt with dynamic package name matching
     custom_main = "android_custom/MainActivity.kt"
     main_kt = glob.glob("android/app/src/**/MainActivity.kt", recursive=True)
     main_java = glob.glob("android/app/src/**/MainActivity.java", recursive=True)
+
     if os.path.exists(custom_main):
-        if main_kt:
-            shutil.copyfile(custom_main, main_kt[0])
-            print(f"✅ Successfully copied {custom_main} to {main_kt[0]}!")
-        elif main_java:
-            target_dir = os.path.dirname(main_java[0])
-            os.remove(main_java[0])
-            target_kt = os.path.join(target_dir, "MainActivity.kt")
-            shutil.copyfile(custom_main, target_kt)
-            print(f"✅ Replaced {main_java[0]} with {custom_main} at {target_kt}!")
+        target = main_kt[0] if main_kt else (main_java[0] if main_java else None)
+        orig_pkg = "com.noordrive.app.noor_drive_app"  # canonical fallback
+
+        if target and os.path.exists(target):
+            with open(target, "r", encoding="utf-8") as f:
+                for line in f:
+                    line_clean = line.strip()
+                    if line_clean.startswith("package "):
+                        orig_pkg = line_clean.replace("package ", "").rstrip(";").strip()
+                        print(f"📦 Detected Android Package Name: {orig_pkg}")
+                        break
+
+        with open(custom_main, "r", encoding="utf-8") as f:
+            kt_code = f.read()
+
+        # Replace package declaration with the detected orig_pkg
+        kt_code = re.sub(r"^package\s+[\w\.]+", f"package {orig_pkg}", kt_code, count=1)
+
+        if target:
+            target_kt = target if target.endswith(".kt") else os.path.join(os.path.dirname(target), "MainActivity.kt")
+            if target.endswith(".java") and os.path.exists(target):
+                os.remove(target)
+            with open(target_kt, "w", encoding="utf-8") as f:
+                f.write(kt_code)
+            print(f"✅ Successfully written custom MainActivity with package {orig_pkg} to {target_kt}!")
         else:
-            pkg_dir = "android/app/src/main/kotlin/com/noordrive/app"
+            pkg_path = orig_pkg.replace(".", "/")
+            pkg_dir = os.path.join("android/app/src/main/kotlin", pkg_path)
             os.makedirs(pkg_dir, exist_ok=True)
-            target = os.path.join(pkg_dir, "MainActivity.kt")
-            shutil.copyfile(custom_main, target)
-            print(f"✅ Placed {custom_main} into {target}!")
+            target_kt = os.path.join(pkg_dir, "MainActivity.kt")
+            with open(target_kt, "w", encoding="utf-8") as f:
+                f.write(kt_code)
+            print(f"✅ Placed custom MainActivity into {target_kt} with package {orig_pkg}!")
     else:
         print("⚠️ Could not find custom MainActivity.kt")
 

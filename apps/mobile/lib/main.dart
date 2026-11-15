@@ -19,6 +19,7 @@ final _router = GoRouter(
 );
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const ProviderScope(child: NoorDriveApp()));
 }
 

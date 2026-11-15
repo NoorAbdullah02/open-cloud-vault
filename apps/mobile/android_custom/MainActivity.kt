@@ -1,4 +1,4 @@
-package com.noordrive.app
+package com.noordrive.app.noor_drive_app
 
 import android.content.Intent
 import android.net.Uri
