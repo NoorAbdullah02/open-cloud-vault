@@ -1817,6 +1817,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
         child: Image.network(
           imgUrl,
           headers: _authToken != null ? {'Authorization': 'Bearer $_authToken'} : null,
+          cacheWidth: 320,
           fit: BoxFit.cover,
           errorBuilder: (ctx, err, stack) => Container(
             color: const Color(0xFFF0F9FF),
@@ -4339,6 +4340,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                                         child: Image.network(
                                                           imgUrl,
                                                           headers: _authToken != null ? {'Authorization': 'Bearer $_authToken'} : null,
+                                                          cacheWidth: 120,
                                                           fit: BoxFit.cover,
                                                           errorBuilder: (_, __, ___) => Container(
                                                             color: vis['bg'] as Color,

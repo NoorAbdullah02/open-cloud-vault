@@ -16,6 +16,9 @@ import * as archiver from 'archiver';
 import * as argon2 from 'argon2';
 import { MailService } from '../mail/mail.service';
 
+const vaultFolderIdsCache = new Map<string, { ids: string[]; cachedAt: number }>();
+const lastCameraConsolidateMap = new Map<string, number>();
+
 @Injectable()
 export class DriveService {
   private readonly logger = new Logger(DriveService.name);
@@ -51,8 +54,12 @@ export class DriveService {
     const view = query.view || 'my-drive';
     let folderId = query.folderId || null;
 
-    // Consolidate duplicate Camera Uploads folders into one canonical folder
-    await this.consolidateDuplicateCameraFolders(userId).catch(() => {});
+    // Consolidate duplicate Camera Uploads folders into one canonical folder (run at most once per 10m unless camera view)
+    const lastConsolidated = lastCameraConsolidateMap.get(userId) || 0;
+    if (view === 'camera' || view === 'camera-uploads' || Date.now() - lastConsolidated > 600_000) {
+      lastCameraConsolidateMap.set(userId, Date.now());
+      await this.consolidateDuplicateCameraFolders(userId).catch(() => {});
+    }
 
     if (view === 'trash') {
       await this.purgeExpiredTrash(userId).catch(() => {});
@@ -1306,6 +1313,10 @@ export class DriveService {
   }
 
   async getAllVaultFolderIds(userId: string): Promise<string[]> {
+    const cached = vaultFolderIdsCache.get(userId);
+    if (cached && Date.now() - cached.cachedAt < 30_000) {
+      return cached.ids;
+    }
     const vaultFolder = await this.getOrCreateVaultFolder(userId);
     const vaultIds = new Set<string>([vaultFolder.id]);
     const allFolders = await this.prisma.folder.findMany({
@@ -1322,10 +1333,13 @@ export class DriveService {
         }
       }
     }
-    return Array.from(vaultIds);
+    const ids = Array.from(vaultIds);
+    vaultFolderIdsCache.set(userId, { ids, cachedAt: Date.now() });
+    return ids;
   }
 
   async moveToVault(userId: string, type: 'file' | 'folder', id: string) {
+    vaultFolderIdsCache.delete(userId);
     const vault = await this.getOrCreateVaultFolder(userId);
     const moved = await this.moveItem(userId, type, id, vault.id);
 
@@ -1355,6 +1369,7 @@ export class DriveService {
   }
 
   async moveFromVault(userId: string, type: 'file' | 'folder', id: string) {
+    vaultFolderIdsCache.delete(userId);
     return this.moveItem(userId, type, id, null);
   }
 
