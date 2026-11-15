@@ -398,9 +398,18 @@ export default function PublicSharePage() {
                     alt={data.file.name}
                   />
                 </div>
-              ) : data.file.mimeType.startsWith('video/') ? (
-                <div className="w-full max-w-4xl">
-                  <CustomVideoPlayer src={getDownloadLink(data.file.id, true)} autoPlay />
+              ) : (data.file.mimeType || '').startsWith('video/') ||
+                ['mp4', 'webm', 'mov', 'mkv', 'avi', 'm4v', 'ogv', '3gp', 'wmv', 'flv', 'ts'].includes(
+                  (data.file.extension || data.file.name.split('.').pop() || '').toLowerCase().replace(/^\./, '')
+                ) ? (
+                <div className="w-full max-w-5xl">
+                  <CustomVideoPlayer
+                    src={getDownloadLink(data.file.id, true)}
+                    fileName={data.file.name}
+                    fileSize={data.file.sizeBytes}
+                    autoPlay
+                    onDownload={() => window.open(getDownloadLink(data.file.id, false), '_blank')}
+                  />
                 </div>
               ) : data.file.mimeType.startsWith('audio/') ? (
                 <audio src={getDownloadLink(data.file.id, true)} controls className="w-full max-w-md" />

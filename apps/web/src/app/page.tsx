@@ -106,21 +106,25 @@ function formatDateTime(iso?: string) {
 function getFileVisual(mime: string, extension?: string, name?: string) {
   const ext = (extension || name?.split('.').pop() || '').toLowerCase().replace(/^\./, '').trim();
   const m = (mime || '').toLowerCase();
-  if (m.startsWith('image/')) {
+  const isVideo = m.startsWith('video/') || ['mp4', 'webm', 'mov', 'mkv', 'avi', 'm4v', 'ogv', '3gp', 'wmv', 'flv', 'ts'].includes(ext);
+  const isAudio = m.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus', 'wma'].includes(ext);
+  const isImage = m.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff'].includes(ext);
+
+  if (isImage) {
     return {
       icon: <ImageIcon className="w-6 h-6 text-sky-600 dark:text-sky-400" />,
       bg: 'bg-sky-50 dark:bg-sky-500/10',
       badge: 'Image',
     };
   }
-  if (m.startsWith('video/')) {
+  if (isVideo) {
     return {
       icon: <Video className="w-6 h-6 text-purple-600 dark:text-purple-400" />,
       bg: 'bg-purple-50 dark:bg-purple-500/10',
       badge: 'Video',
     };
   }
-  if (m.startsWith('audio/')) {
+  if (isAudio) {
     return {
       icon: <Music className="w-6 h-6 text-pink-600 dark:text-pink-400" />,
       bg: 'bg-pink-50 dark:bg-pink-500/10',
@@ -338,8 +342,8 @@ function FileThumbnail({
     ext === 'xlsx' ||
     ext === 'xls' ||
     ext === 'csv';
-  const isVideo = m.startsWith('video/') || ['mp4', 'mov', 'webm', 'mkv', 'avi'].includes(ext);
-  const isAudio = m.startsWith('audio/') || ['mp3', 'wav', 'm4a', 'flac', 'aac', 'ogg'].includes(ext);
+  const isVideo = m.startsWith('video/') || ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', 'ogv', '3gp', 'wmv', 'flv', 'ts'].includes(ext);
+  const isAudio = m.startsWith('audio/') || ['mp3', 'wav', 'm4a', 'flac', 'aac', 'ogg', 'opus', 'wma'].includes(ext);
 
   useEffect(() => {
     if (!mimeType.startsWith('image/') && !isText && !isPdf && !isPptx && !isDocx) return;
@@ -4371,11 +4375,23 @@ function DriveDashboardContent() {
                   alt={previewModal.file.name}
                 />
               </div>
-            ) : previewModal.file.mimeType.startsWith('video/') ? (
-              <div className="w-full max-w-4xl max-h-[82dvh]">
-                <CustomVideoPlayer src={previewModal.url} autoPlay />
+            ) : (previewModal.file.mimeType || '').startsWith('video/') ||
+              ['mp4', 'webm', 'mov', 'mkv', 'avi', 'm4v', 'ogv', '3gp', 'wmv', 'flv', 'ts'].includes(
+                (previewModal.file.extension || previewModal.file.name.split('.').pop() || '').toLowerCase().replace(/^\./, '')
+              ) ? (
+              <div className="w-full max-w-5xl max-h-[85dvh] flex items-center justify-center p-1 sm:p-2">
+                <CustomVideoPlayer
+                  src={previewModal.url}
+                  fileName={previewModal.file.name}
+                  fileSize={previewModal.file.sizeBytes}
+                  autoPlay
+                  onDownload={() => handleDownload(previewModal.file)}
+                />
               </div>
-            ) : previewModal.file.mimeType.startsWith('audio/') ? (
+            ) : (previewModal.file.mimeType || '').startsWith('audio/') ||
+              ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus', 'wma'].includes(
+                (previewModal.file.extension || previewModal.file.name.split('.').pop() || '').toLowerCase().replace(/^\./, '')
+              ) ? (
               <div className="flex flex-col items-center justify-center p-8 bg-zinc-900/90 rounded-3xl border border-white/10 text-white space-y-4 max-w-md w-full shadow-2xl">
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-sky-500 flex items-center justify-center shadow-lg animate-pulse">
                   <Music2 className="w-8 h-8 text-white" />
