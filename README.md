@@ -2,7 +2,7 @@
 
 [![Build Android APK](https://github.com/NoorAbdullah02/open-cloud-vault/actions/workflows/build-android-apk.yml/badge.svg)](https://github.com/NoorAbdullah02/open-cloud-vault/actions/workflows/build-android-apk.yml)
 [![Build iOS IPA](https://github.com/NoorAbdullah02/open-cloud-vault/actions/workflows/build-ios-ipa.yml/badge.svg)](https://github.com/NoorAbdullah02/open-cloud-vault/actions/workflows/build-ios-ipa.yml)
-[![Latest Release](https://img.shields.io/github/v/release/NoorAbdullah02/open-cloud-vault?color=indigo&label=Android%20APK%20v1.0.41)](https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest)
+[![Latest Release](https://img.shields.io/github/v/release/NoorAbdullah02/open-cloud-vault?color=indigo&label=Android%20APK)](https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest)
 [![Next.js 15](https://img.shields.io/badge/Next.js-15.5-black?logo=next.js)](https://nextjs.org/)
 [![Flutter](https://img.shields.io/badge/Flutter-3.27-blue?logo=flutter)](https://flutter.dev/)
 [![NestJS](https://img.shields.io/badge/NestJS-10.4-red?logo=nestjs)](https://nestjs.com/)
