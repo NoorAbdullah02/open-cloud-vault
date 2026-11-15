@@ -80,6 +80,8 @@ import PptxViewer from '@/components/PptxViewer';
 import ZoomableImage from '@/components/ZoomableImage';
 import CustomVideoPlayer from '@/components/CustomVideoPlayer';
 import AudioPlayerBar, { AudioTrack } from '@/components/AudioPlayerBar';
+import ZipViewer from '@/components/ZipViewer';
+import CodeViewer from '@/components/CodeViewer';
 
 type ViewMode = 'my-drive' | 'recent' | 'starred' | 'photos' | 'videos' | 'documents' | 'trash' | 'vault';
 
@@ -751,6 +753,8 @@ function DriveDashboardContent() {
     loading?: boolean;
     imageIndex?: number;
     allImageFiles?: any[];
+    videoIndex?: number;
+    allVideoFiles?: any[];
   } | null>(null);
   const [activeAudioTrack, setActiveAudioTrack] = useState<AudioTrack | null>(null);
   const [storageModalOpen, setStorageModalOpen] = useState(false);
@@ -1208,6 +1212,44 @@ function DriveDashboardContent() {
     };
   }, []);
 
+  // Auto-lock Secret Vault after 10 minutes of inactivity or when window is hidden
+  useEffect(() => {
+    if (!isVaultUnlocked) return;
+    let timer: NodeJS.Timeout;
+
+    const resetTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        setIsVaultUnlocked(false);
+        if (view === 'vault') navigateDrive('my-drive', null);
+        showToast('Secret Vault auto-locked due to inactivity 🔒');
+      }, 10 * 60 * 1000);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          setIsVaultUnlocked(false);
+          if (view === 'vault') navigateDrive('my-drive', null);
+        }, 3 * 60 * 1000);
+      } else {
+        resetTimer();
+      }
+    };
+
+    resetTimer();
+    const events = ['mousemove', 'keydown', 'touchstart', 'scroll'];
+    events.forEach((ev) => window.addEventListener(ev, resetTimer, { passive: true }));
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearTimeout(timer);
+      events.forEach((ev) => window.removeEventListener(ev, resetTimer));
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isVaultUnlocked, view]);
+
   const formatEta = (sec: number) => {
     if (sec <= 0) return 'Almost done';
     if (sec < 60) return `${sec}s left`;
@@ -1621,9 +1663,26 @@ function DriveDashboardContent() {
       ? allImageFiles.findIndex((f) => f.id === file.id)
       : undefined;
 
+    const isVid =
+      mime.startsWith('video/') ||
+      ['mp4', 'webm', 'mov', 'mkv', 'avi', 'm4v', 'ogv', '3gp', 'wmv', 'flv', 'ts'].includes(ext);
+    const allVideoFiles = isVid
+      ? sortedFiles.filter((f) => {
+          const fm = (f.mimeType || '').toLowerCase();
+          const fe = (f.extension || f.name.split('.').pop() || '').toLowerCase();
+          return (
+            fm.startsWith('video/') ||
+            ['mp4', 'webm', 'mov', 'mkv', 'avi', 'm4v', 'ogv', '3gp', 'wmv', 'flv', 'ts'].includes(fe)
+          );
+        })
+      : undefined;
+    const videoIndex = isVid && allVideoFiles
+      ? allVideoFiles.findIndex((f) => f.id === file.id)
+      : undefined;
+
     let textContent: string | undefined;
     if (isText) {
-      setPreviewModal({ file, loading: true, imageIndex, allImageFiles });
+      setPreviewModal({ file, loading: true, imageIndex, allImageFiles, videoIndex, allVideoFiles });
       try {
         const res = await fetch(streamUrl);
         if (res.ok) textContent = await res.text();
@@ -1637,6 +1696,8 @@ function DriveDashboardContent() {
       loading: false,
       imageIndex: imageIndex !== undefined && imageIndex !== -1 ? imageIndex : 0,
       allImageFiles,
+      videoIndex: videoIndex !== undefined && videoIndex !== -1 ? videoIndex : 0,
+      allVideoFiles,
     });
   };
 
@@ -1655,11 +1716,31 @@ function DriveDashboardContent() {
     handlePreview(nextFile, previewModal.allImageFiles);
   };
 
+  const navigatePreviewVideo = (direction: 1 | -1) => {
+    if (
+      !previewModal ||
+      previewModal.videoIndex === undefined ||
+      !previewModal.allVideoFiles ||
+      previewModal.allVideoFiles.length <= 1
+    ) {
+      return;
+    }
+    const len = previewModal.allVideoFiles.length;
+    const nextIdx = (previewModal.videoIndex + direction + len) % len;
+    const nextFile = previewModal.allVideoFiles[nextIdx];
+    handlePreview(nextFile);
+  };
+
   useEffect(() => {
-    if (!previewModal || previewModal.imageIndex === undefined) return;
+    if (!previewModal) return;
     const handleKeyNav = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight') navigatePreviewImage(1);
-      if (e.key === 'ArrowLeft') navigatePreviewImage(-1);
+      if (previewModal.imageIndex !== undefined && previewModal.allImageFiles && previewModal.allImageFiles.length > 1) {
+        if (e.key === 'ArrowRight') navigatePreviewImage(1);
+        if (e.key === 'ArrowLeft') navigatePreviewImage(-1);
+      } else if (previewModal.videoIndex !== undefined && previewModal.allVideoFiles && previewModal.allVideoFiles.length > 1) {
+        if (e.shiftKey && e.key === 'ArrowRight') navigatePreviewVideo(1);
+        if (e.shiftKey && e.key === 'ArrowLeft') navigatePreviewVideo(-1);
+      }
     };
     window.addEventListener('keydown', handleKeyNav);
     return () => window.removeEventListener('keydown', handleKeyNav);
@@ -4291,6 +4372,11 @@ function DriveDashboardContent() {
                   {(previewModal.imageIndex ?? 0) + 1} / {previewModal.allImageFiles.length}
                 </span>
               )}
+              {previewModal.allVideoFiles && previewModal.allVideoFiles.length > 1 && (
+                <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-mono shrink-0 flex items-center gap-1">
+                  <Video className="w-3 h-3" /> {(previewModal.videoIndex ?? 0) + 1} / {previewModal.allVideoFiles.length}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <button
@@ -4379,7 +4465,33 @@ function DriveDashboardContent() {
               ['mp4', 'webm', 'mov', 'mkv', 'avi', 'm4v', 'ogv', '3gp', 'wmv', 'flv', 'ts'].includes(
                 (previewModal.file.extension || previewModal.file.name.split('.').pop() || '').toLowerCase().replace(/^\./, '')
               ) ? (
-              <div className="w-full max-w-5xl max-h-[85dvh] flex items-center justify-center p-1 sm:p-2">
+              <div className="w-full max-w-5xl max-h-[85dvh] relative flex items-center justify-center p-1 sm:p-2">
+                {previewModal.allVideoFiles && previewModal.allVideoFiles.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigatePreviewVideo(-1);
+                      }}
+                      title="Previous Video (Shift+Left Arrow)"
+                      className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-30 p-2 sm:p-3 rounded-full bg-black/70 hover:bg-black/90 text-white backdrop-blur-md transition shadow-2xl hover:scale-110 active:scale-95 border border-white/10"
+                    >
+                      <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigatePreviewVideo(1);
+                      }}
+                      title="Next Video (Shift+Right Arrow)"
+                      className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-30 p-2 sm:p-3 rounded-full bg-black/70 hover:bg-black/90 text-white backdrop-blur-md transition shadow-2xl hover:scale-110 active:scale-95 border border-white/10"
+                    >
+                      <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </button>
+                  </>
+                )}
                 <CustomVideoPlayer
                   src={previewModal.url}
                   fileName={previewModal.file.name}
@@ -4444,10 +4556,20 @@ function DriveDashboardContent() {
                 accessToken={getStoredTokens()?.accessToken || undefined}
                 onDownloadOriginal={() => handleDownload(previewModal.file)}
               />
+            ) : ['zip', 'rar', '7z', 'tar', 'gz'].includes(
+                (previewModal.file.extension || previewModal.file.name.split('.').pop() || '').toLowerCase().replace(/^\./, '')
+              ) || (previewModal.file.mimeType || '').includes('zip') ? (
+              <ZipViewer
+                url={previewModal.url!}
+                fileName={previewModal.file.name}
+                onDownloadOriginal={() => handleDownload(previewModal.file)}
+              />
             ) : previewModal.textContent !== undefined ? (
-              <pre className="w-full max-w-4xl max-h-[80dvh] overflow-auto p-4 sm:p-6 rounded-2xl bg-white text-slate-900 text-xs font-mono shadow-2xl whitespace-pre-wrap break-words">
-                {previewModal.textContent}
-              </pre>
+              <CodeViewer
+                content={previewModal.textContent}
+                fileName={previewModal.file.name}
+                onDownload={() => handleDownload(previewModal.file)}
+              />
             ) : (
               <div className="text-white text-center space-y-3">
                 <FileText className="w-12 h-12 mx-auto text-slate-400" />

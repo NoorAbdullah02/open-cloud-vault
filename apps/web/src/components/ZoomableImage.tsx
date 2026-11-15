@@ -5,9 +5,11 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
+  RotateCw,
   Maximize2,
   Minimize2,
   Hand,
+  FlipHorizontal,
 } from 'lucide-react';
 
 interface ZoomableImageProps {
@@ -25,6 +27,8 @@ export default function ZoomableImage({
 }: ZoomableImageProps) {
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [rotation, setRotation] = useState(0);
+  const [flipH, setFlipH] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -43,6 +47,16 @@ export default function ZoomableImage({
   const resetZoom = useCallback(() => {
     setScale(1);
     setPosition({ x: 0, y: 0 });
+    setRotation(0);
+    setFlipH(false);
+  }, []);
+
+  const rotateCw = useCallback(() => {
+    setRotation((prev) => (prev + 90) % 360);
+  }, []);
+
+  const toggleFlip = useCallback(() => {
+    setFlipH((prev) => !prev);
   }, []);
 
   const zoomIn = useCallback(() => {
@@ -70,7 +84,6 @@ export default function ZoomableImage({
         const rect = containerRef.current.getBoundingClientRect();
         const offsetX = e.clientX - rect.left - rect.width / 2;
         const offsetY = e.clientY - rect.top - rect.height / 2;
-        // Shift center toward click point
         setPosition({
           x: -offsetX * 1.2,
           y: -offsetY * 1.2,
@@ -102,16 +115,13 @@ export default function ZoomableImage({
   }, []);
 
   // Mouse drag handlers
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (scale <= 1 && position.x === 0 && position.y === 0) return;
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (scale <= 1) return;
     setIsDragging(true);
-    setDragStart({
-      x: e.clientX - position.x,
-      y: e.clientY - position.y,
-    });
+    setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isDragging) return;
     setPosition({
       x: e.clientX - dragStart.x,
@@ -123,18 +133,22 @@ export default function ZoomableImage({
     setIsDragging(false);
   };
 
-  // Touch handlers for mobile pinch & drag
-  const handleTouchStart = (e: React.TouchEvent) => {
+  // Touch gesture support: Pinch-to-zoom & two-finger drag
+  const getTouchDistance = (e: React.TouchEvent): number | null => {
+    if (e.touches.length < 2) return null;
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (e.touches.length === 2) {
-      // Pinch
-      const dist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY,
-      );
-      initialTouchDistRef.current = dist;
-      initialTouchScaleRef.current = scale;
+      const dist = getTouchDistance(e);
+      if (dist) {
+        initialTouchDistRef.current = dist;
+        initialTouchScaleRef.current = scale;
+      }
     } else if (e.touches.length === 1 && scale > 1) {
-      // Drag
       setIsDragging(true);
       setDragStart({
         x: e.touches[0].clientX - position.x,
@@ -143,16 +157,14 @@ export default function ZoomableImage({
     }
   };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (e.touches.length === 2 && initialTouchDistRef.current !== null) {
-      const dist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY,
-      );
-      const factor = dist / initialTouchDistRef.current;
-      const next = Math.min(Math.max(initialTouchScaleRef.current * factor, 0.5), 5);
-      setScale(next);
-      if (next <= 1) setPosition({ x: 0, y: 0 });
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2 && initialTouchDistRef.current) {
+      const dist = getTouchDistance(e);
+      if (dist) {
+        const factor = dist / initialTouchDistRef.current;
+        const newScale = Math.min(Math.max(initialTouchScaleRef.current * factor, 0.5), 5);
+        setScale(newScale);
+      }
     } else if (e.touches.length === 1 && isDragging) {
       setPosition({
         x: e.touches[0].clientX - dragStart.x,
@@ -167,9 +179,10 @@ export default function ZoomableImage({
   };
 
   const toggleFullscreen = () => {
-    if (!containerRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
     if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().catch(() => {});
+      container.requestFullscreen().catch(() => {});
       setIsFullscreen(true);
     } else {
       document.exitFullscreen().catch(() => {});
@@ -180,30 +193,30 @@ export default function ZoomableImage({
   return (
     <div
       ref={containerRef}
-      onDoubleClick={handleDoubleClick}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onDoubleClick={handleDoubleClick}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      className={`relative w-full h-full min-h-[350px] overflow-hidden select-none flex items-center justify-center bg-zinc-950/90 rounded-2xl ${
+      className={`relative w-full h-full flex items-center justify-center overflow-hidden select-none ${
         scale > 1 ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in'
       } ${containerClassName}`}
     >
-      {/* Zoom / Pan Instruction Hint */}
+      {/* Floating Hint */}
       {showHint && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none px-3.5 py-1.5 rounded-full bg-black/75 backdrop-blur-md text-white text-[11px] font-medium shadow-lg transition-opacity duration-500 border border-white/10 flex items-center gap-1.5">
-          <Hand className="w-3.5 h-3.5 text-sky-400" />
-          <span>Double-click or pinch to zoom • Drag to pan</span>
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1.5 rounded-full bg-black/75 backdrop-blur-md text-white/90 text-xs font-medium flex items-center gap-2 pointer-events-none animate-in fade-in zoom-in-95 duration-200 shadow-xl border border-white/10">
+          <Hand className="w-3.5 h-3.5 text-indigo-400" />
+          <span>Double-click to zoom • Scroll / Pinch • Drag to pan</span>
         </div>
       )}
 
       {/* Main Image */}
       <div
         style={{
-          transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+          transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg) scaleX(${flipH ? -1 : 1})`,
           transition: isDragging ? 'none' : 'transform 0.22s cubic-bezier(0.2, 0, 0, 1)',
         }}
         className="flex items-center justify-center max-w-full max-h-full pointer-events-none"
@@ -212,11 +225,11 @@ export default function ZoomableImage({
           src={src}
           alt={alt}
           draggable={false}
-          className={`max-w-full max-h-[75vh] object-contain rounded-xl select-none ${className}`}
+          className={`max-w-full max-h-[75vh] object-contain rounded-xl select-none shadow-2xl ${className}`}
         />
       </div>
 
-      {/* Floating Zoom Toolbar */}
+      {/* Floating Zoom & Transformation Toolbar */}
       <div
         className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 p-1.5 rounded-2xl bg-zinc-900/90 backdrop-blur-md border border-white/10 shadow-2xl text-white"
         onClick={(e) => e.stopPropagation()}
@@ -256,6 +269,24 @@ export default function ZoomableImage({
 
         <button
           type="button"
+          onClick={rotateCw}
+          title="Rotate 90° Clockwise"
+          className="p-2 rounded-xl hover:bg-white/15 active:scale-95 text-zinc-200 transition"
+        >
+          <RotateCw className="w-4 h-4" />
+        </button>
+
+        <button
+          type="button"
+          onClick={toggleFlip}
+          title="Flip Horizontal"
+          className={`p-2 rounded-xl hover:bg-white/15 active:scale-95 transition ${flipH ? 'text-indigo-400 bg-white/10' : 'text-zinc-200'}`}
+        >
+          <FlipHorizontal className="w-4 h-4" />
+        </button>
+
+        <button
+          type="button"
           onClick={resetZoom}
           title="Reset View"
           className="p-2 rounded-xl hover:bg-white/15 active:scale-95 text-zinc-200 transition"
@@ -279,4 +310,3 @@ export default function ZoomableImage({
     </div>
   );
 }
-

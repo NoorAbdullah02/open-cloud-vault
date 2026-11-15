@@ -83,6 +83,17 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      if (_vaultUnlocked) {
+        setState(() {
+          _vaultUnlocked = false;
+          if (_view == 'vault') {
+            _view = 'my-drive';
+            _folderId = null;
+          }
+        });
+      }
+    }
     if (state == AppLifecycleState.resumed) {
       if (_view != 'offline') {
         _loadDrive(silent: true);
@@ -2069,26 +2080,43 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     }
 
     // 5. In-App Text / Markdown / Code Preview
-    if (mime.startsWith('text/') || ['md', 'txt', 'json', 'csv', 'log'].contains(ext)) {
+    if (mime.startsWith('text/') || ['md', 'txt', 'json', 'csv', 'log', 'py', 'js', 'ts', 'html', 'css', 'sql', 'sh', 'xml', 'yaml', 'yml', 'env', 'dart'].contains(ext)) {
       try {
         final res = await apiClient.dio.get(
           '/drive/files/${file['id']}/download?inline=true',
           options: Options(responseType: ResponseType.plain),
         );
         if (!mounted) return;
+        final content = res.data?.toString() ?? '';
+        final lineCount = content.split('\n').length;
         showDialog(
           context: context,
           builder: (_) => Dialog.fullscreen(
-            backgroundColor: Colors.white,
+            backgroundColor: const Color(0xFF0D1117),
             child: Scaffold(
-              backgroundColor: Colors.white,
+              backgroundColor: const Color(0xFF0D1117),
               appBar: AppBar(
-                backgroundColor: Colors.white,
-                foregroundColor: const Color(0xFF0F172A),
-                title: Text(file['name'], overflow: TextOverflow.ellipsis),
+                backgroundColor: const Color(0xFF161B22),
+                foregroundColor: Colors.white,
+                title: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(file['name'], overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15)),
+                    Text('$lineCount lines • ${ext.toUpperCase()}', style: const TextStyle(fontSize: 11, color: Colors.white54, fontFamily: 'monospace')),
+                  ],
+                ),
                 actions: [
                   IconButton(
+                    icon: const Icon(Icons.copy),
+                    tooltip: 'Copy Code',
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: content));
+                      _showSnack('Copied to clipboard!');
+                    },
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.download),
+                    tooltip: 'Download File',
                     onPressed: () => _downloadAndOpen(file),
                   ),
                 ],
@@ -2096,8 +2124,8 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
               body: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: SelectableText(
-                  res.data?.toString() ?? '',
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                  content,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 13, color: Color(0xFFE6EDF3), height: 1.5),
                 ),
               ),
             ),

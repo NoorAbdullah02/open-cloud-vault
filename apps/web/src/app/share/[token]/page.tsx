@@ -24,6 +24,8 @@ import DocxViewer from '@/components/DocxViewer';
 import PptxViewer from '@/components/PptxViewer';
 import ZoomableImage from '@/components/ZoomableImage';
 import CustomVideoPlayer from '@/components/CustomVideoPlayer';
+import ZipViewer from '@/components/ZipViewer';
+import CodeViewer from '@/components/CodeViewer';
 
 const API_URL = getApiUrl();
 
@@ -433,10 +435,20 @@ export default function PublicSharePage() {
                   fileName={data.file.name}
                   onDownloadOriginal={() => window.open(getDownloadLink(data.file.id, false), '_blank')}
                 />
+              ) : ['zip', 'rar', '7z', 'tar', 'gz'].includes(
+                  (data.file.extension || data.file.name.split('.').pop() || '').toLowerCase().replace(/^\./, '')
+                ) || (data.file.mimeType || '').includes('zip') ? (
+                <ZipViewer
+                  url={getDownloadLink(data.file.id, true)}
+                  fileName={data.file.name}
+                  onDownloadOriginal={() => window.open(getDownloadLink(data.file.id, false), '_blank')}
+                />
               ) : previewText !== null ? (
-                <pre className="w-full max-h-[75vh] overflow-auto p-5 rounded-2xl bg-zinc-50 border border-zinc-200/70 text-zinc-800 text-xs font-mono whitespace-pre-wrap">
-                  {previewText}
-                </pre>
+                <CodeViewer
+                  content={previewText}
+                  fileName={data.file.name}
+                  onDownload={() => window.open(getDownloadLink(data.file.id, false), '_blank')}
+                />
               ) : (
                 <div className="text-center py-12">
                   <FileText className="w-12 h-12 mx-auto mb-3 text-zinc-300" />
