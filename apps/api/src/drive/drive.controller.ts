@@ -233,6 +233,11 @@ export class DriveController {
       }
 
       const rangeStream = await this.driveService.getFileStream(file.storageObjectId, { start, end });
+      req.on('close', () => {
+        if (!res.writableEnded) {
+          (rangeStream as any).destroy?.();
+        }
+      });
       rangeStream.pipe(res);
       return;
     }
@@ -242,6 +247,11 @@ export class DriveController {
       res.setHeader('Cache-Control', 'private, max-age=3600');
     }
     const fullStream = await this.driveService.getFileStream(file.storageObjectId);
+    req.on('close', () => {
+      if (!res.writableEnded) {
+        (fullStream as any).destroy?.();
+      }
+    });
     fullStream.pipe(res);
   }
 

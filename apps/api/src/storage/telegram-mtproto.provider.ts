@@ -237,6 +237,10 @@ export class TelegramMtprotoProvider implements IStorageProvider {
     // High performance streaming: Use iterDownload for instant chunk delivery & range streaming
     try {
       const passThrough = new PassThrough();
+      let isAborted = false;
+      passThrough.on('close', () => { isAborted = true; });
+      passThrough.on('error', () => { isAborted = true; });
+
       // 4096 is MIN_CHUNK_SIZE for GramJS offset alignment
       const alignedStart = start - (start % 4096);
       const leadingSkip = start - alignedStart;
@@ -249,6 +253,9 @@ export class TelegramMtprotoProvider implements IStorageProvider {
             offset: bigInt(alignedStart),
             requestSize: 512 * 1024,
           })) {
+            if (isAborted || passThrough.destroyed) {
+              break;
+            }
             let bufferChunk: Buffer = chunk as Buffer;
             if (leadingSkip > 0 && sentBytes === 0) {
               bufferChunk = bufferChunk.subarray(leadingSkip);
