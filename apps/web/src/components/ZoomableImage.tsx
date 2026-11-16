@@ -19,7 +19,6 @@ interface ZoomableImageProps {
   alt: string;
   className?: string;
   containerClassName?: string;
-  isLightboxChild?: boolean;
 }
 
 export default function ZoomableImage({
@@ -27,7 +26,6 @@ export default function ZoomableImage({
   alt,
   className = '',
   containerClassName = '',
-  isLightboxChild = false,
 }: ZoomableImageProps) {
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -47,8 +45,7 @@ export default function ZoomableImage({
   scaleRef.current = scale;
   posRef.current = position;
 
-  // Active touch points tracking map
-  const touchesMapRef = useRef<Map<number, { clientX: number; clientY: number }>>(new Map());
+  // Gesture tracking refs
   const pinchStartDistRef = useRef<number>(0);
   const pinchStartScaleRef = useRef<number>(1);
   const pinchStartMidpointRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -128,23 +125,16 @@ export default function ZoomableImage({
     posRef.current = { x: newX, y: newY };
   }, [resetZoom]);
 
-  // Comprehensive Touch Events Listener (Android, iOS Safari, iPads, Windows Touch)
+  // Touch Event Listeners (Native non-passive listeners with hardware-synced e.touches)
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const onTouchStart = (e: TouchEvent) => {
-      for (let i = 0; i < e.changedTouches.length; i++) {
-        const t = e.changedTouches[i];
-        touchesMapRef.current.set(t.identifier, { clientX: t.clientX, clientY: t.clientY });
-      }
-
-      if (touchesMapRef.current.size >= 2) {
-        // Multi-touch pinch zoom start
+      if (e.touches.length >= 2) {
         e.preventDefault();
-        const touches = Array.from(touchesMapRef.current.values());
-        const t1 = touches[0];
-        const t2 = touches[1];
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
         const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
 
         pinchStartDistRef.current = Math.max(dist, 10);
@@ -155,7 +145,7 @@ export default function ZoomableImage({
         };
         pinchStartPosRef.current = { ...posRef.current };
         setIsInteracting(true);
-      } else if (touchesMapRef.current.size === 1) {
+      } else if (e.touches.length === 1) {
         const t = e.touches[0];
         const now = Date.now();
         const timeDiff = now - lastTapTimeRef.current;
@@ -188,17 +178,24 @@ export default function ZoomableImage({
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      for (let i = 0; i < e.changedTouches.length; i++) {
-        const t = e.changedTouches[i];
-        touchesMapRef.current.set(t.identifier, { clientX: t.clientX, clientY: t.clientY });
-      }
-
-      if (touchesMapRef.current.size >= 2 && pinchStartDistRef.current > 0) {
+      if (e.touches.length >= 2) {
         e.preventDefault();
-        const touches = Array.from(touchesMapRef.current.values());
-        const t1 = touches[0];
-        const t2 = touches[1];
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
         const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+
+        // Auto-initialize if finger 2 touched down during active move
+        if (pinchStartDistRef.current <= 0) {
+          pinchStartDistRef.current = Math.max(currentDist, 10);
+          pinchStartScaleRef.current = scaleRef.current;
+          pinchStartMidpointRef.current = {
+            x: (t1.clientX + t2.clientX) / 2,
+            y: (t1.clientY + t2.clientY) / 2,
+          };
+          pinchStartPosRef.current = { ...posRef.current };
+          return;
+        }
+
         const currentMid = {
           x: (t1.clientX + t2.clientX) / 2,
           y: (t1.clientY + t2.clientY) / 2,
@@ -213,24 +210,26 @@ export default function ZoomableImage({
           y: rect.top + rect.height / 2,
         };
 
-        // Zoom centered around the initial gesture midpoint
         const ratio = targetScale / pinchStartScaleRef.current;
+        const dx = currentMid.x - pinchStartMidpointRef.current.x;
+        const dy = currentMid.y - pinchStartMidpointRef.current.y;
+
         const newX =
-          currentMid.x -
-          containerCenter.x -
-          (pinchStartMidpointRef.current.x - containerCenter.x - pinchStartPosRef.current.x) * ratio;
+          pinchStartPosRef.current.x * ratio +
+          (currentMid.x - containerCenter.x) * (1 - ratio) +
+          dx;
         const newY =
-          currentMid.y -
-          containerCenter.y -
-          (pinchStartMidpointRef.current.y - containerCenter.y - pinchStartPosRef.current.y) * ratio;
+          pinchStartPosRef.current.y * ratio +
+          (currentMid.y - containerCenter.y) * (1 - ratio) +
+          dy;
 
         setScale(targetScale);
         scaleRef.current = targetScale;
         setPosition({ x: newX, y: newY });
         posRef.current = { x: newX, y: newY };
-      } else if (touchesMapRef.current.size === 1 && scaleRef.current > 1.05) {
+      } else if (e.touches.length === 1 && scaleRef.current > 1.05) {
         e.preventDefault();
-        const t = Array.from(touchesMapRef.current.values())[0];
+        const t = e.touches[0];
         const newX = t.clientX - dragStartPosRef.current.x;
         const newY = t.clientY - dragStartPosRef.current.y;
         setPosition({ x: newX, y: newY });
@@ -239,31 +238,38 @@ export default function ZoomableImage({
     };
 
     const onTouchEnd = (e: TouchEvent) => {
-      for (let i = 0; i < e.changedTouches.length; i++) {
-        touchesMapRef.current.delete(e.changedTouches[i].identifier);
-      }
-
-      if (touchesMapRef.current.size === 0) {
+      if (e.touches.length >= 2) {
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        pinchStartDistRef.current = Math.max(Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY), 10);
+        pinchStartScaleRef.current = scaleRef.current;
+        pinchStartMidpointRef.current = {
+          x: (t1.clientX + t2.clientX) / 2,
+          y: (t1.clientY + t2.clientY) / 2,
+        };
+        pinchStartPosRef.current = { ...posRef.current };
+      } else if (e.touches.length === 1) {
+        // Smoothly transfer to single-finger drag without sudden displacement
+        const remaining = e.touches[0];
+        dragStartPosRef.current = {
+          x: remaining.clientX - posRef.current.x,
+          y: remaining.clientY - posRef.current.y,
+        };
+        pinchStartDistRef.current = 0;
+      } else {
         setIsInteracting(false);
         pinchStartDistRef.current = 0;
-        // Snap back if scaled down below 1.05x
+        // Snap back to 1x if pinched out below 1.05x
         if (scaleRef.current < 1.05) {
           setScale(1);
           scaleRef.current = 1;
           setPosition({ x: 0, y: 0 });
           posRef.current = { x: 0, y: 0 };
         }
-      } else if (touchesMapRef.current.size === 1) {
-        // One finger remains: smoothly transfer to panning without jumping
-        const remaining = Array.from(touchesMapRef.current.values())[0];
-        dragStartPosRef.current = {
-          x: remaining.clientX - posRef.current.x,
-          y: remaining.clientY - posRef.current.y,
-        };
       }
     };
 
-    // iOS Safari proprietary WebKit gestures fallback
+    // iOS Safari WebKit proprietary gestures
     const onGestureStart = (e: any) => {
       e.preventDefault();
       pinchStartScaleRef.current = scaleRef.current;
@@ -293,9 +299,9 @@ export default function ZoomableImage({
     container.addEventListener('touchend', onTouchEnd, { passive: false });
     container.addEventListener('touchcancel', onTouchEnd, { passive: false });
 
-    container.addEventListener('gesturestart', onGestureStart, { passive: false } as any);
-    container.addEventListener('gesturechange', onGestureChange, { passive: false } as any);
-    container.addEventListener('gestureend', onGestureEnd, { passive: false } as any);
+    container.addEventListener('gesturestart', onGestureStart as any, { passive: false });
+    container.addEventListener('gesturechange', onGestureChange as any, { passive: false });
+    container.addEventListener('gestureend', onGestureEnd as any, { passive: false });
 
     return () => {
       container.removeEventListener('touchstart', onTouchStart);
@@ -403,7 +409,7 @@ export default function ZoomableImage({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isLightbox, resetZoom]);
 
-  const viewerContent = (
+  return (
     <div
       ref={containerRef}
       onMouseDown={handleMouseDown}
@@ -416,10 +422,32 @@ export default function ZoomableImage({
         userSelect: 'none',
         WebkitUserSelect: 'none',
       }}
-      className={`relative w-full h-full flex items-center justify-center overflow-hidden select-none bg-zinc-950 rounded-2xl sm:rounded-3xl ${
-        scale > 1.05 ? (isInteracting ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in'
-      } ${containerClassName}`}
+      className={
+        isLightbox
+          ? 'fixed inset-0 z-[9999] bg-black/95 backdrop-blur-2xl flex flex-col p-2 sm:p-4 select-none animate-in fade-in duration-200'
+          : `relative w-full h-full flex items-center justify-center overflow-hidden select-none bg-zinc-950 rounded-2xl sm:rounded-3xl ${
+              scale > 1.05 ? (isInteracting ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in'
+            } ${containerClassName}`
+      }
     >
+      {/* Lightbox Header with File Title and Close Button */}
+      {isLightbox && (
+        <div className="flex items-center justify-between text-white px-3 py-2 z-30 shrink-0">
+          <span className="text-sm font-semibold truncate max-w-[65vw]">{alt}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setIsLightbox(false);
+              resetZoom();
+            }}
+            className="p-2.5 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 transition"
+            title="Exit Fullscreen (Esc)"
+          >
+            <X className="w-5 h-5 text-white" />
+          </button>
+        </div>
+      )}
+
       {/* Floating Auto-Fading Hint */}
       {showHint && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1 rounded-full bg-black/70 backdrop-blur-md text-white/90 text-[11px] font-medium flex items-center gap-1.5 pointer-events-none shadow-xl border border-white/10 animate-in fade-in zoom-in-95 duration-200">
@@ -445,26 +473,35 @@ export default function ZoomableImage({
 
       {/* Main Image Stage */}
       <div
-        style={{
-          transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg) scaleX(${flipH ? -1 : 1})`,
-          transition: isInteracting ? 'none' : 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
-          willChange: 'transform',
+        className="flex-1 w-full h-full relative flex items-center justify-center overflow-hidden"
+        onClick={() => {
+          if (!isLightbox && scale <= 1.05) {
+            toggleFullscreen();
+          }
         }}
-        className="flex items-center justify-center w-full h-full pointer-events-none p-3 sm:p-5"
       >
-        <img
-          src={src}
-          alt={alt}
-          draggable={false}
-          onLoad={() => setImageLoading(false)}
-          onError={() => {
-            setImageLoading(false);
-            setImageError(true);
+        <div
+          style={{
+            transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg) scaleX(${flipH ? -1 : 1})`,
+            transition: isInteracting ? 'none' : 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
+            willChange: 'transform',
           }}
-          className={`max-w-[92%] max-h-[88%] object-contain rounded-xl select-none shadow-2xl transition-opacity duration-300 ${
-            imageLoading ? 'opacity-0' : 'opacity-100'
-          } ${className}`}
-        />
+          className="flex items-center justify-center w-full h-full pointer-events-none p-3 sm:p-5"
+        >
+          <img
+            src={src}
+            alt={alt}
+            draggable={false}
+            onLoad={() => setImageLoading(false)}
+            onError={() => {
+              setImageLoading(false);
+              setImageError(true);
+            }}
+            className={`max-w-[92%] max-h-[88%] object-contain rounded-xl select-none shadow-2xl transition-opacity duration-300 ${
+              imageLoading ? 'opacity-0' : 'opacity-100'
+            } ${className}`}
+          />
+        </div>
       </div>
 
       {/* Glassmorphic Floating Controls Pill */}
@@ -538,7 +575,7 @@ export default function ZoomableImage({
         <button
           type="button"
           onClick={toggleFullscreen}
-          title={isLightbox ? 'Exit Lightbox' : 'Fullscreen Lightbox'}
+          title={isLightbox ? 'Exit Fullscreen' : 'Fullscreen Lightbox'}
           className="p-1.5 sm:p-2 rounded-full hover:bg-white/15 active:scale-95 text-zinc-200 transition"
         >
           {isLightbox ? (
@@ -549,33 +586,5 @@ export default function ZoomableImage({
         </button>
       </div>
     </div>
-  );
-
-  return (
-    <>
-      {viewerContent}
-
-      {/* Edge-to-Edge Dedicated Lightbox Modal */}
-      {!isLightboxChild && isLightbox && (
-        <div className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-2xl flex flex-col p-2 sm:p-4 animate-in fade-in duration-200">
-          <div className="flex items-center justify-between text-white p-2">
-            <span className="text-sm font-semibold truncate max-w-[70vw]">{alt}</span>
-            <button
-              onClick={() => {
-                setIsLightbox(false);
-                resetZoom();
-              }}
-              className="p-2.5 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 transition"
-              title="Close Fullscreen (Esc)"
-            >
-              <X className="w-5 h-5 text-white" />
-            </button>
-          </div>
-          <div className="flex-1 w-full h-full overflow-hidden relative">
-            <ZoomableImage src={src} alt={alt} isLightboxChild />
-          </div>
-        </div>
-      )}
-    </>
   );
 }
