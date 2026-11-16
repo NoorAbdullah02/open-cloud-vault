@@ -2189,7 +2189,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                               imageUrl: '${ApiClient.baseUrl}/drive/files/${allImages[0]['id']}/download?inline=true',
                               headers: authHeaders,
                             ),
-                      if (allImages.length > 1) ...[
+                      if (allImages.length > 1 && !isZoomed) ...[
                         if (currentImageIdx > 0)
                           Positioned(
                             left: 12,

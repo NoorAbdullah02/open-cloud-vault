@@ -11,6 +11,7 @@ import {
   Hand,
   FlipHorizontal,
   X,
+  Loader2,
 } from 'lucide-react';
 
 interface ZoomableImageProps {
@@ -35,6 +36,8 @@ export default function ZoomableImage({
   const [isInteracting, setIsInteracting] = useState(false);
   const [isLightbox, setIsLightbox] = useState(false);
   const [showHint, setShowHint] = useState(true);
+  const [imageLoading, setImageLoading] = useState(true);
+  const [imageError, setImageError] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -425,6 +428,21 @@ export default function ZoomableImage({
         </div>
       )}
 
+      {/* Loading Spinner */}
+      {imageLoading && !imageError && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10 text-white/50 space-y-2">
+          <Loader2 className="w-7 h-7 animate-spin text-indigo-400" />
+          <span className="text-xs">Loading image...</span>
+        </div>
+      )}
+
+      {/* Error Fallback */}
+      {imageError && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10 text-white/60 text-xs space-y-1">
+          <span>Failed to load image preview</span>
+        </div>
+      )}
+
       {/* Main Image Stage */}
       <div
         style={{
@@ -438,7 +456,14 @@ export default function ZoomableImage({
           src={src}
           alt={alt}
           draggable={false}
-          className={`max-w-[92%] max-h-[88%] object-contain rounded-xl select-none shadow-2xl transition-opacity duration-300 ${className}`}
+          onLoad={() => setImageLoading(false)}
+          onError={() => {
+            setImageLoading(false);
+            setImageError(true);
+          }}
+          className={`max-w-[92%] max-h-[88%] object-contain rounded-xl select-none shadow-2xl transition-opacity duration-300 ${
+            imageLoading ? 'opacity-0' : 'opacity-100'
+          } ${className}`}
         />
       </div>
 
