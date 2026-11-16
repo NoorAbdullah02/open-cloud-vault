@@ -416,17 +416,19 @@ export default function PublicSharePage() {
             </div>
 
             {/* Direct Inline Preview */}
-            <div className={`rounded-3xl border border-zinc-200/80 shadow-xs overflow-hidden ${
+            <div className={`rounded-3xl border shadow-xs overflow-hidden ${
               data.file.mimeType.includes('pdf') ||
               data.file.extension === 'docx' ||
               data.file.mimeType.includes('wordprocessingml') ||
               data.file.extension === 'pptx' ||
               data.file.mimeType.includes('presentationml')
-                ? 'h-[75dvh] flex flex-col'
-                : 'bg-white p-3 sm:p-6 flex items-center justify-center min-h-[360px] sm:min-h-[420px]'
+                ? 'h-[75dvh] flex flex-col border-zinc-200/80 bg-white'
+                : data.file.mimeType.startsWith('image/')
+                  ? 'bg-zinc-950 p-1.5 sm:p-2.5 flex items-center justify-center border-zinc-800/90 shadow-lg'
+                  : 'bg-white p-3 sm:p-6 flex items-center justify-center min-h-[360px] sm:min-h-[420px] border-zinc-200/80'
             }`}>
               {data.file.mimeType.startsWith('image/') ? (
-                <div className="w-full h-[65dvh] sm:h-[75dvh]">
+                <div className="w-full h-[50dvh] sm:h-[60dvh] md:h-[66dvh] max-h-[580px]">
                   <ZoomableImage
                     src={getDownloadLink(data.file.id, true)}
                     alt={data.file.name}

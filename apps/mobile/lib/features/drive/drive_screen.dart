@@ -2158,32 +2158,37 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                   ),
                   body: Stack(
                     children: [
-                      PageView.builder(
-                        controller: pageController,
-                        physics: isZoomed ? const NeverScrollableScrollPhysics() : const BouncingScrollPhysics(),
-                        itemCount: allImages.length,
-                        onPageChanged: (idx) {
-                          setDialogState(() {
-                            currentImageIdx = idx;
-                            isZoomed = false;
-                          });
-                        },
-                        itemBuilder: (ctx, idx) {
-                          final cur = allImages[idx];
-                          final curUrl = '${ApiClient.baseUrl}/drive/files/${cur['id']}/download?inline=true';
-                          return _MobileZoomableImageViewer(
-                            imageUrl: curUrl,
-                            headers: authHeaders,
-                            onZoomChanged: (zoomed) {
-                              if (isZoomed != zoomed) {
+                      allImages.length > 1
+                          ? PageView.builder(
+                              controller: pageController,
+                              physics: isZoomed ? const NeverScrollableScrollPhysics() : const BouncingScrollPhysics(),
+                              itemCount: allImages.length,
+                              onPageChanged: (idx) {
                                 setDialogState(() {
-                                  isZoomed = zoomed;
+                                  currentImageIdx = idx;
+                                  isZoomed = false;
                                 });
-                              }
-                            },
-                          );
-                        },
-                      ),
+                              },
+                              itemBuilder: (ctx, idx) {
+                                final cur = allImages[idx];
+                                final curUrl = '${ApiClient.baseUrl}/drive/files/${cur['id']}/download?inline=true';
+                                return _MobileZoomableImageViewer(
+                                  imageUrl: curUrl,
+                                  headers: authHeaders,
+                                  onZoomChanged: (zoomed) {
+                                    if (isZoomed != zoomed) {
+                                      setDialogState(() {
+                                        isZoomed = zoomed;
+                                      });
+                                    }
+                                  },
+                                );
+                              },
+                            )
+                          : _MobileZoomableImageViewer(
+                              imageUrl: '${ApiClient.baseUrl}/drive/files/${allImages[0]['id']}/download?inline=true',
+                              headers: authHeaders,
+                            ),
                       if (allImages.length > 1) ...[
                         if (currentImageIdx > 0)
                           Positioned(
@@ -4541,6 +4546,7 @@ class _MobileZoomableImageViewerState extends State<_MobileZoomableImageViewer>
   AnimationController? _animationController;
   Animation<Matrix4>? _animation;
   double _currentScale = 1.0;
+  int _activePointers = 0;
 
   @override
   void initState() {
@@ -4594,10 +4600,8 @@ class _MobileZoomableImageViewerState extends State<_MobileZoomableImageViewer>
       widget.onZoomChanged?.call(false);
     } else {
       final pos = _doubleTapDetails?.localPosition ?? Offset.zero;
-      final x = -pos.dx * (2.5 - 1.0);
-      final y = -pos.dy * (2.5 - 1.0);
       final target = Matrix4.identity()
-        ..translate(x, y)
+        ..translate(-pos.dx * 1.5, -pos.dy * 1.5)
         ..scale(2.5);
       _animateTo(target);
       widget.onZoomChanged?.call(true);
@@ -4606,7 +4610,7 @@ class _MobileZoomableImageViewerState extends State<_MobileZoomableImageViewer>
 
   void _zoomIn() {
     final scale = _transformationController.value.getMaxScaleOnAxis();
-    final targetScale = (scale * 1.4).clamp(0.8, 6.0);
+    final targetScale = (scale * 1.35).clamp(1.0, 5.0);
     final target = Matrix4.identity()..scale(targetScale);
     _animateTo(target);
     widget.onZoomChanged?.call(targetScale > 1.05);
@@ -4614,7 +4618,7 @@ class _MobileZoomableImageViewerState extends State<_MobileZoomableImageViewer>
 
   void _zoomOut() {
     final scale = _transformationController.value.getMaxScaleOnAxis();
-    final targetScale = (scale / 1.4).clamp(0.8, 6.0);
+    final targetScale = (scale / 1.35).clamp(1.0, 5.0);
     final target = targetScale <= 1.05 ? Matrix4.identity() : (Matrix4.identity()..scale(targetScale));
     _animateTo(target);
     widget.onZoomChanged?.call(targetScale > 1.05);
@@ -4629,46 +4633,73 @@ class _MobileZoomableImageViewerState extends State<_MobileZoomableImageViewer>
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        InteractiveViewer(
-          transformationController: _transformationController,
-          clipBehavior: Clip.none,
-          panEnabled: true,
-          scaleEnabled: true,
-          minScale: 0.8,
-          maxScale: 6.0,
-          boundaryMargin: const EdgeInsets.all(250.0),
-          onInteractionStart: (_) {
-            widget.onZoomChanged?.call(true);
+        Listener(
+          onPointerDown: (_) {
+            _activePointers++;
+            if (_activePointers >= 2) {
+              widget.onZoomChanged?.call(true);
+            }
           },
-          onInteractionEnd: (_) {
-            final scale = _transformationController.value.getMaxScaleOnAxis();
-            widget.onZoomChanged?.call(scale > 1.05);
+          onPointerUp: (_) {
+            _activePointers = (_activePointers - 1).clamp(0, 10);
+            if (_activePointers < 2 && _currentScale <= 1.05) {
+              widget.onZoomChanged?.call(false);
+            }
           },
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onDoubleTapDown: (details) => _doubleTapDetails = details,
-            onDoubleTap: _handleDoubleTap,
-            child: Container(
-              width: double.infinity,
-              height: double.infinity,
-              alignment: Alignment.center,
-              child: Image.network(
-                widget.imageUrl,
-                headers: widget.headers,
-                fit: BoxFit.contain,
-                loadingBuilder: (_, child, progress) => progress == null
-                    ? child
-                    : const Center(
-                        child: CircularProgressIndicator(color: Colors.white),
-                      ),
-                errorBuilder: (_, __, ___) => const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.broken_image, color: Colors.white54, size: 48),
-                      SizedBox(height: 8),
-                      Text('Failed to load image', style: TextStyle(color: Colors.white54)),
-                    ],
+          onPointerCancel: (_) {
+            _activePointers = 0;
+            if (_currentScale <= 1.05) {
+              widget.onZoomChanged?.call(false);
+            }
+          },
+          child: InteractiveViewer(
+            transformationController: _transformationController,
+            clipBehavior: Clip.hardEdge,
+            panEnabled: true,
+            scaleEnabled: true,
+            minScale: 1.0,
+            maxScale: 5.0,
+            boundaryMargin: EdgeInsets.zero,
+            onInteractionStart: (details) {
+              if (details.pointerCount >= 2) {
+                widget.onZoomChanged?.call(true);
+              }
+            },
+            onInteractionEnd: (_) {
+              final scale = _transformationController.value.getMaxScaleOnAxis();
+              if (scale <= 1.05 && _activePointers < 2) {
+                widget.onZoomChanged?.call(false);
+              } else {
+                widget.onZoomChanged?.call(true);
+              }
+            },
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onDoubleTapDown: (details) => _doubleTapDetails = details,
+              onDoubleTap: _handleDoubleTap,
+              child: Container(
+                width: double.infinity,
+                height: double.infinity,
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 16),
+                child: Image.network(
+                  widget.imageUrl,
+                  headers: widget.headers,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (_, child, progress) => progress == null
+                      ? child
+                      : const Center(
+                          child: CircularProgressIndicator(color: Colors.white),
+                        ),
+                  errorBuilder: (_, __, ___) => const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.broken_image, color: Colors.white54, size: 48),
+                        SizedBox(height: 8),
+                        Text('Failed to load image', style: TextStyle(color: Colors.white54)),
+                      ],
+                    ),
                   ),
                 ),
               ),
