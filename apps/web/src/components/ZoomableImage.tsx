@@ -10,6 +10,7 @@ import {
   Minimize2,
   Hand,
   FlipHorizontal,
+  X,
 } from 'lucide-react';
 
 interface ZoomableImageProps {
@@ -17,6 +18,7 @@ interface ZoomableImageProps {
   alt: string;
   className?: string;
   containerClassName?: string;
+  isLightboxChild?: boolean;
 }
 
 export default function ZoomableImage({
@@ -24,33 +26,35 @@ export default function ZoomableImage({
   alt,
   className = '',
   containerClassName = '',
+  isLightboxChild = false,
 }: ZoomableImageProps) {
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [rotation, setRotation] = useState(0);
   const [flipH, setFlipH] = useState(false);
   const [isInteracting, setIsInteracting] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isLightbox, setIsLightbox] = useState(false);
   const [showHint, setShowHint] = useState(true);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Mutable refs for high-frequency gesture calculations (prevents stale closures)
+  // Mutable refs to eliminate stale closure issues during high-frequency gesture updates
   const scaleRef = useRef<number>(1);
   const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   scaleRef.current = scale;
   posRef.current = position;
 
-  // Touch tracking refs
+  // Active touch points tracking map
+  const touchesMapRef = useRef<Map<number, { clientX: number; clientY: number }>>(new Map());
   const pinchStartDistRef = useRef<number>(0);
   const pinchStartScaleRef = useRef<number>(1);
   const pinchStartMidpointRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const pinchStartPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const touchStartPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const dragStartPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const lastTapTimeRef = useRef<number>(0);
   const lastTapPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Mouse drag tracking refs
+  // Mouse drag tracking
   const isMouseDownRef = useRef<boolean>(false);
   const mouseDragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
@@ -79,7 +83,7 @@ export default function ZoomableImage({
 
   const zoomIn = useCallback(() => {
     setScale((prev) => {
-      const next = Math.min(prev * 1.35, 5);
+      const next = Math.min(prev * 1.35, 6);
       scaleRef.current = next;
       return next;
     });
@@ -95,7 +99,7 @@ export default function ZoomableImage({
         return 1;
       }
       scaleRef.current = next;
-      return Math.max(next, 0.7);
+      return Math.max(next, 0.6);
     });
   }, []);
 
@@ -104,10 +108,7 @@ export default function ZoomableImage({
     if (!container) return;
 
     if (targetScale <= 1.05) {
-      setScale(1);
-      scaleRef.current = 1;
-      setPosition({ x: 0, y: 0 });
-      posRef.current = { x: 0, y: 0 };
+      resetZoom();
       return;
     }
 
@@ -122,21 +123,28 @@ export default function ZoomableImage({
     scaleRef.current = targetScale;
     setPosition({ x: newX, y: newY });
     posRef.current = { x: newX, y: newY };
-  }, []);
+  }, [resetZoom]);
 
-  // Native Non-Passive Multi-Touch Listeners (Pinch-to-zoom, Double-tap, 1-finger pan)
+  // Comprehensive Touch Events Listener (Android, iOS Safari, iPads, Windows Touch)
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        // Two fingers detected -> initialize pinch zoom
+    const onTouchStart = (e: TouchEvent) => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        touchesMapRef.current.set(t.identifier, { clientX: t.clientX, clientY: t.clientY });
+      }
+
+      if (touchesMapRef.current.size >= 2) {
+        // Multi-touch pinch zoom start
         e.preventDefault();
-        const t1 = e.touches[0];
-        const t2 = e.touches[1];
+        const touches = Array.from(touchesMapRef.current.values());
+        const t1 = touches[0];
+        const t2 = touches[1];
         const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-        pinchStartDistRef.current = Math.max(dist, 1);
+
+        pinchStartDistRef.current = Math.max(dist, 10);
         pinchStartScaleRef.current = scaleRef.current;
         pinchStartMidpointRef.current = {
           x: (t1.clientX + t2.clientX) / 2,
@@ -144,14 +152,14 @@ export default function ZoomableImage({
         };
         pinchStartPosRef.current = { ...posRef.current };
         setIsInteracting(true);
-      } else if (e.touches.length === 1) {
+      } else if (touchesMapRef.current.size === 1) {
         const t = e.touches[0];
         const now = Date.now();
         const timeDiff = now - lastTapTimeRef.current;
         const distDiff = Math.hypot(t.clientX - lastTapPosRef.current.x, t.clientY - lastTapPosRef.current.y);
 
-        // Double tap detection (< 320ms, < 28px)
-        if (timeDiff > 40 && timeDiff < 320 && distDiff < 28) {
+        // Double-tap zoom detection (< 320ms, < 30px)
+        if (timeDiff > 40 && timeDiff < 320 && distDiff < 30) {
           e.preventDefault();
           lastTapTimeRef.current = 0;
           if (scaleRef.current > 1.15) {
@@ -165,10 +173,9 @@ export default function ZoomableImage({
         lastTapTimeRef.current = now;
         lastTapPosRef.current = { x: t.clientX, y: t.clientY };
 
-        // If already zoomed in, single touch initiates panning
         if (scaleRef.current > 1.05) {
           e.preventDefault();
-          touchStartPosRef.current = {
+          dragStartPosRef.current = {
             x: t.clientX - posRef.current.x,
             y: t.clientY - posRef.current.y,
           };
@@ -177,85 +184,146 @@ export default function ZoomableImage({
       }
     };
 
-    const handleTouchMove = (e: TouchEvent) => {
-      if (e.touches.length === 2 && pinchStartDistRef.current > 0) {
-        e.preventDefault();
-        const t1 = e.touches[0];
-        const t2 = e.touches[1];
-        const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-        const ratio = currentDist / pinchStartDistRef.current;
-        const newScale = Math.min(Math.max(pinchStartScaleRef.current * ratio, 0.7), 5.0);
+    const onTouchMove = (e: TouchEvent) => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        touchesMapRef.current.set(t.identifier, { clientX: t.clientX, clientY: t.clientY });
+      }
 
+      if (touchesMapRef.current.size >= 2 && pinchStartDistRef.current > 0) {
+        e.preventDefault();
+        const touches = Array.from(touchesMapRef.current.values());
+        const t1 = touches[0];
+        const t2 = touches[1];
+        const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
         const currentMid = {
           x: (t1.clientX + t2.clientX) / 2,
           y: (t1.clientY + t2.clientY) / 2,
         };
 
-        const rect = container.getBoundingClientRect();
-        const center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        const scaleRatio = currentDist / pinchStartDistRef.current;
+        const targetScale = Math.min(Math.max(pinchStartScaleRef.current * scaleRatio, 0.6), 6.0);
 
-        const factor = newScale / pinchStartScaleRef.current;
+        const rect = container.getBoundingClientRect();
+        const containerCenter = {
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        };
+
+        // Zoom centered around the initial gesture midpoint
+        const ratio = targetScale / pinchStartScaleRef.current;
         const newX =
           currentMid.x -
-          center.x -
-          (pinchStartMidpointRef.current.x - center.x - pinchStartPosRef.current.x) * factor;
+          containerCenter.x -
+          (pinchStartMidpointRef.current.x - containerCenter.x - pinchStartPosRef.current.x) * ratio;
         const newY =
           currentMid.y -
-          center.y -
-          (pinchStartMidpointRef.current.y - center.y - pinchStartPosRef.current.y) * factor;
+          containerCenter.y -
+          (pinchStartMidpointRef.current.y - containerCenter.y - pinchStartPosRef.current.y) * ratio;
 
-        setScale(newScale);
-        scaleRef.current = newScale;
+        setScale(targetScale);
+        scaleRef.current = targetScale;
         setPosition({ x: newX, y: newY });
         posRef.current = { x: newX, y: newY };
-      } else if (e.touches.length === 1 && scaleRef.current > 1.05) {
+      } else if (touchesMapRef.current.size === 1 && scaleRef.current > 1.05) {
         e.preventDefault();
-        const t = e.touches[0];
-        const newX = t.clientX - touchStartPosRef.current.x;
-        const newY = t.clientY - touchStartPosRef.current.y;
+        const t = Array.from(touchesMapRef.current.values())[0];
+        const newX = t.clientX - dragStartPosRef.current.x;
+        const newY = t.clientY - dragStartPosRef.current.y;
         setPosition({ x: newX, y: newY });
         posRef.current = { x: newX, y: newY };
       }
     };
 
-    const handleTouchEnd = (e: TouchEvent) => {
-      if (e.touches.length < 2) {
-        pinchStartDistRef.current = 0;
+    const onTouchEnd = (e: TouchEvent) => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        touchesMapRef.current.delete(e.changedTouches[i].identifier);
       }
-      if (e.touches.length === 0) {
+
+      if (touchesMapRef.current.size === 0) {
         setIsInteracting(false);
-        // Snap back if scaled below 1.05x
+        pinchStartDistRef.current = 0;
+        // Snap back if scaled down below 1.05x
         if (scaleRef.current < 1.05) {
           setScale(1);
           scaleRef.current = 1;
           setPosition({ x: 0, y: 0 });
           posRef.current = { x: 0, y: 0 };
         }
+      } else if (touchesMapRef.current.size === 1) {
+        // One finger remains: smoothly transfer to panning without jumping
+        const remaining = Array.from(touchesMapRef.current.values())[0];
+        dragStartPosRef.current = {
+          x: remaining.clientX - posRef.current.x,
+          y: remaining.clientY - posRef.current.y,
+        };
       }
     };
 
-    container.addEventListener('touchstart', handleTouchStart, { passive: false });
-    container.addEventListener('touchmove', handleTouchMove, { passive: false });
-    container.addEventListener('touchend', handleTouchEnd, { passive: false });
-    container.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+    // iOS Safari proprietary WebKit gestures fallback
+    const onGestureStart = (e: any) => {
+      e.preventDefault();
+      pinchStartScaleRef.current = scaleRef.current;
+      setIsInteracting(true);
+    };
+
+    const onGestureChange = (e: any) => {
+      e.preventDefault();
+      const targetScale = Math.min(Math.max(pinchStartScaleRef.current * (e.scale || 1), 0.6), 6.0);
+      setScale(targetScale);
+      scaleRef.current = targetScale;
+    };
+
+    const onGestureEnd = (e: any) => {
+      e.preventDefault();
+      setIsInteracting(false);
+      if (scaleRef.current < 1.05) {
+        setScale(1);
+        scaleRef.current = 1;
+        setPosition({ x: 0, y: 0 });
+        posRef.current = { x: 0, y: 0 };
+      }
+    };
+
+    container.addEventListener('touchstart', onTouchStart, { passive: false });
+    container.addEventListener('touchmove', onTouchMove, { passive: false });
+    container.addEventListener('touchend', onTouchEnd, { passive: false });
+    container.addEventListener('touchcancel', onTouchEnd, { passive: false });
+
+    container.addEventListener('gesturestart', onGestureStart, { passive: false } as any);
+    container.addEventListener('gesturechange', onGestureChange, { passive: false } as any);
+    container.addEventListener('gestureend', onGestureEnd, { passive: false } as any);
 
     return () => {
-      container.removeEventListener('touchstart', handleTouchStart);
-      container.removeEventListener('touchmove', handleTouchMove);
-      container.removeEventListener('touchend', handleTouchEnd);
-      container.removeEventListener('touchcancel', handleTouchEnd);
+      container.removeEventListener('touchstart', onTouchStart);
+      container.removeEventListener('touchmove', onTouchMove);
+      container.removeEventListener('touchend', onTouchEnd);
+      container.removeEventListener('touchcancel', onTouchEnd);
+
+      container.removeEventListener('gesturestart', onGestureStart as any);
+      container.removeEventListener('gesturechange', onGestureChange as any);
+      container.removeEventListener('gestureend', onGestureEnd as any);
     };
   }, [resetZoom, zoomToFocalPoint]);
 
-  // Desktop Mouse Wheel Zoom
+  // Desktop Mouse Wheel & Mac Trackpad Pinch Zoom
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const handleWheel = (e: WheelEvent) => {
+    const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const factor = e.deltaY < 0 ? 1.15 : 0.88;
-      const nextScale = Math.min(Math.max(scaleRef.current * factor, 0.75), 5.0);
+      let nextScale: number;
+
+      if (e.ctrlKey) {
+        // Mac Trackpad two-finger pinch!
+        const pinchDelta = -e.deltaY * 0.015;
+        nextScale = Math.min(Math.max(scaleRef.current * (1 + pinchDelta), 0.6), 6.0);
+      } else {
+        // Regular mouse scroll wheel
+        const factor = e.deltaY < 0 ? 1.15 : 0.88;
+        nextScale = Math.min(Math.max(scaleRef.current * factor, 0.6), 6.0);
+      }
 
       if (nextScale <= 1.02) {
         setScale(1);
@@ -277,8 +345,8 @@ export default function ZoomableImage({
       }
     };
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
+    container.addEventListener('wheel', onWheel, { passive: false });
+    return () => container.removeEventListener('wheel', onWheel);
   }, []);
 
   // Desktop Mouse Drag Handlers
@@ -315,18 +383,24 @@ export default function ZoomableImage({
   };
 
   const toggleFullscreen = () => {
-    const container = containerRef.current;
-    if (!container) return;
-    if (!document.fullscreenElement) {
-      container.requestFullscreen().catch(() => {});
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen().catch(() => {});
-      setIsFullscreen(false);
-    }
+    setIsLightbox((prev) => !prev);
+    resetZoom();
   };
 
-  return (
+  // Close lightbox on Escape key
+  useEffect(() => {
+    if (!isLightbox) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsLightbox(false);
+        resetZoom();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isLightbox, resetZoom]);
+
+  const viewerContent = (
     <div
       ref={containerRef}
       onMouseDown={handleMouseDown}
@@ -335,40 +409,42 @@ export default function ZoomableImage({
       onMouseLeave={handleMouseUp}
       onDoubleClick={handleDoubleClick}
       style={{
-        touchAction: scale > 1.05 ? 'none' : 'pan-y pinch-zoom',
+        touchAction: 'none',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
       }}
-      className={`relative w-full h-full flex items-center justify-center overflow-hidden select-none bg-zinc-950/90 rounded-2xl sm:rounded-3xl ${
+      className={`relative w-full h-full flex items-center justify-center overflow-hidden select-none bg-zinc-950 rounded-2xl sm:rounded-3xl ${
         scale > 1.05 ? (isInteracting ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in'
       } ${containerClassName}`}
     >
-      {/* Floating Subtle Hint (auto fades out) */}
+      {/* Floating Auto-Fading Hint */}
       {showHint && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1 rounded-full bg-black/65 backdrop-blur-md text-white/85 text-[11px] font-medium flex items-center gap-1.5 pointer-events-none shadow-lg border border-white/10 animate-in fade-in zoom-in-95 duration-200">
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1 rounded-full bg-black/70 backdrop-blur-md text-white/90 text-[11px] font-medium flex items-center gap-1.5 pointer-events-none shadow-xl border border-white/10 animate-in fade-in zoom-in-95 duration-200">
           <Hand className="w-3.5 h-3.5 text-indigo-400" />
           <span>Pinch with 2 fingers or double-tap to zoom • Drag to pan</span>
         </div>
       )}
 
-      {/* Main Image Frame */}
+      {/* Main Image Stage */}
       <div
         style={{
           transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg) scaleX(${flipH ? -1 : 1})`,
           transition: isInteracting ? 'none' : 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
           willChange: 'transform',
         }}
-        className="flex items-center justify-center w-full h-full pointer-events-none p-2 sm:p-4"
+        className="flex items-center justify-center w-full h-full pointer-events-none p-3 sm:p-5"
       >
         <img
           src={src}
           alt={alt}
           draggable={false}
-          className={`max-w-[94%] max-h-[90%] object-contain rounded-xl select-none shadow-2xl transition-opacity duration-300 ${className}`}
+          className={`max-w-[92%] max-h-[88%] object-contain rounded-xl select-none shadow-2xl transition-opacity duration-300 ${className}`}
         />
       </div>
 
-      {/* Modern Translucent Floating Controls Pill */}
+      {/* Glassmorphic Floating Controls Pill */}
       <div
-        className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-0.5 sm:gap-1 px-2 py-1.5 rounded-full bg-zinc-900/80 backdrop-blur-xl border border-white/15 shadow-2xl text-white select-none max-w-[92vw] overflow-x-auto"
+        className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-0.5 sm:gap-1 px-2.5 py-1.5 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/15 shadow-2xl text-white select-none max-w-[92vw] overflow-x-auto"
         onClick={(e) => e.stopPropagation()}
         onDoubleClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
@@ -396,7 +472,7 @@ export default function ZoomableImage({
         <button
           type="button"
           onClick={zoomIn}
-          disabled={scale >= 4.9}
+          disabled={scale >= 5.9}
           title="Zoom In (+)"
           className="p-1.5 sm:p-2 rounded-full hover:bg-white/15 active:scale-95 disabled:opacity-30 disabled:pointer-events-none transition"
         >
@@ -437,10 +513,10 @@ export default function ZoomableImage({
         <button
           type="button"
           onClick={toggleFullscreen}
-          title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen Lightbox'}
+          title={isLightbox ? 'Exit Lightbox' : 'Fullscreen Lightbox'}
           className="p-1.5 sm:p-2 rounded-full hover:bg-white/15 active:scale-95 text-zinc-200 transition"
         >
-          {isFullscreen ? (
+          {isLightbox ? (
             <Minimize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           ) : (
             <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -448,5 +524,33 @@ export default function ZoomableImage({
         </button>
       </div>
     </div>
+  );
+
+  return (
+    <>
+      {viewerContent}
+
+      {/* Edge-to-Edge Dedicated Lightbox Modal */}
+      {!isLightboxChild && isLightbox && (
+        <div className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-2xl flex flex-col p-2 sm:p-4 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between text-white p-2">
+            <span className="text-sm font-semibold truncate max-w-[70vw]">{alt}</span>
+            <button
+              onClick={() => {
+                setIsLightbox(false);
+                resetZoom();
+              }}
+              className="p-2.5 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 transition"
+              title="Close Fullscreen (Esc)"
+            >
+              <X className="w-5 h-5 text-white" />
+            </button>
+          </div>
+          <div className="flex-1 w-full h-full overflow-hidden relative">
+            <ZoomableImage src={src} alt={alt} isLightboxChild />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
