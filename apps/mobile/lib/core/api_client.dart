@@ -37,7 +37,7 @@ class ApiClient {
             final refreshToken = await storage.read(key: 'refresh_token');
             if (refreshToken != null) {
               try {
-                final refreshDio = Dio(BaseOptions(baseUrl: baseUrl));
+                final refreshDio = Dio(BaseOptions(baseUrl: dio.options.baseUrl));
                 final res = await refreshDio.post(
                   '/auth/refresh',
                   data: {'refreshToken': refreshToken},
@@ -60,6 +60,23 @@ class ApiClient {
         },
       ),
     );
+  }
+
+  String get currentBaseUrl => dio.options.baseUrl;
+
+  Future<void> initCustomUrl() async {
+    try {
+      final saved = await storage.read(key: 'custom_api_url');
+      if (saved != null && saved.trim().isNotEmpty) {
+        dio.options.baseUrl = saved.trim();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> setBaseUrl(String newUrl) async {
+    final clean = newUrl.trim();
+    dio.options.baseUrl = clean;
+    await storage.write(key: 'custom_api_url', value: clean);
   }
 }
 

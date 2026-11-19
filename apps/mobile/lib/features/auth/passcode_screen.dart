@@ -25,6 +25,9 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
   @override
   void initState() {
     super.initState();
+    apiClient.initCustomUrl().then((_) {
+      if (mounted) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initBiometrics();
     });
@@ -163,7 +166,7 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
               border: Border.all(color: const Color(0xFFE2E8F0)),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF0F172A).withOpacity(0.06),
+                  color: const Color(0xFF0F172A).withValues(alpha: 0.06),
                   blurRadius: 30,
                   offset: const Offset(0, 12),
                 ),
@@ -302,12 +305,77 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
                     ),
                   ),
                 ],
+                const SizedBox(height: 16),
+                TextButton.icon(
+                  onPressed: _showServerUrlDialog,
+                  icon: const Icon(Icons.dns_outlined, size: 14, color: Color(0xFF64748B)),
+                  label: Text(
+                    'Server: ${Uri.tryParse(apiClient.currentBaseUrl)?.host ?? "Render Live"}',
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                  ),
+                ),
               ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _showServerUrlDialog() async {
+    final controller = TextEditingController(text: apiClient.currentBaseUrl);
+    final newUrl = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Server Configuration', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Select or enter backend API URL:',
+              style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                hintText: 'https://noordrive.is-a.dev/api',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              style: const TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              children: [
+                ActionChip(
+                  label: const Text('is-a.dev', style: TextStyle(fontSize: 11)),
+                  onPressed: () => controller.text = 'https://noordrive.is-a.dev/api',
+                ),
+                ActionChip(
+                  label: const Text('Render', style: TextStyle(fontSize: 11)),
+                  onPressed: () => controller.text = 'https://noor-cloud-vault.onrender.com/api',
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (newUrl != null && newUrl.isNotEmpty) {
+      await apiClient.setBaseUrl(newUrl);
+      if (mounted) setState(() {});
+    }
   }
 }
 
