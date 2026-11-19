@@ -11,6 +11,8 @@ jobs:
     steps:
       - name: Ping Noor Cloud Vault API
         run: |
-          echo "Pinging Noor Drive live instance to keep it warm and prevent 50s cold start..."
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 45 https://noor-cloud-vault.onrender.com/api/shares/app-release || echo "FAILED")
-          echo "Render response status: $STATUS"
+          echo "Pinging Noor Drive live instances to keep warm and prevent cold starts..."
+          STATUS_RENDER=$(curl -s -o /dev/null -w "%{http_code}" -m 45 https://noor-cloud-vault.onrender.com/api/shares/app-release || echo "FAILED")
+          echo "Render primary response: $STATUS_RENDER"
+          STATUS_DEV=$(curl -s -o /dev/null -w "%{http_code}" -m 45 https://noordrive.is-a.dev/api/shares/app-release || echo "FAILED")
+          echo "Custom is-a.dev domain response: $STATUS_DEV"

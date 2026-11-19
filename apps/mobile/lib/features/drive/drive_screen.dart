@@ -201,7 +201,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
       try {
         final apiRes = await Dio(
           BaseOptions(connectTimeout: const Duration(seconds: 20)),
-        ).get('${ApiClient.baseUrl}/shares/app-release');
+        ).get('${apiClient.currentBaseUrl}/shares/app-release');
         tag = (apiRes.data['version'] ?? '') as String;
         if (apiRes.data['downloadUrl'] != null) {
           downloadUrl = apiRes.data['downloadUrl'].toString();
@@ -1810,7 +1810,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     final isSheet = ext == 'xlsx' || ext == 'xls' || ext == 'csv' || mime.contains('spreadsheet') || mime.contains('excel');
 
     if (isImage) {
-      final imgUrl = '${ApiClient.baseUrl}/drive/files/${file['id']}/download?inline=true';
+      final imgUrl = '${apiClient.currentBaseUrl}/drive/files/${file['id']}/download?inline=true';
       return SizedBox(
         height: 94,
         width: double.infinity,
@@ -2116,7 +2116,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     final ext = (file['extension'] ?? '').toString().toLowerCase();
     final token = await apiClient.storage.read(key: 'access_token');
     final authHeaders = token != null ? {'Authorization': 'Bearer $token'} : <String, String>{};
-    final inlineUrl = '${ApiClient.baseUrl}/drive/files/${file['id']}/download?inline=true';
+    final inlineUrl = '${apiClient.currentBaseUrl}/drive/files/${file['id']}/download?inline=true';
 
     // 1. In-App Multi-Image Preview & Swipe Gallery
     if (mime.startsWith('image/')) {
@@ -2171,7 +2171,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                               },
                               itemBuilder: (ctx, idx) {
                                 final cur = allImages[idx];
-                                final curUrl = '${ApiClient.baseUrl}/drive/files/${cur['id']}/download?inline=true';
+                                final curUrl = '${apiClient.currentBaseUrl}/drive/files/${cur['id']}/download?inline=true';
                                 return _MobileZoomableImageViewer(
                                   imageUrl: curUrl,
                                   headers: authHeaders,
@@ -2186,7 +2186,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                               },
                             )
                           : _MobileZoomableImageViewer(
-                              imageUrl: '${ApiClient.baseUrl}/drive/files/${allImages[0]['id']}/download?inline=true',
+                              imageUrl: '${apiClient.currentBaseUrl}/drive/files/${allImages[0]['id']}/download?inline=true',
                               headers: authHeaders,
                             ),
                       if (allImages.length > 1 && !isZoomed) ...[
@@ -2805,7 +2805,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
       final matching = links.where((l) => l['permission'] == permission).toList();
       if (!forceNew && matching.isNotEmpty) {
         final token = matching[0]['shareToken'];
-        final webBase = ApiClient.baseUrl.replaceAll('/api', '');
+        final webBase = apiClient.currentBaseUrl.replaceAll('/api', '');
         return '$webBase/share/$token';
       }
       final res = await apiClient.dio.post('/shares', data: {
@@ -2816,7 +2816,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
       });
       links.insert(0, res.data);
       final token = res.data['shareToken'];
-      final webBase = ApiClient.baseUrl.replaceAll('/api', '');
+      final webBase = apiClient.currentBaseUrl.replaceAll('/api', '');
       return '$webBase/share/$token';
     }
 
@@ -2947,7 +2947,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                             IconButton(
                               icon: const Icon(Icons.copy, size: 18, color: Color(0xFF4F46E5)),
                               onPressed: () async {
-                                final webBase = ApiClient.baseUrl.replaceAll('/api', '');
+                                final webBase = apiClient.currentBaseUrl.replaceAll('/api', '');
                                 await Clipboard.setData(ClipboardData(text: '$webBase/share/${l['shareToken']}'));
                                 _showSnack('Copied link!');
                               },
@@ -4360,7 +4360,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                                   final vis = _getFileVisualInfo(file);
                                                   final mime = (file['mimeType'] ?? '').toString().toLowerCase();
                                                   if (mime.startsWith('image/')) {
-                                                    final imgUrl = '${ApiClient.baseUrl}/drive/files/${file['id']}/download?inline=true';
+                                                    final imgUrl = '${apiClient.currentBaseUrl}/drive/files/${file['id']}/download?inline=true';
                                                     return ClipRRect(
                                                       borderRadius: BorderRadius.circular(8),
                                                       child: SizedBox(
@@ -4812,7 +4812,7 @@ class _MobileVideoPlayerDialogState extends State<_MobileVideoPlayerDialog> {
   Future<void> _initPlayer() async {
     final fileId = widget.file['id']?.toString() ?? '';
     final tokenParam = widget.token != null ? '&token=${Uri.encodeComponent(widget.token!)}' : '';
-    final streamUrl = '${ApiClient.baseUrl}/drive/files/$fileId/download?inline=true$tokenParam';
+    final streamUrl = '${apiClient.currentBaseUrl}/drive/files/$fileId/download?inline=true$tokenParam';
 
     try {
       _controller = VideoPlayerController.networkUrl(

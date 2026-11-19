@@ -12,6 +12,9 @@
 **NOOR DRIVE** is a private, production-grade, and stateless personal cloud storage platform inspired by Google Drive and Dropbox.  
 All uploaded files stream directly through high-speed memory buffers to your private **Telegram MTProto Cloud Vault** (**zero disk usage & unlimited free cloud storage**), while metadata, file version trees, secret vault isolation, folder hierarchies, tokenized public shares, and audit logs live securely in serverless **Neon PostgreSQL**.
 
+- **Live Web URL:** [https://noordrive.is-a.dev](https://noordrive.is-a.dev) *(Fallback: [https://noor-cloud-vault.onrender.com](https://noor-cloud-vault.onrender.com))*
+- **Free Domains Directory & PDF Guide:** [FREE_DOMAINS_DIRECTORY.md](./docs/FREE_DOMAINS_DIRECTORY.md) ([Download PDF](./docs/FREE_DOMAINS_DIRECTORY.pdf))
+
 ---
 
 ## 🏛️ System Architecture
