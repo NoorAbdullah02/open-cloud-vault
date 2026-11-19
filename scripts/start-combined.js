@@ -1,12 +1,14 @@
 const http = require('http');
 const { spawn } = require('child_process');
 const path = require('path');
+const rootDir = path.resolve(__dirname, '..');
+
+// Load environment variables locally
+require('dotenv').config({ path: path.join(rootDir, '.env') });
 
 const PUBLIC_PORT = parseInt(process.env.PORT || '3000', 10);
 const API_PORT = 4000;
 const WEB_PORT = 3001;
-
-const rootDir = path.resolve(__dirname, '..');
 
 console.log(`Starting NOOR CLOUD combined server (Public: ${PUBLIC_PORT}, API: ${API_PORT}, Web: ${WEB_PORT})...`);
 

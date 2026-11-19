@@ -41,4 +41,10 @@ services:
       - key: TELEGRAM_TARGET_CHANNEL
         value: me
       - key: CORS_ORIGIN
-        value: https://noor-cloud-vault.onrender.com
+        value: https://noor-cloud-vault.onrender.com,https://noordrive.is-a.dev
+      - key: ADMIN_NOTIFY_EMAIL
+        value: sheikhnoorabdullah02@gmail.com
+      - key: SUPER_ADMIN_NAME
+        value: Noor Owner
+      - key: BREVO_API_KEY
+        sync: false

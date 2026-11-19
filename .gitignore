@@ -11,4 +11,5 @@ storage/chunks/*
 *.log
 *.tsbuildinfo
 .DS_Store
+.dart_tool/
 

@@ -6,7 +6,9 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { AppModule } from './app.module';
 
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
 
 (BigInt.prototype as any).toJSON = function () {
   return this.toString();
@@ -24,14 +26,38 @@ async function bootstrap() {
   );
   app.use(cookieParser());
 
-  const allowedOrigins = (
-    process.env.CORS_ORIGIN || 'http://localhost:3000,https://noor-cloud-vault.onrender.com'
+  const configuredOrigins = (
+    process.env.CORS_ORIGIN ||
+    'http://localhost:3000,https://noor-cloud-vault.onrender.com,https://noordrive.is-a.dev'
   )
     .split(',')
-    .map((o) => o.trim());
+    .map((o) => o.trim())
+    .filter(Boolean);
+
+  const defaultOrigins = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'https://noor-cloud-vault.onrender.com',
+    'https://noordrive.is-a.dev',
+  ];
+
+  const allowedOrigins = Array.from(new Set([...defaultOrigins, ...configuredOrigins]));
 
   app.enableCors({
-    origin: process.env.NODE_ENV === 'production' ? allowedOrigins : true,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (
+        process.env.NODE_ENV !== 'production' ||
+        allowedOrigins.includes(origin) ||
+        origin.endsWith('.is-a.dev') ||
+        origin.endsWith('.onrender.com') ||
+        origin.includes('localhost') ||
+        origin.includes('127.0.0.1')
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
     credentials: true,
   });
 

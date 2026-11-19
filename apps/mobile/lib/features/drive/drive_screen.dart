@@ -447,7 +447,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     };
     if (effectiveTarget != null) {
       mapData['folderId'] = effectiveTarget;
-    } else if (_view != null && _view != 'all' && _view != 'my-drive') {
+    } else if (_view != 'all' && _view != 'my-drive') {
       mapData['view'] = _view;
     }
 
@@ -1602,7 +1602,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
         final createdRoot = await apiClient.dio.post('/drive/folders', data: {
           'name': customName,
           if (effectiveParent != null) 'parentId': effectiveParent,
-          if (_view != null) 'view': _view,
+          'view': _view,
         });
         final rootFolderId = createdRoot.data['id'] as String;
         for (final pf in picked.files) {
@@ -1631,7 +1631,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
       final createdRoot = await apiClient.dio.post('/drive/folders', data: {
         'name': rootName,
         if (effectiveParent != null) 'parentId': effectiveParent,
-        if (_view != null) 'view': _view,
+        'view': _view,
       });
       final rootFolderId = createdRoot.data['id'] as String;
 
@@ -1657,7 +1657,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
               final subRes = await apiClient.dio.post('/drive/folders', data: {
                 'name': part,
                 'parentId': targetFolderId,
-                if (_view != null) 'view': _view,
+                'view': _view,
               });
               targetFolderId = subRes.data['id'] as String;
               subfolderCache[built] = targetFolderId;
@@ -1711,7 +1711,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
       final res = await apiClient.dio.post('/drive/folders', data: {
         'name': name,
         if (effectiveParent != null) 'parentId': effectiveParent,
-        if (_view != null) 'view': _view,
+        'view': _view,
       });
       if (mounted && res.data is Map) {
         setState(() {
@@ -4964,6 +4964,16 @@ class _MobileVideoPlayerDialogState extends State<_MobileVideoPlayerDialog> {
                         style: TextStyle(color: Colors.white60, fontSize: 13),
                         textAlign: TextAlign.center,
                       ),
+                      if (_errorMessage.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          _errorMessage,
+                          style: const TextStyle(color: Colors.white38, fontSize: 11),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                       const SizedBox(height: 24),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
