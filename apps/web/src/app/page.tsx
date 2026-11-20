@@ -2896,14 +2896,24 @@ function DriveDashboardContent() {
                     setSidebarOpen(true);
                   }
                 }}
-                className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0 text-slate-600 dark:text-slate-300 transition"
+                className="p-1.5 sm:p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0 text-slate-600 dark:text-slate-300 transition"
                 title={dualSideMode ? 'Toggle Dual-Side / Single-Side View' : 'Open Navigation'}
                 aria-label="Toggle navigation"
               >
                 {dualSideMode ? <PanelLeft className="w-5 h-5 hidden md:block" /> : <PanelLeftClose className="w-5 h-5 hidden md:block text-indigo-500" />}
                 <Menu className="w-5 h-5 md:hidden" />
               </button>
-              <div className="relative flex-1 min-w-0">
+
+              {/* Mobile Brand Title */}
+              <div className="sm:hidden flex items-center gap-1.5 font-bold text-slate-900 dark:text-white text-xs tracking-tight shrink-0">
+                <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-indigo-600 to-sky-500 flex items-center justify-center text-white text-[11px] shadow-xs font-black">
+                  N
+                </div>
+                <span className="truncate max-w-[105px]">NOOR DRIVE</span>
+              </div>
+
+              {/* Desktop / Tablet Search Bar */}
+              <div className="relative flex-1 min-w-0 hidden sm:block">
                 <Search className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-slate-400 absolute left-3 sm:left-4 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
@@ -2924,14 +2934,14 @@ function DriveDashboardContent() {
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
               {!isOnline && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-xs font-semibold shrink-0">
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-xs font-semibold shrink-0">
                   <AlertCircle className="w-3.5 h-3.5 animate-pulse" />
-                  <span className="hidden sm:inline">Offline Mode</span>
+                  <span className="hidden sm:inline">Offline</span>
                 </div>
               )}
-              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 sm:p-1 rounded-xl shrink-0">
                 <button
                   onClick={() => setLayout('grid')}
                   className={`p-1.5 rounded-lg transition ${
@@ -2961,7 +2971,7 @@ function DriveDashboardContent() {
                 <button
                   type="button"
                   onClick={toggleSelectAll}
-                  className={`hidden md:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold shadow-xs transition active:scale-95 ${
+                  className={`hidden xl:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-semibold shadow-xs transition active:scale-95 ${
                     isAllSelected
                       ? 'bg-indigo-600 border-indigo-600 text-white'
                       : selectedItems.length > 0
@@ -2977,7 +2987,7 @@ function DriveDashboardContent() {
                   ) : (
                     <Square className="w-3.5 h-3.5" />
                   )}
-                  <span className="hidden xl:inline">
+                  <span>
                     {isAllSelected ? 'Deselect All' : 'Select All'}
                   </span>
                   <span className="px-1.5 py-0.5 rounded-md bg-black/10 dark:bg-white/10 text-[10px] font-mono">
@@ -2989,7 +2999,7 @@ function DriveDashboardContent() {
               )}
 
               {/* Sort Menu */}
-              <div className="relative hidden sm:block">
+              <div className="relative hidden lg:block">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -3003,7 +3013,7 @@ function DriveDashboardContent() {
                   title="Sort options"
                 >
                   <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
-                  <span className="hidden md:inline capitalize">
+                  <span className="capitalize">
                     {sortBy === 'name' ? 'Name' : sortBy === 'size' ? 'Size' : 'Date'} ({sortOrder === 'asc' ? '↑' : '↓'})
                   </span>
                 </button>
@@ -3046,11 +3056,11 @@ function DriveDashboardContent() {
                 type="button"
                 onClick={() => setSpotlightOpen(true)}
                 title="Spotlight Search & Quick Actions (⌘K)"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 transition shadow-xs"
+                className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 transition shadow-xs"
               >
                 <Command className="w-3.5 h-3.5 text-indigo-500" />
-                <span className="hidden lg:inline">Spotlight</span>
-                <kbd className="hidden sm:inline px-1 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-700 font-mono text-slate-500 dark:text-slate-400">⌘K</kbd>
+                <span>Spotlight</span>
+                <kbd className="px-1 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-700 font-mono text-slate-500 dark:text-slate-400">⌘K</kbd>
               </button>
 
               {/* Apps Download Hub Button */}
@@ -3068,7 +3078,7 @@ function DriveDashboardContent() {
                     .catch(() => {});
                 }}
                 title="Download Apps for Windows, Mac, Linux, Android & iOS"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-950/40 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition shadow-xs"
+                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-950/40 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition shadow-xs shrink-0"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Apps</span>
@@ -3099,7 +3109,7 @@ function DriveDashboardContent() {
               {/* Info Inspector Toggle */}
               <button
                 onClick={() => setInfoPanelOpen((prev) => !prev)}
-                className={`hidden sm:flex p-2 rounded-xl transition border shadow-xs ${
+                className={`hidden xl:flex p-2 rounded-xl transition border shadow-xs ${
                   infoPanelOpen
                     ? 'bg-indigo-50 border-indigo-300 text-indigo-600 dark:bg-slate-800 dark:border-indigo-500'
                     : 'bg-white dark:bg-slate-800 border-slate-200/90 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
@@ -3112,16 +3122,16 @@ function DriveDashboardContent() {
               {/* Keyboard Shortcuts Cheat Sheet (?) */}
               <button
                 onClick={() => setShortcutsModalOpen(true)}
-                className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 hover:text-indigo-600 transition shadow-xs"
+                className="hidden xl:flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 hover:text-indigo-600 transition shadow-xs"
                 title="Keyboard Shortcuts Cheat Sheet (?)"
               >
                 <Keyboard className="w-4 h-4" />
-                <span className="hidden xl:inline text-xs font-semibold">Shortcuts</span>
+                <span className="text-xs font-semibold">Shortcuts</span>
               </button>
 
               <button
                 onClick={() => setDarkMode(!darkMode)}
-                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200/70 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition"
+                className="p-1.5 sm:p-2 rounded-xl bg-slate-100 hover:bg-slate-200/70 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition shrink-0"
                 title="Toggle Light/Dark Mode"
               >
                 {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -3129,7 +3139,7 @@ function DriveDashboardContent() {
 
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl bg-white hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-600 border border-slate-200/90 dark:border-slate-700 hover:border-rose-200 text-xs font-semibold shadow-xs transition"
+                className="flex items-center gap-1.5 p-1.5 sm:px-3 sm:py-2 rounded-xl bg-white hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-600 border border-slate-200/90 dark:border-slate-700 hover:border-rose-200 text-xs font-semibold shadow-xs transition shrink-0"
                 title="Lock Drive"
               >
                 <Lock className="w-3.5 h-3.5" />
@@ -3141,7 +3151,7 @@ function DriveDashboardContent() {
                 alt="Noor Abdullah"
                 title="Noor Abdullah (Owner)"
                 onClick={openSecuritySettings}
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover object-top border-2 border-indigo-500/30 cursor-pointer hover:scale-105 transition shadow-xs"
+                className="w-7 h-7 sm:w-9 sm:h-9 rounded-full object-cover object-top border-2 border-indigo-500/30 cursor-pointer hover:scale-105 transition shadow-xs shrink-0"
               />
             </div>
           </div>
@@ -3154,8 +3164,17 @@ function DriveDashboardContent() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search files & folders..."
-              className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-100/90 dark:bg-slate-800/80 border border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-indigo-500/40 text-sm focus:outline-none transition"
+              className="w-full pl-10 pr-9 py-2 rounded-xl bg-slate-100/90 dark:bg-slate-800/80 border border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-indigo-500/40 text-sm focus:outline-none transition shadow-2xs"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </header>
 
@@ -3171,7 +3190,7 @@ function DriveDashboardContent() {
               target: { type: 'blank' },
             });
           }}
-          className="flex-1 p-4 md:p-8 overflow-y-auto space-y-6 max-w-full overflow-x-hidden min-w-0"
+          className="flex-1 px-3 sm:px-6 md:px-8 pt-3 sm:pt-6 pb-24 md:pb-8 overflow-y-auto space-y-5 sm:space-y-6 max-w-full overflow-x-hidden min-w-0"
         >
           {/* Quick Overview Cards (Only on My Drive root) */}
           {view === 'my-drive' && !folderId && !search && (
@@ -4289,7 +4308,7 @@ function DriveDashboardContent() {
                     </div>
                   ) : (
                     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 overflow-x-auto shadow-xs">
-                      <table className="w-full text-left text-sm">
+                      <table className="w-full text-left text-sm min-w-[580px] sm:min-w-full">
                         <thead className="bg-slate-50/80 dark:bg-slate-800/50 border-b border-slate-200/80 dark:border-slate-800 text-xs text-slate-500 uppercase">
                           <tr>
                             <th className="py-3.5 px-3 w-10">
@@ -4308,8 +4327,8 @@ function DriveDashboardContent() {
                             </th>
                             <th className="py-3.5 px-4 font-semibold">Name</th>
                             <th className="py-3.5 px-4 font-semibold">Size</th>
-                            <th className="py-3.5 px-4 font-semibold">Uploaded</th>
-                            <th className="py-3.5 px-4 font-semibold">Backend</th>
+                            <th className="py-3.5 px-4 font-semibold hidden md:table-cell">Uploaded</th>
+                            <th className="py-3.5 px-4 font-semibold hidden lg:table-cell">Backend</th>
                             <th className="py-3.5 px-4 font-semibold text-right">Actions</th>
                           </tr>
                         </thead>
@@ -4365,10 +4384,10 @@ function DriveDashboardContent() {
                                   </div>
                                 </td>
                                 <td className="py-3 px-4 text-slate-500">{formatBytes(file.sizeBytes)}</td>
-                                <td className="py-3 px-4 text-slate-500 text-xs whitespace-nowrap">
+                                <td className="py-3 px-4 text-slate-500 text-xs whitespace-nowrap hidden md:table-cell">
                                   {formatDateTime(file.createdAt)}
                                 </td>
-                                <td className="py-3 px-4">
+                                <td className="py-3 px-4 hidden lg:table-cell">
                                   <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                                     NOOR DRIVE
                                   </span>
@@ -5935,7 +5954,7 @@ function DriveDashboardContent() {
                     }
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="shrink-0 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold flex items-center gap-2 shadow-sm transition active:scale-95"
+                    className="w-full sm:w-auto shrink-0 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-sm transition active:scale-95"
                   >
                     <Download className="w-4 h-4" /> Download .EXE
                   </a>
@@ -5984,7 +6003,7 @@ function DriveDashboardContent() {
                     }
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="shrink-0 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center gap-2 shadow-sm transition active:scale-95"
+                    className="w-full sm:w-auto shrink-0 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-sm transition active:scale-95"
                   >
                     <Download className="w-4 h-4" /> Download .DMG
                   </a>
@@ -6015,7 +6034,7 @@ function DriveDashboardContent() {
                       Native <code className="font-mono text-[11px]">.deb</code> package for Ubuntu 20.04/22.04/24.04 with <code className="font-mono text-[11px]">~/NoorDrive</code> sync.
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0 w-full sm:w-auto">
                     <a
                       href={
                         releasePlatforms?.linux ||
@@ -6023,7 +6042,7 @@ function DriveDashboardContent() {
                       }
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold flex items-center gap-2 shadow-sm transition active:scale-95"
+                      className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-sm transition active:scale-95"
                     >
                       <Download className="w-4 h-4" /> Download .DEB
                     </a>
@@ -6034,7 +6053,7 @@ function DriveDashboardContent() {
                       }
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                      className="px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition"
                       title="Universal Linux tar.gz"
                     >
                       <Download className="w-3.5 h-3.5" /> .tar.gz
@@ -6062,7 +6081,7 @@ function DriveDashboardContent() {
                   }
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-between p-4 rounded-2xl border border-emerald-200 dark:border-emerald-800/80 hover:border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20 transition group"
+                  className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl border border-emerald-200 dark:border-emerald-800/80 hover:border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20 transition group"
                 >
                   <div className="min-w-0 pr-2">
                     <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
@@ -6074,7 +6093,7 @@ function DriveDashboardContent() {
                         : 'Official Release APK • Direct Download & Auto-Update'}
                     </p>
                   </div>
-                  <div className="shrink-0 px-4 py-2.5 rounded-xl bg-emerald-600 group-hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 transition shadow-sm">
+                  <div className="w-full sm:w-auto justify-center shrink-0 px-4 py-2.5 rounded-xl bg-emerald-600 group-hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 transition shadow-sm">
                     <Download className="w-3.5 h-3.5" /> Download .APK
                   </div>
                 </a>
@@ -6106,7 +6125,7 @@ function DriveDashboardContent() {
                   href="https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.ipa"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-between p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-zinc-400 bg-slate-50/70 dark:bg-slate-800/50 transition group"
+                  className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-zinc-400 bg-slate-50/70 dark:bg-slate-800/50 transition group"
                 >
                   <div className="min-w-0 pr-2">
                     <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
@@ -6116,7 +6135,7 @@ function DriveDashboardContent() {
                       Free Sideload via Sideloadly / AltStore / Scarlet
                     </p>
                   </div>
-                  <div className="shrink-0 px-3 py-1.5 rounded-xl bg-zinc-900 group-hover:bg-zinc-800 text-white text-xs font-semibold flex items-center gap-1.5 transition">
+                  <div className="w-full sm:w-auto justify-center shrink-0 px-3 py-1.5 rounded-xl bg-zinc-900 group-hover:bg-zinc-800 text-white text-xs font-semibold flex items-center gap-1.5 transition">
                     <Download className="w-3.5 h-3.5" /> Download .IPA
                   </div>
                 </a>
