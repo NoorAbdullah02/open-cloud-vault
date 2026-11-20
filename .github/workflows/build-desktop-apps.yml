@@ -56,17 +56,16 @@ jobs:
           mkdir -p "${DEB_DIR}/usr/lib/noor-drive"
           mkdir -p "${DEB_DIR}/usr/share/applications"
           mkdir -p "${DEB_DIR}/usr/share/pixmaps"
-          mkdir -p "${DEB_DIR}/usr/share/icons/hicolor/512x512/apps"
-          mkdir -p "${DEB_DIR}/usr/share/icons/hicolor/1024x1024/apps"
+          for size in 48x48 64x64 128x128 256x256 512x512 1024x1024; do
+            mkdir -p "${DEB_DIR}/usr/share/icons/hicolor/$size/apps"
+            cp apps/mobile/assets/app_icon.png "${DEB_DIR}/usr/share/icons/hicolor/$size/apps/noor-drive.png"
+            cp apps/mobile/assets/app_icon.png "${DEB_DIR}/usr/share/icons/hicolor/$size/apps/com.noordrive.app.noor_drive_app.png"
+          done
           mkdir -p "${DEB_DIR}/DEBIAN"
 
           cp -r ${RELEASE_DIR}/* "${DEB_DIR}/usr/lib/noor-drive/"
           cp apps/mobile/assets/app_icon.png "${DEB_DIR}/usr/share/pixmaps/noor-drive.png"
           cp apps/mobile/assets/app_icon.png "${DEB_DIR}/usr/share/pixmaps/com.noordrive.app.noor_drive_app.png"
-          cp apps/mobile/assets/app_icon.png "${DEB_DIR}/usr/share/icons/hicolor/512x512/apps/noor-drive.png"
-          cp apps/mobile/assets/app_icon.png "${DEB_DIR}/usr/share/icons/hicolor/512x512/apps/com.noordrive.app.noor_drive_app.png"
-          cp apps/mobile/assets/app_icon.png "${DEB_DIR}/usr/share/icons/hicolor/1024x1024/apps/noor-drive.png"
-          cp apps/mobile/assets/app_icon.png "${DEB_DIR}/usr/share/icons/hicolor/1024x1024/apps/com.noordrive.app.noor_drive_app.png"
 
           cat << 'EOF' > "${DEB_DIR}/usr/bin/noordrive"
           #!/bin/sh
