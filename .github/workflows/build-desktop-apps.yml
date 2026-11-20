@@ -89,6 +89,19 @@ jobs:
            Multi-platform personal cloud vault with ~/NoorDrive local folder auto-sync.
           EOF
 
+          cat << 'EOF' > "${DEB_DIR}/DEBIAN/postinst"
+          #!/bin/sh
+          set -e
+          if command -v update-desktop-database >/dev/null 2>&1; then
+            update-desktop-database -q /usr/share/applications || true
+          fi
+          if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+            gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
+          fi
+          exit 0
+          EOF
+          chmod 755 "${DEB_DIR}/DEBIAN/postinst"
+
           cat << EOF > "${DEB_DIR}/usr/share/applications/noor-drive.desktop"
           [Desktop Entry]
           Name=NOOR DRIVE

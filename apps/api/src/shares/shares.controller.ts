@@ -76,7 +76,9 @@ export class SharesController {
     let version = defaultTag;
     let apkAsset: any = null;
     let windowsAsset: any = null;
+    let windowsPortableAsset: any = null;
     let macAsset: any = null;
+    let macZipAsset: any = null;
     let linuxAsset: any = null;
     let linuxTarAsset: any = null;
 
@@ -92,8 +94,10 @@ export class SharesController {
           for (const rel of releases) {
             const assets = rel.assets || [];
             if (!apkAsset) apkAsset = assets.find((a: any) => String(a.name).endsWith('.apk'));
-            if (!windowsAsset) windowsAsset = assets.find((a: any) => String(a.name).endsWith('.exe') || String(a.name).includes('Windows'));
-            if (!macAsset) macAsset = assets.find((a: any) => String(a.name).endsWith('.dmg') || String(a.name).includes('macOS') || String(a.name).includes('mac'));
+            if (!windowsAsset) windowsAsset = assets.find((a: any) => String(a.name).endsWith('.exe'));
+            if (!windowsPortableAsset) windowsPortableAsset = assets.find((a: any) => String(a.name).includes('Portable') || (String(a.name).endsWith('.zip') && String(a.name).includes('Windows')));
+            if (!macAsset) macAsset = assets.find((a: any) => String(a.name).endsWith('.dmg'));
+            if (!macZipAsset) macZipAsset = assets.find((a: any) => String(a.name).includes('macOS') && String(a.name).endsWith('.zip'));
             if (!linuxAsset) linuxAsset = assets.find((a: any) => String(a.name).endsWith('.deb'));
             if (!linuxTarAsset) linuxTarAsset = assets.find((a: any) => String(a.name).endsWith('.tar.gz') && String(a.name).includes('linux'));
           }
@@ -103,7 +107,9 @@ export class SharesController {
 
     const apkUrl = apkAsset?.browser_download_url || `${baseReleaseUrl}/noor-drive.apk`;
     const windowsUrl = windowsAsset?.browser_download_url || `${baseReleaseUrl}/NoorDrive-Setup.exe`;
+    const windowsPortableUrl = windowsPortableAsset?.browser_download_url || `${baseReleaseUrl}/NoorDrive-Windows-Portable.zip`;
     const macUrl = macAsset?.browser_download_url || `${baseReleaseUrl}/NoorDrive.dmg`;
+    const macZipUrl = macZipAsset?.browser_download_url || `${baseReleaseUrl}/NoorDrive-macOS.zip`;
     const linuxUrl = linuxAsset?.browser_download_url || `${baseReleaseUrl}/noor-drive-linux.deb`;
     const linuxTarUrl = linuxTarAsset?.browser_download_url || `${baseReleaseUrl}/noor-drive-linux.tar.gz`;
 
@@ -112,37 +118,37 @@ export class SharesController {
 
     cachedRelease = {
       version,
-      sizeBytes: Number(apkAsset?.size || 31574349),
+      sizeBytes: Number(apkAsset?.size || 32165505),
       downloadUrl: apkUrl,
       platforms: {
         apk: apkUrl,
         windows: windowsUrl,
-        windowsPortable: `${baseReleaseUrl}/NoorDrive-Windows-Portable.zip`,
+        windowsPortable: windowsPortableUrl,
         mac: macUrl,
-        macZip: `${baseReleaseUrl}/NoorDrive-macOS.zip`,
+        macZip: macZipUrl,
         linux: linuxUrl,
         linuxTar: linuxTarUrl,
         android: {
           name: 'noor-drive.apk',
           url: apkUrl,
-          sizeBytes: Number(apkAsset?.size || 31574349),
+          sizeBytes: Number(apkAsset?.size || 32165505),
         },
         windowsData: {
-          name: 'NoorDrive-Setup.exe',
+          name: windowsAsset?.name || 'NoorDrive-Setup.exe',
           url: windowsUrl,
-          sizeBytes: Number(windowsAsset?.size || 45200000),
-          portableUrl: `${baseReleaseUrl}/NoorDrive-Windows-Portable.zip`,
+          sizeBytes: Number(windowsAsset?.size || 15724741),
+          portableUrl: windowsPortableUrl,
         },
         macData: {
-          name: 'NoorDrive.dmg',
+          name: macAsset?.name || 'NoorDrive.dmg',
           url: macUrl,
-          sizeBytes: Number(macAsset?.size || 41800000),
-          zipUrl: `${baseReleaseUrl}/NoorDrive-macOS.zip`,
+          sizeBytes: Number(macAsset?.size || 28296659),
+          zipUrl: macZipUrl,
         },
         linuxData: {
-          name: 'noor-drive-linux.deb',
+          name: linuxAsset?.name || 'noor-drive-linux.deb',
           url: linuxUrl,
-          sizeBytes: Number(linuxAsset?.size || 38400000),
+          sizeBytes: Number(linuxAsset?.size || 12804532),
           tarUrl: linuxTarUrl,
         },
       },
