@@ -131,7 +131,7 @@ jobs:
 
   build-macos:
     name: Build macOS (.dmg / .zip)
-    runs-on: macos-latest
+    runs-on: macos-13
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
