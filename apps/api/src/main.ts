@@ -95,7 +95,7 @@ async function bootstrap() {
 
   // Render Free Tier Keep-Alive safeguard:
   // Ping public endpoint every 9 minutes to prevent 15-minute inactivity spin-down
-  const publicUrl = process.env.RENDER_EXTERNAL_URL || process.env.APP_URL || 'https://noor-cloud-vault.onrender.com';
+  const publicUrl = process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || 'https://drive.noor.is-a.dev';
   if (process.env.NODE_ENV === 'production' && publicUrl) {
     setInterval(() => {
       fetch(`${publicUrl.replace(/\/$/, '')}/api/shares/app-release`)

@@ -48,3 +48,5 @@ services:
         value: Noor Owner
       - key: BREVO_API_KEY
         sync: false
+      - key: APP_URL
+        value: https://drive.noor.is-a.dev

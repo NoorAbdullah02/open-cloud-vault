@@ -113,7 +113,7 @@ export class SharesController {
     const linuxUrl = linuxAsset?.browser_download_url || `${baseReleaseUrl}/noor-drive-linux.deb`;
     const linuxTarUrl = linuxTarAsset?.browser_download_url || `${baseReleaseUrl}/noor-drive-linux.tar.gz`;
 
-    const publicBase = process.env.RENDER_EXTERNAL_URL || process.env.APP_URL || 'https://noor-cloud-vault.onrender.com';
+    const publicBase = process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || 'https://drive.noor.is-a.dev';
     const webdavUrl = `${publicBase.replace(/\/$/, '')}/api/webdav`;
 
     cachedRelease = {
