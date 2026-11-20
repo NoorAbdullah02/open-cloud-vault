@@ -49,8 +49,9 @@ export class TelegramMtprotoProvider implements IStorageProvider {
     const sessionString = process.env.TELEGRAM_SESSION_STRING || '';
 
     const client = new TelegramClient(new StringSession(sessionString), apiId, apiHash, {
-      connectionRetries: 3,
-      timeout: 15,
+      connectionRetries: 5,
+      timeout: 30,
+      floodSleepThreshold: 300,
       useWSS: false,
     });
 
@@ -180,7 +181,7 @@ export class TelegramMtprotoProvider implements IStorageProvider {
     const client = await this.getClient();
     const defaultTarget = params.telegramChatId || process.env.TELEGRAM_TARGET_CHANNEL || 'me';
 
-    // Check if multipart
+    // Check if multipart (Auto-Chunked 100GB+ Massive Files)
     if (params.objectKey && params.objectKey.startsWith('{')) {
       try {
         const meta = JSON.parse(params.objectKey);
@@ -188,23 +189,65 @@ export class TelegramMtprotoProvider implements IStorageProvider {
           const target = meta.target || defaultTarget;
           const chunkMessageIds: number[] = meta.chunkMessageIds;
           const passThrough = new PassThrough();
+          let isAborted = false;
+          passThrough.on('close', () => { isAborted = true; });
+          passThrough.on('error', () => { isAborted = true; });
+
+          const totalBytes: number = meta.sizeBytes || chunkMessageIds.length * TELEGRAM_SINGLE_PART_BYTES;
+          const start = params.range ? Math.max(0, params.range.start) : 0;
+          const end = params.range && params.range.end !== undefined
+            ? Math.min(totalBytes - 1, params.range.end)
+            : totalBytes - 1;
+          const requestedBytes = end - start + 1;
+
+          const firstChunkIdx = Math.floor(start / TELEGRAM_SINGLE_PART_BYTES);
+          const firstChunkOffset = start % TELEGRAM_SINGLE_PART_BYTES;
+          const lastChunkIdx = Math.min(chunkMessageIds.length - 1, Math.floor(end / TELEGRAM_SINGLE_PART_BYTES));
 
           (async () => {
             try {
-              for (let i = 0; i < chunkMessageIds.length; i++) {
+              let sentBytes = 0;
+              for (let i = firstChunkIdx; i <= lastChunkIdx; i++) {
+                if (isAborted || passThrough.destroyed) break;
                 const msgId = chunkMessageIds[i];
                 const messages = await client.getMessages(target, { ids: [msgId] });
                 const message = messages[0];
                 if (!message || !message.media) {
                   throw new BadRequestException(`Chunk part ${i + 1} not found in Telegram vault`);
                 }
-                const buffer = (await client.downloadMedia(message, {})) as Buffer;
-                const canContinue = passThrough.write(buffer);
-                if (!canContinue) {
-                  await new Promise((resolve) => passThrough.once('drain', resolve));
+
+                const chunkStartOffset = i === firstChunkIdx ? firstChunkOffset : 0;
+                const alignedStart = chunkStartOffset - (chunkStartOffset % 4096);
+                const leadingSkip = chunkStartOffset - alignedStart;
+
+                let chunkSent = 0;
+                for await (const chunk of client.iterDownload({
+                  file: message.media,
+                  offset: bigInt(alignedStart),
+                  requestSize: 512 * 1024,
+                })) {
+                  if (isAborted || passThrough.destroyed) break;
+                  let bufferChunk = chunk as Buffer;
+                  if (leadingSkip > 0 && chunkSent === 0) {
+                    bufferChunk = bufferChunk.subarray(leadingSkip);
+                  }
+                  if (sentBytes + bufferChunk.length > requestedBytes) {
+                    bufferChunk = bufferChunk.subarray(0, requestedBytes - sentBytes);
+                  }
+                  sentBytes += bufferChunk.length;
+                  chunkSent += bufferChunk.length;
+
+                  const canContinue = passThrough.write(bufferChunk);
+                  if (!canContinue) {
+                    await new Promise((resolve) => passThrough.once('drain', resolve));
+                  }
+                  if (sentBytes >= requestedBytes) break;
                 }
+                if (sentBytes >= requestedBytes) break;
               }
-              passThrough.end();
+              if (!isAborted && !passThrough.destroyed) {
+                passThrough.end();
+              }
             } catch (err) {
               passThrough.destroy(err as Error);
             }

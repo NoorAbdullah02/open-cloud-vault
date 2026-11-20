@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import * as argon2 from 'argon2';
+import * as path from 'path';
 import { Readable } from 'stream';
 
 @Injectable()
@@ -182,6 +183,41 @@ export class WebdavService {
       await this.prisma.file.update({
         where: { id: target.file.id },
         data: { isTrash: true },
+      });
+      return true;
+    }
+    return false;
+  }
+
+  async moveResource(userId: string, sourceTarget: any, destinationTarget: any) {
+    const newName =
+      destinationTarget.targetName ||
+      (destinationTarget.file
+        ? destinationTarget.file.name
+        : destinationTarget.folder
+          ? destinationTarget.folder.name
+          : null);
+    const newParentId = destinationTarget.parentFolderId;
+
+    if (sourceTarget.type === 'file') {
+      const ext = newName
+        ? path.extname(newName).replace('.', '').toLowerCase()
+        : sourceTarget.file.extension;
+      await this.prisma.file.update({
+        where: { id: sourceTarget.file.id },
+        data: {
+          ...(newName ? { name: newName, extension: ext } : {}),
+          folderId: newParentId,
+        },
+      });
+      return true;
+    } else if (sourceTarget.type === 'folder') {
+      await this.prisma.folder.update({
+        where: { id: sourceTarget.folder.id },
+        data: {
+          ...(newName ? { name: newName } : {}),
+          parentId: newParentId,
+        },
       });
       return true;
     }

@@ -9,12 +9,20 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { WebdavService } from './webdav.service';
+import { DriveService } from '../drive/drive.service';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { pipeline } from 'stream/promises';
 
 @Controller('webdav')
 export class WebdavController {
   private readonly logger = new Logger(WebdavController.name);
 
-  constructor(private readonly webdavService: WebdavService) {}
+  constructor(
+    private readonly webdavService: WebdavService,
+    private readonly driveService: DriveService,
+  ) {}
 
   @All('*')
   async handleWebdav(@Req() req: Request, @Res() res: Response) {
@@ -25,7 +33,7 @@ export class WebdavController {
     res.setHeader('MS-Author-Via', 'DAV');
     res.setHeader(
       'Allow',
-      'OPTIONS, GET, HEAD, POST, DELETE, PROPFIND, PROPPATCH, COPY, MOVE, LOCK, UNLOCK, MKCOL',
+      'OPTIONS, GET, HEAD, POST, PUT, DELETE, PROPFIND, PROPPATCH, COPY, MOVE, LOCK, UNLOCK, MKCOL',
     );
 
     if (method === 'OPTIONS') {
@@ -78,6 +86,72 @@ export class WebdavController {
         return res.status(201).send('Created');
       }
       return res.status(405).send('Cannot create collection here');
+    }
+
+    if (method === 'PUT') {
+      const fileName =
+        target?.targetName ||
+        (target?.file ? target.file.name : path.basename(decodeURIComponent(rawPath)));
+      if (!fileName) {
+        return res.status(400).send('Invalid file name');
+      }
+
+      const tempFilePath = path.join(
+        os.tmpdir(),
+        `noor-webdav-${Date.now()}-${Math.random().toString(36).slice(2)}-${encodeURIComponent(fileName)}`,
+      );
+
+      try {
+        const writeStream = fs.createWriteStream(tempFilePath);
+        await pipeline(req, writeStream);
+
+        const stats = await fs.promises.stat(tempFilePath);
+        const fileObj: Express.Multer.File = {
+          fieldname: 'file',
+          originalname: decodeURIComponent(fileName),
+          encoding: '7bit',
+          mimetype: (req.headers['content-type'] as string) || 'application/octet-stream',
+          size: stats.size,
+          destination: os.tmpdir(),
+          filename: path.basename(tempFilePath),
+          path: tempFilePath,
+          buffer: undefined as any,
+          stream: undefined as any,
+        };
+
+        if (target && target.type === 'file' && target.file) {
+          await this.driveService.replaceFile(user.id, target.file.id, fileObj);
+          return res.status(204).send();
+        } else {
+          const parentFolderId = target?.parentFolderId || undefined;
+          await this.driveService.uploadFile(user.id, fileObj, parentFolderId);
+          return res.status(201).send('Created');
+        }
+      } catch (err: any) {
+        await fs.promises.unlink(tempFilePath).catch(() => {});
+        this.logger.error(`WebDAV PUT failed: ${err.message}`, err.stack);
+        return res.status(500).send('Failed to upload file via WebDAV: ' + err.message);
+      }
+    }
+
+    if (method === 'MOVE') {
+      const destinationHeader = req.headers['destination'] as string;
+      if (!destinationHeader) {
+        return res.status(400).send('Destination header missing');
+      }
+      try {
+        const destUrl = new URL(destinationHeader, `http://${req.headers.host || 'localhost'}`);
+        const destPath = destUrl.pathname;
+        const destTarget = await this.webdavService.resolvePath(user.id, destPath);
+        if (!destTarget) {
+          return res.status(409).send('Conflict or invalid destination');
+        }
+        await this.webdavService.moveResource(user.id, target, destTarget);
+        return res.status(201).send('Created');
+      } catch (err: any) {
+        this.logger.error(`WebDAV MOVE failed: ${err.message}`);
+        return res.status(500).send('Error moving resource: ' + err.message);
+      }
     }
 
     if (method === 'DELETE') {
