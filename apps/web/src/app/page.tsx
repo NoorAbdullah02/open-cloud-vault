@@ -71,6 +71,9 @@ import {
   Terminal,
   ExternalLink,
   Globe,
+  PanelLeft,
+  PanelLeftClose,
+  Columns2,
 } from 'lucide-react';
 import {
   apiFetch,
@@ -767,6 +770,7 @@ function DriveDashboardContent() {
   const [darkMode, setDarkMode] = useState(false); // White / Light Mode by default
   const [accentColor, setAccentColor] = useState<string>('#18181b');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [dualSideMode, setDualSideMode] = useState<boolean>(true);
 
   // Upload & Drag states
   const [isDragging, setIsDragging] = useState(false);
@@ -961,6 +965,8 @@ function DriveDashboardContent() {
     try {
       const savedTags = localStorage.getItem('noor_color_tags');
       if (savedTags) setColorTags(JSON.parse(savedTags));
+      const savedDual = localStorage.getItem('noor_dual_side');
+      if (savedDual !== null) setDualSideMode(savedDual === 'true');
     } catch {}
 
     if (typeof window !== 'undefined') {
@@ -2649,11 +2655,13 @@ function DriveDashboardContent() {
         />
       )}
 
-      {/* White Sidebar */}
+      {/* Responsive Dual-Side / Single-Side Sidebar */}
       <aside
-        className={`fixed md:static inset-y-0 left-0 z-40 w-68 bg-white dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800 flex flex-col transition-transform duration-200 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-        }`}
+        className={`fixed md:static inset-y-0 left-0 z-40 ${
+          dualSideMode ? 'md:w-68 md:flex' : 'md:hidden'
+        } w-68 bg-white dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800 flex flex-col transition-all duration-200 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } ${dualSideMode ? 'md:translate-x-0' : ''}`}
       >
         <div className="p-5 flex items-center justify-between">
           <div
@@ -2877,11 +2885,23 @@ function DriveDashboardContent() {
           <div className="flex items-center justify-between gap-2 sm:gap-3">
             <div className="flex items-center gap-2 sm:gap-2.5 flex-1 max-w-xl min-w-0">
               <button
-                onClick={() => setSidebarOpen(true)}
-                className="md:hidden p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0"
-                aria-label="Open menu"
+                onClick={() => {
+                  if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+                    setDualSideMode((prev) => {
+                      const next = !prev;
+                      try { localStorage.setItem('noor_dual_side', String(next)); } catch {}
+                      return next;
+                    });
+                  } else {
+                    setSidebarOpen(true);
+                  }
+                }}
+                className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0 text-slate-600 dark:text-slate-300 transition"
+                title={dualSideMode ? 'Toggle Dual-Side / Single-Side View' : 'Open Navigation'}
+                aria-label="Toggle navigation"
               >
-                <Menu className="w-5 h-5" />
+                {dualSideMode ? <PanelLeft className="w-5 h-5 hidden md:block" /> : <PanelLeftClose className="w-5 h-5 hidden md:block text-indigo-500" />}
+                <Menu className="w-5 h-5 md:hidden" />
               </button>
               <div className="relative flex-1 min-w-0">
                 <Search className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-slate-400 absolute left-3 sm:left-4 top-1/2 -translate-y-1/2" />
@@ -3052,6 +3072,28 @@ function DriveDashboardContent() {
               >
                 <Download className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Apps</span>
+              </button>
+
+              {/* Dual-Side / Single-Side View Switcher */}
+              <button
+                type="button"
+                onClick={() => {
+                  setDualSideMode((prev) => {
+                    const next = !prev;
+                    try { localStorage.setItem('noor_dual_side', String(next)); } catch {}
+                    showToast(next ? 'Dual-Side (Split) View Active' : 'Single-Side (Full Width) View Active', 'success');
+                    return next;
+                  });
+                }}
+                title={dualSideMode ? 'Switch to Single-Side View (Full Width)' : 'Switch to Dual-Side View (Split Sidebar)'}
+                className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold shadow-xs transition ${
+                  dualSideMode
+                    ? 'border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400'
+                    : 'border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                }`}
+              >
+                <Columns2 className="w-3.5 h-3.5" />
+                <span className="hidden xl:inline">{dualSideMode ? 'Dual-Side' : 'Single-Side'}</span>
               </button>
 
               {/* Info Inspector Toggle */}

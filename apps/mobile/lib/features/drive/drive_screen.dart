@@ -38,6 +38,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
   bool _vaultUnlocked = false;
   final TextEditingController _searchController = TextEditingController();
   bool _isGrid = false;
+  bool _isDualSide = true;
   bool _loading = true;
   Color _accentColor = const Color(0xFF18181B);
 
@@ -3333,6 +3334,260 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     }
   }
 
+  int _getResponsiveCrossAxisCount(double width) {
+    if (width < 450) return 2;
+    if (width < 720) return 3;
+    if (width < 1050) return 4;
+    if (width < 1400) return 5;
+    return 6;
+  }
+
+  Widget _buildNavigationPanel({
+    required bool isDualSide,
+    required double usedRatio,
+    required bool isUnlimited,
+    required int usedBytes,
+    required int quotaBytes,
+  }) {
+    return Column(
+      children: [
+        Expanded(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _folderId = null;
+                    _view = 'my-drive';
+                    _searchController.clear();
+                  });
+                  if (!isDualSide) Navigator.pop(context);
+                  _loadDrive();
+                },
+                child: DrawerHeader(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [_accentColor, const Color(0xFF2563EB)],
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      const CircleAvatar(
+                        radius: 26,
+                        backgroundImage: AssetImage('assets/owner.jpg'),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Text(
+                            'NOOR DRIVE',
+                            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          if (isDualSide) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.white24,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text('Dual-Side', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const Text(
+                        'Personal Cloud Vault (Tap for Root)',
+                        style: TextStyle(color: Colors.white70, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              for (final item in [
+                ('my-drive', 'My Drive', Icons.folder_outlined),
+                ('vault', 'Secret Vault', Icons.lock_outline),
+                ('offline', 'Offline Files', Icons.offline_pin_outlined),
+                ('recent', 'Recent', Icons.access_time),
+                ('starred', 'Starred', Icons.star_outline),
+                ('photos', 'Photos', Icons.image_outlined),
+                ('videos', 'Videos', Icons.videocam_outlined),
+                ('documents', 'Documents', Icons.description_outlined),
+                ('trash', 'Trash', Icons.delete_outline),
+              ])
+                ListTile(
+                  leading: Icon(item.$3, color: _view == item.$1 ? const Color(0xFF2563EB) : null),
+                  title: Text(item.$2, style: TextStyle(fontSize: 13, fontWeight: _view == item.$1 ? FontWeight.bold : FontWeight.normal)),
+                  selected: _view == item.$1,
+                  dense: true,
+                  onTap: () async {
+                    if (!isDualSide) Navigator.pop(context);
+                    if (item.$1 == 'vault') {
+                      final ok = await _authenticateVault();
+                      if (!ok) return;
+                    }
+                    setState(() {
+                      _view = item.$1;
+                      _folderId = null;
+                    });
+                    _loadDrive();
+                  },
+                ),
+              const Divider(),
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.photo_library_outlined, color: Color(0xFF4F46E5), size: 20),
+                title: const Text('Backup Gallery Photos', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                subtitle: const Text('Sync phone photos to Camera Uploads', style: TextStyle(fontSize: 10)),
+                onTap: () {
+                  if (!isDualSide) Navigator.pop(context);
+                  _backupGalleryPhotos();
+                },
+              ),
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.sync, color: Color(0xFF4F46E5), size: 20),
+                title: const Text('Background Auto-Sync', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                subtitle: Text(_autoSyncEnabled ? 'Auto-sync active' : 'Disabled • Tap to configure', style: const TextStyle(fontSize: 10)),
+                onTap: () {
+                  if (!isDualSide) Navigator.pop(context);
+                  _showAutoSyncDialog();
+                },
+              ),
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.cleaning_services_outlined, color: Color(0xFFD97706), size: 20),
+                title: const Text('Storage Cleaner & Duplicates', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                subtitle: const Text('Find SHA-256 duplicate files & free space', style: TextStyle(fontSize: 10)),
+                onTap: () {
+                  if (!isDualSide) Navigator.pop(context);
+                  _showDuplicateCleanerDialog();
+                },
+              ),
+              const Divider(),
+              ListTile(
+                dense: true,
+                leading: Icon(Icons.palette_outlined, color: _accentColor, size: 20),
+                title: const Text('Customize Theme Color', style: TextStyle(fontSize: 12)),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                    children: [
+                      for (final c in const [
+                        Color(0xFF18181B),
+                        Color(0xFF2563EB),
+                        Color(0xFF4F46E5),
+                        Color(0xFF059669),
+                        Color(0xFFE11D48),
+                      ])
+                        GestureDetector(
+                          onTap: () => _setAccentColor(c),
+                          child: Container(
+                            margin: const EdgeInsets.only(right: 10),
+                            width: 22,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: c,
+                              shape: BoxShape.circle,
+                              border: _accentColor.value == c.value
+                                  ? Border.all(color: Colors.black26, width: 3)
+                                  : null,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const Divider(),
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.security, color: Color(0xFF059669), size: 20),
+                title: const Text('Passcode & Security', style: TextStyle(fontSize: 12)),
+                onTap: () {
+                  if (!isDualSide) Navigator.pop(context);
+                  _openSecurityDialog();
+                },
+              ),
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.system_update, color: Color(0xFF2563EB), size: 20),
+                title: const Text('Check for App Update', style: TextStyle(fontSize: 12)),
+                onTap: () {
+                  if (!isDualSide) Navigator.pop(context);
+                  _checkForAppUpdate(silent: false);
+                },
+              ),
+              if (DesktopSyncService.isDesktopPlatform) ...[
+                ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.folder_special_rounded, color: Color(0xFF4F46E5), size: 20),
+                  title: const Text('Open Local Folder (~/NoorDrive)', style: TextStyle(fontSize: 12)),
+                  subtitle: const Text('Open computer sync folder in Files/Explorer', style: TextStyle(fontSize: 10)),
+                  onTap: () {
+                    if (!isDualSide) Navigator.pop(context);
+                    SystemTrayService.openLocalSyncFolder();
+                  },
+                ),
+                ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.sync_rounded, color: Color(0xFF0EA5E9), size: 20),
+                  title: const Text('Sync ~/NoorDrive Now', style: TextStyle(fontSize: 12)),
+                  subtitle: Text(DesktopSyncService.instance.statusMessage, style: const TextStyle(fontSize: 10)),
+                  onTap: () {
+                    DesktopSyncService.instance.triggerSync();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Syncing ~/NoorDrive folder...')),
+                    );
+                  },
+                ),
+              ],
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.tips_and_updates_outlined, color: Color(0xFF6366F1), size: 20),
+                title: const Text('Shortcuts & Gestures Guide', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                subtitle: const Text('Touch gestures, secret vault & tricks', style: TextStyle(fontSize: 10)),
+                onTap: () {
+                  if (!isDualSide) Navigator.pop(context);
+                  _showShortcutsAndGesturesDialog();
+                },
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('NOOR DRIVE Storage', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 5),
+                LinearProgressIndicator(value: usedRatio, minHeight: 5, borderRadius: BorderRadius.circular(4)),
+                const SizedBox(height: 5),
+                Text(
+                  isUnlimited
+                      ? '${_formatBytes(usedBytes)} used (Unlimited)'
+                      : '${_formatBytes(usedBytes)} of ${_formatBytes(quotaBytes)}',
+                  style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final canGoBack = _folderId != null || _view != 'my-drive';
@@ -3342,409 +3597,292 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     final quotaBytes = isUnlimited ? 1 : rawQuota;
     final usedRatio = isUnlimited ? 0.05 : (usedBytes / quotaBytes).clamp(0.0, 1.0);
 
-    return PopScope(
-      canPop: !canGoBack,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && canGoBack) _goBack();
-      },
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF6F7F9),
-        appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 0,
-          leading: _selectedKeys.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.close, color: Color(0xFF0F172A)),
-                  onPressed: () => setState(() => _selectedKeys.clear()),
-                  tooltip: 'Cancel Selection',
-                )
-              : (canGoBack
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenWidth = constraints.maxWidth;
+        final isWide = screenWidth >= 740;
+        final effectiveDualSide = isWide && _isDualSide;
+
+        return PopScope(
+          canPop: !canGoBack,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop && canGoBack) _goBack();
+          },
+          child: Scaffold(
+            backgroundColor: const Color(0xFFF6F7F9),
+            appBar: AppBar(
+              backgroundColor: Colors.white,
+              elevation: 0,
+              leading: _selectedKeys.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Color(0xFF0F172A)),
-                      onPressed: _goBack,
+                      icon: const Icon(Icons.close, color: Color(0xFF0F172A)),
+                      onPressed: () => setState(() => _selectedKeys.clear()),
+                      tooltip: 'Cancel Selection',
                     )
-                  : null),
-          title: _selectedKeys.isNotEmpty
-              ? Text(
-                  '${_selectedKeys.length} selected',
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 18),
-                )
-              : GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _folderId = null;
-                      _view = 'my-drive';
-                      _searchController.clear();
-                    });
-                    _loadDrive();
-                  },
-                  child: const Text(
-                    'NOOR DRIVE',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 18),
-                  ),
-                ),
-          actions: [
-            if (_selectedKeys.isNotEmpty) ...[
-              IconButton(
-                icon: Icon(
-                  _selectedKeys.length == (_folders.length + _files.length) && (_folders.length + _files.length) > 0
-                      ? Icons.check_box
-                      : Icons.check_box_outline_blank,
-                  color: const Color(0xFF4F46E5),
-                ),
-                onPressed: _toggleSelectAll,
-                tooltip: _selectedKeys.length == (_folders.length + _files.length)
-                    ? 'Deselect All'
-                    : 'Select All',
-              ),
-              if (_view != 'trash')
-                IconButton(
-                  icon: const Icon(Icons.download_rounded, color: Color(0xFF2563EB)),
-                  onPressed: _batchDownloadSelected,
-                  tooltip: 'Download Selected (.zip)',
-                ),
-              if (_view == 'trash') ...[
-                IconButton(
-                  icon: const Icon(Icons.restore_from_trash, color: Color(0xFF059669)),
-                  onPressed: () => _bulkAction('restore'),
-                  tooltip: 'Restore Selected',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_forever, color: Color(0xFFE11D48)),
-                  onPressed: () => _confirmAction(
-                    title: 'Delete ${_selectedKeys.length} items forever?',
-                    message: 'All selected items will be permanently deleted.',
-                    confirmText: 'Delete Forever',
-                    onConfirm: () => _bulkAction('delete'),
-                  ),
-                  tooltip: 'Delete Forever',
-                ),
-              ] else
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Color(0xFFE11D48)),
-                  onPressed: () => _confirmAction(
-                    title: 'Move ${_selectedKeys.length} items to Trash?',
-                    message: 'You can restore selected items later from Trash.',
-                    confirmText: 'Move to Trash',
-                    onConfirm: () => _bulkAction('trash'),
-                  ),
-                  tooltip: 'Move to Trash',
-                ),
-            ] else ...[
-              IconButton(
-                icon: Icon(_isGrid ? Icons.view_list : Icons.grid_view, color: const Color(0xFF18181B)),
-                onPressed: () => setState(() => _isGrid = !_isGrid),
-                tooltip: 'Toggle Grid/List',
-              ),
-              IconButton(
-                icon: const Icon(Icons.photo_library_outlined, color: Color(0xFF18181B)),
-                onPressed: _backupGalleryPhotos,
-                tooltip: 'Backup Media (Camera Uploads)',
-              ),
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert, color: Color(0xFF18181B)),
-                onSelected: (val) {
-                  if (val == 'select_all') _selectAll();
-                  if (val == 'new_folder') _createFolder();
-                  if (val == 'upload_folder') _uploadFolder();
-                  if (val == 'lock_vault') _lockVault();
-                  if (val == 'empty_trash') {
-                    _confirmAction(
-                      title: 'Empty Trash?',
-                      message: 'All trashed items will be permanently deleted.',
-                      confirmText: 'Empty Trash',
-                      onConfirm: _emptyTrash,
-                    );
-                  }
-                },
-                itemBuilder: (ctx) => [
-                  if (_files.isNotEmpty || _folders.isNotEmpty)
-                    const PopupMenuItem(
-                      value: 'select_all',
-                      child: Row(
-                        children: [
-                          Icon(Icons.select_all, size: 18, color: Color(0xFF4F46E5)),
-                          SizedBox(width: 10),
-                          Text('Select All'),
-                        ],
-                      ),
-                    ),
-                  const PopupMenuItem(
-                    value: 'new_folder',
-                    child: Row(
-                      children: [
-                        Icon(Icons.create_new_folder_outlined, size: 18, color: Color(0xFF18181B)),
-                        SizedBox(width: 10),
-                        Text('New Folder'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'upload_folder',
-                    child: Row(
-                      children: [
-                        Icon(Icons.drive_folder_upload_outlined, size: 18, color: Color(0xFF18181B)),
-                        SizedBox(width: 10),
-                        Text('Upload Folder'),
-                      ],
-                    ),
-                  ),
-                  if (_vaultUnlocked)
-                    const PopupMenuItem(
-                      value: 'lock_vault',
-                      child: Row(
-                        children: [
-                          Icon(Icons.lock_outline, size: 18, color: Color(0xFFE11D48)),
-                          SizedBox(width: 10),
-                          Text('Lock Vault'),
-                        ],
-                      ),
-                    ),
-                  if (_view == 'trash' && (_files.isNotEmpty || _folders.isNotEmpty))
-                    const PopupMenuItem(
-                      value: 'empty_trash',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete_sweep, size: 18, color: Color(0xFFE11D48)),
-                          SizedBox(width: 10),
-                          Text('Empty Trash'),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          ],
-        ),
-        drawer: Drawer(
-          backgroundColor: Colors.white,
-          child: Column(
-            children: [
-              Expanded(
-                child: ListView(
-                  padding: EdgeInsets.zero,
-                  children: [
-                    GestureDetector(
+                  : (canGoBack
+                      ? IconButton(
+                          icon: const Icon(Icons.arrow_back, color: Color(0xFF0F172A)),
+                          onPressed: _goBack,
+                        )
+                      : (effectiveDualSide
+                          ? const Padding(
+                              padding: EdgeInsets.only(left: 14),
+                              child: Icon(Icons.cloud_done_rounded, color: Color(0xFF4F46E5)),
+                            )
+                          : null)),
+              title: _selectedKeys.isNotEmpty
+                  ? Text(
+                      '${_selectedKeys.length} selected',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 18),
+                    )
+                  : GestureDetector(
                       onTap: () {
                         setState(() {
                           _folderId = null;
                           _view = 'my-drive';
                           _searchController.clear();
                         });
-                        Navigator.pop(context);
                         _loadDrive();
                       },
-                      child: DrawerHeader(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [_accentColor, const Color(0xFF2563EB)],
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'NOOR DRIVE',
+                            style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 18),
+                          ),
+                          if (effectiveDualSide) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEEF2FF),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFFC7D2FE)),
+                              ),
+                              child: const Text(
+                                'DUAL SIDE',
+                                style: TextStyle(color: Color(0xFF4F46E5), fontSize: 9, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+              actions: [
+                if (_selectedKeys.isNotEmpty) ...[
+                  IconButton(
+                    icon: Icon(
+                      _selectedKeys.length == (_folders.length + _files.length) && (_folders.length + _files.length) > 0
+                          ? Icons.check_box
+                          : Icons.check_box_outline_blank,
+                      color: const Color(0xFF4F46E5),
+                    ),
+                    onPressed: _toggleSelectAll,
+                    tooltip: _selectedKeys.length == (_folders.length + _files.length)
+                        ? 'Deselect All'
+                        : 'Select All',
+                  ),
+                  if (_view != 'trash')
+                    IconButton(
+                      icon: const Icon(Icons.download_rounded, color: Color(0xFF2563EB)),
+                      onPressed: _batchDownloadSelected,
+                      tooltip: 'Download Selected (.zip)',
+                    ),
+                  if (_view == 'trash') ...[
+                    IconButton(
+                      icon: const Icon(Icons.restore_from_trash, color: Color(0xFF059669)),
+                      onPressed: () => _bulkAction('restore'),
+                      tooltip: 'Restore Selected',
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_forever, color: Color(0xFFE11D48)),
+                      onPressed: () => _confirmAction(
+                        title: 'Delete ${_selectedKeys.length} items forever?',
+                        message: 'All selected items will be permanently deleted.',
+                        confirmText: 'Delete Forever',
+                        onConfirm: () => _bulkAction('delete'),
+                      ),
+                      tooltip: 'Delete Forever',
+                    ),
+                  ] else
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Color(0xFFE11D48)),
+                      onPressed: () => _confirmAction(
+                        title: 'Move ${_selectedKeys.length} items to Trash?',
+                        message: 'You can restore selected items later from Trash.',
+                        confirmText: 'Move to Trash',
+                        onConfirm: () => _bulkAction('trash'),
+                      ),
+                      tooltip: 'Move to Trash',
+                    ),
+                ] else ...[
+                  if (isWide)
+                    IconButton(
+                      icon: Icon(_isDualSide ? Icons.view_sidebar_rounded : Icons.view_agenda_rounded, color: const Color(0xFF18181B)),
+                      onPressed: () {
+                        setState(() => _isDualSide = !_isDualSide);
+                        _showSnack(_isDualSide ? 'Dual-Side Mode Enabled' : 'Single-Side Mode Enabled');
+                      },
+                      tooltip: _isDualSide ? 'Switch to Single-Side View' : 'Switch to Dual-Side View',
+                    ),
+                  IconButton(
+                    icon: Icon(_isGrid ? Icons.view_list : Icons.grid_view, color: const Color(0xFF18181B)),
+                    onPressed: () => setState(() => _isGrid = !_isGrid),
+                    tooltip: 'Toggle Grid/List',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.photo_library_outlined, color: Color(0xFF18181B)),
+                    onPressed: _backupGalleryPhotos,
+                    tooltip: 'Backup Media (Camera Uploads)',
+                  ),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert, color: Color(0xFF18181B)),
+                    onSelected: (val) {
+                      if (val == 'select_all') _selectAll();
+                      if (val == 'new_folder') _createFolder();
+                      if (val == 'upload_folder') _uploadFolder();
+                      if (val == 'toggle_dual_side') {
+                        setState(() => _isDualSide = !_isDualSide);
+                        _showSnack(_isDualSide ? 'Dual-Side Mode Enabled' : 'Single-Side Mode Enabled');
+                      }
+                      if (val == 'lock_vault') _lockVault();
+                      if (val == 'empty_trash') {
+                        _confirmAction(
+                          title: 'Empty Trash?',
+                          message: 'All trashed items will be permanently deleted.',
+                          confirmText: 'Empty Trash',
+                          onConfirm: _emptyTrash,
+                        );
+                      }
+                    },
+                    itemBuilder: (ctx) => [
+                      if (_files.isNotEmpty || _folders.isNotEmpty)
+                        const PopupMenuItem(
+                          value: 'select_all',
+                          child: Row(
+                            children: [
+                              Icon(Icons.select_all, size: 18, color: Color(0xFF4F46E5)),
+                              SizedBox(width: 10),
+                              Text('Select All'),
+                            ],
                           ),
                         ),
-                        child: const Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            CircleAvatar(
-                              radius: 26,
-                              backgroundImage: AssetImage('assets/owner.jpg'),
-                            ),
-                            SizedBox(height: 10),
-                            Text(
-                              'NOOR DRIVE',
-                              style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                            ),
-                            Text(
-                              'Personal Cloud Vault (Tap for Root)',
-                              style: TextStyle(color: Colors.white70, fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    for (final item in [
-                      ('my-drive', 'My Drive', Icons.folder_outlined),
-                      ('vault', 'Secret Vault', Icons.lock_outline),
-                      ('offline', 'Offline Files', Icons.offline_pin_outlined),
-                      ('recent', 'Recent', Icons.access_time),
-                      ('starred', 'Starred', Icons.star_outline),
-                      ('photos', 'Photos', Icons.image_outlined),
-                      ('videos', 'Videos', Icons.videocam_outlined),
-                      ('documents', 'Documents', Icons.description_outlined),
-                      ('trash', 'Trash', Icons.delete_outline),
-                    ])
-                      ListTile(
-                        leading: Icon(item.$3, color: _view == item.$1 ? const Color(0xFF2563EB) : null),
-                        title: Text(item.$2),
-                        selected: _view == item.$1,
-                        onTap: () async {
-                          Navigator.pop(context);
-                          if (item.$1 == 'vault') {
-                            final ok = await _authenticateVault();
-                            if (!ok) return;
-                          }
-                          setState(() {
-                            _view = item.$1;
-                            _folderId = null;
-                          });
-                          _loadDrive();
-                        },
-                      ),
-                    const Divider(),
-                    ListTile(
-                      leading: const Icon(Icons.photo_library_outlined, color: Color(0xFF4F46E5)),
-                      title: const Text('Backup Gallery Photos', style: TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: const Text('Sync phone photos to Camera Uploads', style: TextStyle(fontSize: 12)),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _backupGalleryPhotos();
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.sync, color: Color(0xFF4F46E5)),
-                      title: const Text('Background Auto-Sync', style: TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text(_autoSyncEnabled ? 'Auto-sync active' : 'Disabled • Tap to configure', style: const TextStyle(fontSize: 12)),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _showAutoSyncDialog();
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.cleaning_services_outlined, color: Color(0xFFD97706)),
-                      title: const Text('Storage Cleaner & Duplicates', style: TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: const Text('Find SHA-256 duplicate files & free space', style: TextStyle(fontSize: 12)),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _showDuplicateCleanerDialog();
-                      },
-                    ),
-                    const Divider(),
-                    ListTile(
-                      leading: Icon(Icons.palette_outlined, color: _accentColor),
-                      title: const Text('Customize Theme Color'),
-                      subtitle: Padding(
-                        padding: const EdgeInsets.only(top: 8),
+                      PopupMenuItem(
+                        value: 'toggle_dual_side',
                         child: Row(
                           children: [
-                            for (final c in const [
-                              Color(0xFF18181B),
-                              Color(0xFF2563EB),
-                              Color(0xFF4F46E5),
-                              Color(0xFF059669),
-                              Color(0xFFE11D48),
-                            ])
-                              GestureDetector(
-                                onTap: () => _setAccentColor(c),
-                                child: Container(
-                                  margin: const EdgeInsets.only(right: 10),
-                                  width: 24,
-                                  height: 24,
-                                  decoration: BoxDecoration(
-                                    color: c,
-                                    shape: BoxShape.circle,
-                                    border: _accentColor.value == c.value
-                                        ? Border.all(color: Colors.black26, width: 3)
-                                        : null,
-                                  ),
-                                ),
-                              ),
+                            Icon(_isDualSide ? Icons.view_sidebar_rounded : Icons.view_agenda_rounded, size: 18, color: const Color(0xFF4F46E5)),
+                            const SizedBox(width: 10),
+                            Text(_isDualSide ? 'Single-Side View' : 'Dual-Side View'),
                           ],
                         ),
                       ),
-                    ),
-                    const Divider(),
-                    ListTile(
-                      leading: const Icon(Icons.security, color: Color(0xFF059669)),
-                      title: const Text('Passcode & Security'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _openSecurityDialog();
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.system_update, color: Color(0xFF2563EB)),
-                      title: const Text('Check for App Update'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _checkForAppUpdate(silent: false);
-                      },
-                    ),
-                    if (DesktopSyncService.isDesktopPlatform) ...[
-                      ListTile(
-                        leading: const Icon(Icons.folder_special_rounded, color: Color(0xFF4F46E5)),
-                        title: const Text('Open Local Folder (~/NoorDrive)'),
-                        subtitle: const Text('Open computer sync folder in Files/Explorer', style: TextStyle(fontSize: 11)),
-                        onTap: () {
-                          Navigator.pop(context);
-                          SystemTrayService.openLocalSyncFolder();
-                        },
+                      const PopupMenuItem(
+                        value: 'new_folder',
+                        child: Row(
+                          children: [
+                            Icon(Icons.create_new_folder_outlined, size: 18, color: Color(0xFF18181B)),
+                            SizedBox(width: 10),
+                            Text('New Folder'),
+                          ],
+                        ),
                       ),
-                      ListTile(
-                        leading: const Icon(Icons.sync_rounded, color: Color(0xFF0EA5E9)),
-                        title: const Text('Sync ~/NoorDrive Now'),
-                        subtitle: Text(DesktopSyncService.instance.statusMessage, style: const TextStyle(fontSize: 11)),
-                        onTap: () {
-                          DesktopSyncService.instance.triggerSync();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Syncing ~/NoorDrive folder...')),
-                          );
-                        },
+                      const PopupMenuItem(
+                        value: 'upload_folder',
+                        child: Row(
+                          children: [
+                            Icon(Icons.drive_folder_upload_outlined, size: 18, color: Color(0xFF18181B)),
+                            SizedBox(width: 10),
+                            Text('Upload Folder'),
+                          ],
+                        ),
                       ),
+                      if (_vaultUnlocked)
+                        const PopupMenuItem(
+                          value: 'lock_vault',
+                          child: Row(
+                            children: [
+                              Icon(Icons.lock_outline, size: 18, color: Color(0xFFE11D48)),
+                              SizedBox(width: 10),
+                              Text('Lock Vault'),
+                            ],
+                          ),
+                        ),
+                      if (_view == 'trash' && (_files.isNotEmpty || _folders.isNotEmpty))
+                        const PopupMenuItem(
+                          value: 'empty_trash',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_sweep, size: 18, color: Color(0xFFE11D48)),
+                              SizedBox(width: 10),
+                              Text('Empty Trash'),
+                            ],
+                          ),
+                        ),
                     ],
-                    ListTile(
-                      leading: const Icon(Icons.tips_and_updates_outlined, color: Color(0xFF6366F1)),
-                      title: const Text('Shortcuts & Gestures Guide', style: TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: const Text('Touch gestures, secret vault & tricks', style: TextStyle(fontSize: 12)),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _showShortcutsAndGesturesDialog();
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                ],
+              ],
+            ),
+            drawer: effectiveDualSide
+                ? null
+                : Drawer(
+                    backgroundColor: Colors.white,
+                    child: _buildNavigationPanel(
+                      isDualSide: false,
+                      usedRatio: usedRatio,
+                      isUnlimited: isUnlimited,
+                      usedBytes: usedBytes,
+                      quotaBytes: quotaBytes,
+                    ),
+                  ),
+            floatingActionButton: FloatingActionButton.extended(
+              onPressed: _uploadingName != null ? null : _showUploadMenu,
+              backgroundColor: _accentColor,
+              foregroundColor: Colors.white,
+              icon: _uploadingName != null
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
+                  : const Icon(Icons.add),
+              label: Text(_uploadingName != null ? 'Uploading...' : 'Upload'),
+            ),
+            body: effectiveDualSide
+                ? Row(
                     children: [
-                      const Text('NOOR DRIVE Storage', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 6),
-                      LinearProgressIndicator(value: usedRatio, minHeight: 6, borderRadius: BorderRadius.circular(4)),
-                      const SizedBox(height: 6),
-                      Text(
-                        isUnlimited
-                            ? '${_formatBytes(usedBytes)} used (Unlimited Storage)'
-                            : '${_formatBytes(usedBytes)} of ${_formatBytes(quotaBytes)}',
-                        style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                      SizedBox(
+                        width: 270,
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            border: Border(right: BorderSide(color: Color(0xFFE2E8F0))),
+                          ),
+                          child: _buildNavigationPanel(
+                            isDualSide: true,
+                            usedRatio: usedRatio,
+                            isUnlimited: isUnlimited,
+                            usedBytes: usedBytes,
+                            quotaBytes: quotaBytes,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildMainContentArea(screenWidth - 270),
                       ),
                     ],
-                  ),
-                ),
-              ),
-            ],
+                  )
+                : _buildMainContentArea(screenWidth),
           ),
-        ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: _uploadingName != null ? null : _showUploadMenu,
-          backgroundColor: _accentColor,
-          foregroundColor: Colors.white,
-          icon: _uploadingName != null
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                )
-              : const Icon(Icons.add),
-          label: Text(_uploadingName != null ? 'Uploading...' : 'Upload'),
-        ),
-        body: Column(
+        );
+      },
+    );
+  }
+
+  Widget _buildMainContentArea(double availableWidth) {
+    return Column(
           children: [
             Padding(
               padding: const EdgeInsets.all(12),
@@ -3974,8 +4112,8 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                       child: _isGrid
                           ? GridView.builder(
                               padding: const EdgeInsets.all(12),
-                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
+                              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: _getResponsiveCrossAxisCount(availableWidth),
                                 crossAxisSpacing: 10,
                                 mainAxisSpacing: 10,
                                 childAspectRatio: 0.88,
@@ -4550,9 +4688,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                     ),
             ),
           ],
-        ),
-      ),
-    );
+        );
   }
 }
 
