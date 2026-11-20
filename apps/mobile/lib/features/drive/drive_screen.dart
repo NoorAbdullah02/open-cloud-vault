@@ -215,6 +215,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
           final dismissed = await apiClient.storage.read(key: 'dismissed_update_version');
           if (dismissed == info.version) return;
         }
+        if (!mounted) return;
         await UpdaterService.showUpdateDialog(context, info);
       } else if (!silent && mounted) {
         _showSnack('You are on the latest version (Build #${ApiClient.buildNumber})');

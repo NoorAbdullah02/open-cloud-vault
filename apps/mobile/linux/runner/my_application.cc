@@ -55,13 +55,20 @@ static void my_application_activate(GApplication* application) {
   // Set application and window icon
   gtk_window_set_icon_name(window, "noor-drive");
   gtk_window_set_default_icon_name("noor-drive");
+
+  g_autofree gchar* user_icon1 = g_build_filename(g_get_user_data_dir(), "icons", "hicolor", "1024x1024", "apps", "noor-drive.png", nullptr);
+  g_autofree gchar* user_icon2 = g_build_filename(g_get_user_data_dir(), "pixmaps", "noor-drive.png", nullptr);
+
   const gchar* icon_paths[] = {
     "/usr/share/pixmaps/noor-drive.png",
     "/usr/share/pixmaps/com.noordrive.app.noor_drive_app.png",
+    "/usr/share/icons/hicolor/1024x1024/apps/noor-drive.png",
+    user_icon1,
+    user_icon2,
     nullptr
   };
   for (int i = 0; icon_paths[i] != nullptr; i++) {
-    if (g_file_test(icon_paths[i], G_FILE_TEST_EXISTS)) {
+    if (icon_paths[i] && g_file_test(icon_paths[i], G_FILE_TEST_EXISTS)) {
       gtk_window_set_icon_from_file(window, icon_paths[i], nullptr);
       break;
     }

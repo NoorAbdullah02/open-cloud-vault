@@ -59,9 +59,14 @@ class UpdaterService {
           notes = res.data['releaseNotes'].toString();
         }
         if (res.data['platforms'] is Map) {
-          platforms = (res.data['platforms'] as Map).map(
-            (k, v) => MapEntry(k.toString(), v.toString()),
-          );
+          final raw = res.data['platforms'] as Map;
+          raw.forEach((k, v) {
+            if (v is String) {
+              platforms[k.toString()] = v;
+            } else if (v is Map && v['url'] != null) {
+              platforms[k.toString()] = v['url'].toString();
+            }
+          });
         }
       } catch (_) {
         // Fallback to GitHub Releases API with multi-release scanning
@@ -236,19 +241,36 @@ class UpdaterService {
                         });
 
                         try {
-                          if (Platform.isAndroid) {
-                            final dir = (await getExternalStorageDirectory()) ??
-                                (await getApplicationDocumentsDirectory());
-                            final apkPath = '${dir.path}/noor-drive-${info.version}.apk';
+                          final downloadDio = Dio(
+                            BaseOptions(
+                              connectTimeout: const Duration(seconds: 30),
+                              receiveTimeout: const Duration(minutes: 10),
+                              followRedirects: true,
+                              maxRedirects: 10,
+                            ),
+                          );
 
-                            await Dio().download(
+                          if (Platform.isAndroid) {
+                            final dir = await getTemporaryDirectory();
+                            final apkPath = '${dir.path}/noor-drive-${info.version}.apk';
+                            final existing = File(apkPath);
+                            if (await existing.exists()) {
+                              try { await existing.delete(); } catch (_) {}
+                            }
+
+                            await downloadDio.download(
                               assetUrl,
                               apkPath,
                               onReceiveProgress: (rec, total) {
-                                if (total > 0 && ctx.mounted) {
+                                if (ctx.mounted) {
                                   setModalState(() {
-                                    progress = rec / total;
-                                    statusText = 'Downloading APK (${(rec / (1024 * 1024)).toStringAsFixed(1)} MB / ${(total / (1024 * 1024)).toStringAsFixed(1)} MB)';
+                                    if (total > 0) {
+                                      progress = rec / total;
+                                      statusText = 'Downloading APK (${(rec / (1024 * 1024)).toStringAsFixed(1)} MB / ${(total / (1024 * 1024)).toStringAsFixed(1)} MB)';
+                                    } else {
+                                      progress = -1;
+                                      statusText = 'Downloading APK (${(rec / (1024 * 1024)).toStringAsFixed(1)} MB)...';
+                                    }
                                   });
                                 }
                               },
@@ -275,15 +297,24 @@ class UpdaterService {
 
                             final ext = Platform.isWindows ? 'exe' : (Platform.isLinux ? 'deb' : 'dmg');
                             final installerPath = '${targetDir.path}/noor-drive-${info.version}.$ext';
+                            final existing = File(installerPath);
+                            if (await existing.exists()) {
+                              try { await existing.delete(); } catch (_) {}
+                            }
 
-                            await Dio().download(
+                            await downloadDio.download(
                               assetUrl,
                               installerPath,
                               onReceiveProgress: (rec, total) {
-                                if (total > 0 && ctx.mounted) {
+                                if (ctx.mounted) {
                                   setModalState(() {
-                                    progress = rec / total;
-                                    statusText = 'Downloading Installer (${(rec / (1024 * 1024)).toStringAsFixed(1)} MB)...';
+                                    if (total > 0) {
+                                      progress = rec / total;
+                                      statusText = 'Downloading Installer (${(rec / (1024 * 1024)).toStringAsFixed(1)} MB / ${(total / (1024 * 1024)).toStringAsFixed(1)} MB)...';
+                                    } else {
+                                      progress = -1;
+                                      statusText = 'Downloading Installer (${(rec / (1024 * 1024)).toStringAsFixed(1)} MB)...';
+                                    }
                                   });
                                 }
                               },
