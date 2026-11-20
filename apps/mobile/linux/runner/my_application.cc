@@ -45,11 +45,26 @@ static void my_application_activate(GApplication* application) {
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "noor_drive_app");
+    gtk_header_bar_set_title(header_bar, "NOOR DRIVE");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "noor_drive_app");
+    gtk_window_set_title(window, "NOOR DRIVE");
+  }
+
+  // Set application and window icon
+  gtk_window_set_icon_name(window, "noor-drive");
+  gtk_window_set_default_icon_name("noor-drive");
+  const gchar* icon_paths[] = {
+    "/usr/share/pixmaps/noor-drive.png",
+    "/usr/share/pixmaps/com.noordrive.app.noor_drive_app.png",
+    nullptr
+  };
+  for (int i = 0; icon_paths[i] != nullptr; i++) {
+    if (g_file_test(icon_paths[i], G_FILE_TEST_EXISTS)) {
+      gtk_window_set_icon_from_file(window, icon_paths[i], nullptr);
+      break;
+    }
   }
 
   gtk_window_set_default_size(window, 1280, 720);

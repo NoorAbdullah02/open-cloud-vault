@@ -56,10 +56,17 @@ jobs:
           mkdir -p "${DEB_DIR}/usr/lib/noor-drive"
           mkdir -p "${DEB_DIR}/usr/share/applications"
           mkdir -p "${DEB_DIR}/usr/share/pixmaps"
+          mkdir -p "${DEB_DIR}/usr/share/icons/hicolor/512x512/apps"
+          mkdir -p "${DEB_DIR}/usr/share/icons/hicolor/1024x1024/apps"
           mkdir -p "${DEB_DIR}/DEBIAN"
 
           cp -r ${RELEASE_DIR}/* "${DEB_DIR}/usr/lib/noor-drive/"
           cp apps/mobile/assets/app_icon.png "${DEB_DIR}/usr/share/pixmaps/noor-drive.png"
+          cp apps/mobile/assets/app_icon.png "${DEB_DIR}/usr/share/pixmaps/com.noordrive.app.noor_drive_app.png"
+          cp apps/mobile/assets/app_icon.png "${DEB_DIR}/usr/share/icons/hicolor/512x512/apps/noor-drive.png"
+          cp apps/mobile/assets/app_icon.png "${DEB_DIR}/usr/share/icons/hicolor/512x512/apps/com.noordrive.app.noor_drive_app.png"
+          cp apps/mobile/assets/app_icon.png "${DEB_DIR}/usr/share/icons/hicolor/1024x1024/apps/noor-drive.png"
+          cp apps/mobile/assets/app_icon.png "${DEB_DIR}/usr/share/icons/hicolor/1024x1024/apps/com.noordrive.app.noor_drive_app.png"
 
           cat << 'EOF' > "${DEB_DIR}/usr/bin/noordrive"
           #!/bin/sh
@@ -83,12 +90,16 @@ jobs:
           [Desktop Entry]
           Name=NOOR DRIVE
           Comment=Personal Cloud Vault & Auto-Sync
-          Exec=/usr/bin/noordrive
+          Exec=/usr/bin/noordrive %U
           Icon=noor-drive
           Terminal=false
           Type=Application
           Categories=Utility;Network;
+          StartupWMClass=com.noordrive.app.noor_drive_app
+          StartupNotify=true
           EOF
+
+          cp "${DEB_DIR}/usr/share/applications/noor-drive.desktop" "${DEB_DIR}/usr/share/applications/com.noordrive.app.noor_drive_app.desktop"
 
           dpkg-deb --build "deb_package/noor-drive_${VERSION}_amd64" "$GITHUB_WORKSPACE/noor-drive-linux.deb"
           tar -czvf "$GITHUB_WORKSPACE/noor-drive-linux.tar.gz" -C "${RELEASE_DIR}" .
