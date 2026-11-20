@@ -175,33 +175,111 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Top Private Badge
                 Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [Color(0xFF4F46E5), Color(0xFF0EA5E9)],
+                  margin: const EdgeInsets.only(bottom: 18),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFA7F3D0)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.shield_rounded, size: 13, color: Color(0xFF059669)),
+                      SizedBox(width: 5),
+                      Text(
+                        'PRIVATE CLOUD VAULT',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                          color: Color(0xFF047857),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Glowing Owner Avatar with Badge
+                Stack(
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(3.5),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF4F46E5), Color(0xFF0EA5E9), Color(0xFF6366F1)],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF4F46E5).withValues(alpha: 0.35),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white,
+                        ),
+                        child: const CircleAvatar(
+                          radius: 44,
+                          backgroundColor: Color(0xFFEEF2FF),
+                          backgroundImage: AssetImage('assets/owner.jpg'),
+                        ),
+                      ),
                     ),
-                  ),
-                  child: const CircleAvatar(
-                    radius: 40,
-                    backgroundImage: AssetImage('assets/app_icon.png'),
-                  ),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F172A),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.cloud_done_rounded,
+                        size: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'NOOR DRIVE',
+                  'Welcome back, Noor',
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
+                    letterSpacing: -0.3,
                     color: Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Sheikh Noor Abdullah • Personal Cloud',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF4F46E5),
                   ),
                 ),
                 const SizedBox(height: 6),
                 const Text(
                   'Enter your passcode to unlock NOOR DRIVE',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                  style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
                 ),
                 const SizedBox(height: 24),
                 if (_error != null)

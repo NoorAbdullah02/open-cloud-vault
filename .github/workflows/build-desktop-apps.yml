@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Target Release Tag Name (e.g. v1.0.60)'
+        description: 'Target Release Tag Name (e.g. v1.0.61)'
         required: false
-        default: 'v1.0.60'
+        default: 'v1.0.61'
   release:
     types: [published]
   push:
@@ -99,9 +99,9 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.tag_name || github.event.release.tag_name || github.ref_name }}"
           if [ -z "$TAG" ] || [ "$TAG" = "master" ]; then
-            TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "v1.0.60")
+            TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "v1.0.61")
           fi
-          [ -z "$TAG" ] && TAG="v1.0.60"
+          [ -z "$TAG" ] && TAG="v1.0.61"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -134,7 +134,9 @@ jobs:
 
       - name: Build Windows Release
         working-directory: apps/mobile
+        shell: pwsh
         run: |
+          $env:CL = "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS"
           flutter pub get
           flutter build windows --release
 
@@ -151,9 +153,9 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.tag_name || github.event.release.tag_name || github.ref_name }}"
           if [ -z "$TAG" ] || [ "$TAG" = "master" ]; then
-            TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "v1.0.60")
+            TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "v1.0.61")
           fi
-          [ -z "$TAG" ] && TAG="v1.0.60"
+          [ -z "$TAG" ] && TAG="v1.0.61"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -168,7 +170,7 @@ jobs:
 
   build-macos:
     name: Build macOS (.dmg / .zip)
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -199,9 +201,9 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.tag_name || github.event.release.tag_name || github.ref_name }}"
           if [ -z "$TAG" ] || [ "$TAG" = "master" ]; then
-            TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "v1.0.60")
+            TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "v1.0.61")
           fi
-          [ -z "$TAG" ] && TAG="v1.0.60"
+          [ -z "$TAG" ] && TAG="v1.0.61"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

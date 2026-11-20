@@ -71,7 +71,7 @@ export class SharesController {
     if (cachedRelease && Date.now() - cachedRelease.fetchedAt < 60_000) {
       return cachedRelease;
     }
-    const defaultTag = 'v1.0.53';
+    const defaultTag = 'v1.0.61';
     const baseReleaseUrl = 'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download';
     let version = defaultTag;
     let apkAsset: any = null;
@@ -82,18 +82,22 @@ export class SharesController {
 
     try {
       const res = await fetch(
-        'https://api.github.com/repos/NoorAbdullah02/open-cloud-vault/releases/latest',
+        'https://api.github.com/repos/NoorAbdullah02/open-cloud-vault/releases?per_page=5',
         { headers: { 'User-Agent': 'NoorDrive-API' } },
       );
       if (res.ok) {
-        const data: any = await res.json();
-        version = data.tag_name || defaultTag;
-        const assets = data.assets || [];
-        apkAsset = assets.find((a: any) => String(a.name).endsWith('.apk'));
-        windowsAsset = assets.find((a: any) => String(a.name).endsWith('.exe') || String(a.name).includes('Windows'));
-        macAsset = assets.find((a: any) => String(a.name).endsWith('.dmg') || String(a.name).includes('macOS') || String(a.name).includes('mac'));
-        linuxAsset = assets.find((a: any) => String(a.name).endsWith('.deb'));
-        linuxTarAsset = assets.find((a: any) => String(a.name).endsWith('.tar.gz') && String(a.name).includes('linux'));
+        const releases: any[] = await res.json();
+        if (releases && releases.length > 0) {
+          version = releases[0].tag_name || defaultTag;
+          for (const rel of releases) {
+            const assets = rel.assets || [];
+            if (!apkAsset) apkAsset = assets.find((a: any) => String(a.name).endsWith('.apk'));
+            if (!windowsAsset) windowsAsset = assets.find((a: any) => String(a.name).endsWith('.exe') || String(a.name).includes('Windows'));
+            if (!macAsset) macAsset = assets.find((a: any) => String(a.name).endsWith('.dmg') || String(a.name).includes('macOS') || String(a.name).includes('mac'));
+            if (!linuxAsset) linuxAsset = assets.find((a: any) => String(a.name).endsWith('.deb'));
+            if (!linuxTarAsset) linuxTarAsset = assets.find((a: any) => String(a.name).endsWith('.tar.gz') && String(a.name).includes('linux'));
+          }
+        }
       }
     } catch {}
 

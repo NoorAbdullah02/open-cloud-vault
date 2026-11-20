@@ -2986,6 +2986,216 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _showOwnerProfileDialog() async {
+    final usedBytes = int.tryParse(_user?['usedStorageBytes']?.toString() ?? '0') ?? 0;
+    final rawQuota = int.tryParse(_user?['storageQuotaBytes']?.toString() ?? '0') ?? 0;
+    final isUnlimited = rawQuota == 0;
+    final quotaBytes = isUnlimited ? (100 * 1024 * 1024 * 1024) : rawQuota;
+    final usedRatio = isUnlimited ? 0.05 : (quotaBytes > 0 ? (usedBytes / quotaBytes).clamp(0.0, 1.0) : 0.0);
+
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 380),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Owner Portrait with Glowing Gradient Ring & Verified Badge
+              Stack(
+                alignment: Alignment.bottomRight,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(3.5),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF4F46E5), Color(0xFF0EA5E9), Color(0xFF6366F1)],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF4F46E5).withValues(alpha: 0.35),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white,
+                      ),
+                      child: const CircleAvatar(
+                        radius: 44,
+                        backgroundImage: AssetImage('assets/owner.jpg'),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF059669),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: const Icon(
+                      Icons.verified_user_rounded,
+                      size: 14,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Sheikh Noor Abdullah',
+                style: TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 3),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEEF2FF),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFC7D2FE)),
+                    ),
+                    child: const Text(
+                      'Vault Owner',
+                      style: TextStyle(
+                        color: Color(0xFF4F46E5),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFECFDF5),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFA7F3D0)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.lock_outline, size: 11, color: Color(0xFF059669)),
+                        SizedBox(width: 3),
+                        Text(
+                          'Encrypted',
+                          style: TextStyle(
+                            color: Color(0xFF059669),
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Storage Progress Card
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Cloud Storage', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF334155))),
+                        Text(
+                          isUnlimited
+                              ? '${_formatBytes(usedBytes)} / Unlimited'
+                              : '${_formatBytes(usedBytes)} / ${_formatBytes(quotaBytes)}',
+                          style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: isUnlimited ? 0.05 : usedRatio,
+                        minHeight: 6,
+                        backgroundColor: const Color(0xFFE2E8F0),
+                        valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Domain: ${Uri.tryParse(apiClient.currentBaseUrl)?.host ?? "drive.noor.is-a.dev"}',
+                      style: const TextStyle(fontSize: 10.5, color: Color(0xFF94A3B8)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Actions
+              ListTile(
+                dense: true,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                leading: const Icon(Icons.system_update_rounded, color: Color(0xFF2563EB)),
+                title: const Text('Check for Updates', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                subtitle: Text('Current: v1.0.${ApiClient.buildNumber}', style: const TextStyle(fontSize: 11)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _checkForAppUpdate(silent: false);
+                },
+              ),
+              ListTile(
+                dense: true,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                leading: const Icon(Icons.security_rounded, color: Color(0xFF4F46E5)),
+                title: const Text('Security & Active Sessions', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _openSecurityDialog();
+                },
+              ),
+              ListTile(
+                dense: true,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                leading: const Icon(Icons.lock_rounded, color: Color(0xFFE11D48)),
+                title: const Text('Lock Drive', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFFE11D48))),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _lockVault();
+                },
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Close', style: TextStyle(color: Color(0xFF64748B))),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _openSecurityDialog() async {
     final currentCtrl = TextEditingController();
     final newCtrl = TextEditingController();
@@ -3365,43 +3575,80 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                   if (!isDualSide) Navigator.pop(context);
                   _loadDrive();
                 },
-                child: DrawerHeader(
+                child: Container(
+                  padding: EdgeInsets.fromLTRB(16, isDualSide ? 20 : 48, 16, 16),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [_accentColor, const Color(0xFF2563EB)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [_accentColor, const Color(0xFF1E40AF)],
                     ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const CircleAvatar(
-                        radius: 26,
-                        backgroundImage: AssetImage('assets/owner.jpg'),
-                      ),
-                      const SizedBox(height: 8),
                       Row(
                         children: [
-                          const Text(
-                            'NOOR DRIVE',
-                            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                          if (isDualSide) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.white24,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: const Text('Dual-Side', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                          Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.5),
                             ),
-                          ],
+                            child: const CircleAvatar(
+                              radius: 24,
+                              backgroundImage: AssetImage('assets/owner.jpg'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Sheikh Noor',
+                                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text('Owner', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                                    ),
+                                    if (isDualSide) ...[
+                                      const SizedBox(width: 4),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF38BDF8).withValues(alpha: 0.3),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: const Text('Dual-Side', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
-                      const Text(
-                        'Personal Cloud Vault (Tap for Root)',
-                        style: TextStyle(color: Colors.white70, fontSize: 11),
+                      const SizedBox(height: 12),
+                      const Row(
+                        children: [
+                          Icon(Icons.cloud_done_rounded, size: 14, color: Colors.white70),
+                          SizedBox(width: 6),
+                          Text(
+                            'NOOR DRIVE • Root Vault',
+                            style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -3821,6 +4068,30 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                           ),
                         ),
                     ],
+                  ),
+                  GestureDetector(
+                    onTap: _showOwnerProfileDialog,
+                    child: Container(
+                      margin: const EdgeInsets.only(left: 6, right: 12),
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF4F46E5), Color(0xFF0EA5E9)],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF4F46E5).withValues(alpha: 0.25),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const CircleAvatar(
+                        radius: 16,
+                        backgroundImage: AssetImage('assets/owner.jpg'),
+                      ),
+                    ),
                   ),
                 ],
               ],
