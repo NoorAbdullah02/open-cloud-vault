@@ -1,0 +1,21 @@
+name: Feature Request
+description: Propose an architectural improvement or new capability for NOOR DRIVE
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: Share your ideas for new storage backends, viewers, or security features.
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Feature Summary
+      description: Explain the problem this new feature solves or why it would be beneficial.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution or Implementation Concept
+      description: How would you like this to be implemented or configured?
+    validations:
+      required: false

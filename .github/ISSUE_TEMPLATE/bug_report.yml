@@ -1,0 +1,28 @@
+name: Bug Report
+description: Report an unexpected defect, broken link, or runtime error in NOOR DRIVE
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thank you for helping improve NOOR DRIVE! Please provide details to help reproduce the issue.
+  - type: input
+    id: version
+    attributes:
+      label: Application Version / Component
+      description: Which part of the ecosystem is affected? (e.g., Web App, Android APK, NestJS API)
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: Describe what happened and what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Outline step-by-step instructions to recreate the problem.
+    validations:
+      required: true
