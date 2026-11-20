@@ -137,7 +137,7 @@ class DesktopSyncService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final entities = _syncFolder!.listSync(recursive: true, followLinks: false);
+      final entities = await _syncFolder!.list(recursive: true, followLinks: false).toList();
       final localFiles = entities.whereType<File>().toList();
       _totalFiles = localFiles.length;
       _syncedFiles = 0;

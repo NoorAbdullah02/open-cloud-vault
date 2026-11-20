@@ -1589,7 +1589,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
 
     List<File> filesToUpload = [];
     try {
-      final entities = rootDir.listSync(recursive: true);
+      final entities = await rootDir.list(recursive: true).toList();
       filesToUpload = entities.whereType<File>().toList();
     } catch (_) {
       // Android 11+ Scoped Storage fallback: create folder & pick files inside it
