@@ -44,10 +44,18 @@ jobs:
           mkdir -p "${DEB_DIR}/usr/bin"
           mkdir -p "${DEB_DIR}/usr/lib/noor-drive"
           mkdir -p "${DEB_DIR}/usr/share/applications"
+          mkdir -p "${DEB_DIR}/usr/share/pixmaps"
           mkdir -p "${DEB_DIR}/DEBIAN"
 
           cp -r ${RELEASE_DIR}/* "${DEB_DIR}/usr/lib/noor-drive/"
-          ln -s /usr/lib/noor-drive/noor_drive_app "${DEB_DIR}/usr/bin/noordrive"
+          cp apps/mobile/assets/app_icon.png "${DEB_DIR}/usr/share/pixmaps/noor-drive.png"
+
+          cat << 'EOF' > "${DEB_DIR}/usr/bin/noordrive"
+          #!/bin/sh
+          cd /usr/lib/noor-drive
+          exec /usr/lib/noor-drive/noor_drive_app "$@"
+          EOF
+          chmod 755 "${DEB_DIR}/usr/bin/noordrive"
 
           cat << EOF > "${DEB_DIR}/DEBIAN/control"
           Package: noor-drive
@@ -63,8 +71,9 @@ jobs:
           cat << EOF > "${DEB_DIR}/usr/share/applications/noor-drive.desktop"
           [Desktop Entry]
           Name=NOOR DRIVE
-          Comment=Personal Cloud Vault
+          Comment=Personal Cloud Vault & Auto-Sync
           Exec=/usr/bin/noordrive
+          Icon=noor-drive
           Terminal=false
           Type=Application
           Categories=Utility;Network;
@@ -94,18 +103,23 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+
       - name: Build Windows Release
         working-directory: apps/mobile
         run: |
           flutter pub get
           flutter build windows --release
 
-      - name: Package Windows Bundle
+      - name: Package Windows Bundle & Installer
         shell: pwsh
         run: |
           $ReleaseDir = "apps/mobile/build/windows/x64/runner/Release"
           Compress-Archive -Path "$ReleaseDir\*" -DestinationPath "NoorDrive-Windows-Portable.zip" -Force
-          Copy-Item "$ReleaseDir\noor_drive_app.exe" -Destination "NoorDrive-Setup.exe"
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" scripts/desktop/windows-installer.iss
 
       - name: Upload Windows Assets to Release
         uses: softprops/action-gh-release@v2
@@ -134,11 +148,13 @@ jobs:
           flutter pub get
           flutter build macos --release
 
-      - name: Package macOS App
+      - name: Package Native macOS .dmg & .zip
         run: |
           cd apps/mobile/build/macos/Build/Products/Release
-          zip -r -y NoorDrive-macOS.zip "NOOR DRIVE.app" || zip -r -y NoorDrive-macOS.zip "noor_drive_app.app"
-          mv NoorDrive-macOS.zip ../../../../../../NoorDrive.dmg
+          APP_NAME=$(ls -d *.app | head -n 1)
+          echo "Packaging macOS Application: $APP_NAME"
+          hdiutil create -volname "NOOR DRIVE" -srcfolder "$APP_NAME" -ov -format UDZO ../../../../../../NoorDrive.dmg
+          zip -r -y ../../../../../../NoorDrive-macOS.zip "$APP_NAME"
 
       - name: Upload macOS Assets to Release
         uses: softprops/action-gh-release@v2
@@ -146,3 +162,4 @@ jobs:
         with:
           files: |
             NoorDrive.dmg
+            NoorDrive-macOS.zip

@@ -108,24 +108,31 @@ export class SharesController {
       sizeBytes: Number(apkAsset?.size || 31574349),
       downloadUrl: apkUrl,
       platforms: {
+        apk: apkUrl,
+        windows: windowsUrl,
+        windowsPortable: `${baseReleaseUrl}/NoorDrive-Windows-Portable.zip`,
+        mac: macUrl,
+        macZip: `${baseReleaseUrl}/NoorDrive-macOS.zip`,
+        linux: linuxUrl,
+        linuxTar: linuxTarUrl,
         android: {
           name: 'noor-drive.apk',
           url: apkUrl,
           sizeBytes: Number(apkAsset?.size || 31574349),
         },
-        windows: {
+        windowsData: {
           name: 'NoorDrive-Setup.exe',
           url: windowsUrl,
           sizeBytes: Number(windowsAsset?.size || 45200000),
           portableUrl: `${baseReleaseUrl}/NoorDrive-Windows-Portable.zip`,
         },
-        mac: {
+        macData: {
           name: 'NoorDrive.dmg',
           url: macUrl,
           sizeBytes: Number(macAsset?.size || 41800000),
           zipUrl: `${baseReleaseUrl}/NoorDrive-macOS.zip`,
         },
-        linux: {
+        linuxData: {
           name: 'noor-drive-linux.deb',
           url: linuxUrl,
           sizeBytes: Number(linuxAsset?.size || 38400000),

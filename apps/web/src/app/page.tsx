@@ -805,6 +805,14 @@ function DriveDashboardContent() {
   const [webdavCopied, setWebdavCopied] = useState(false);
   const [apkSizeBytes, setApkSizeBytes] = useState<string | null>(null);
   const [apkVersion, setApkVersion] = useState<string | null>(null);
+
+  const getSafeReleaseUrl = (key: string, fallback: string) => {
+    if (!releasePlatforms) return fallback;
+    const val = releasePlatforms[key];
+    if (typeof val === 'string' && val.startsWith('http')) return val;
+    if (val && typeof val === 'object' && typeof val.url === 'string') return val.url;
+    return fallback;
+  };
   const [confirmModal, setConfirmModal] = useState<{
     title: string;
     description: string;
@@ -5947,17 +5955,25 @@ function DriveDashboardContent() {
                       Includes System Tray resident, <code className="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-800 font-mono text-[11px]">C:\Users\Name\NoorDrive</code> auto-sync &amp; background updater.
                     </p>
                   </div>
-                  <a
-                    href={
-                      releasePlatforms?.windows ||
-                      'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/NoorDrive-Setup.exe'
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full sm:w-auto shrink-0 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-sm transition active:scale-95"
-                  >
-                    <Download className="w-4 h-4" /> Download .EXE
-                  </a>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0 w-full sm:w-auto">
+                    <a
+                      href={getSafeReleaseUrl('windows', 'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/NoorDrive-Setup.exe')}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-sm transition active:scale-95"
+                    >
+                      <Download className="w-4 h-4" /> Download .EXE
+                    </a>
+                    <a
+                      href={getSafeReleaseUrl('windowsPortable', 'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/NoorDrive-Windows-Portable.zip')}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                      title="No installation needed (Portable .zip)"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Portable .zip
+                    </a>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
@@ -5996,17 +6012,25 @@ function DriveDashboardContent() {
                       Menu Bar status icon, <code className="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-800 font-mono text-[11px]">~/NoorDrive</code> auto-sync &amp; native Finder integration.
                     </p>
                   </div>
-                  <a
-                    href={
-                      releasePlatforms?.mac ||
-                      'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/NoorDrive.dmg'
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full sm:w-auto shrink-0 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-sm transition active:scale-95"
-                  >
-                    <Download className="w-4 h-4" /> Download .DMG
-                  </a>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0 w-full sm:w-auto">
+                    <a
+                      href={getSafeReleaseUrl('mac', 'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/NoorDrive.dmg')}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-sm transition active:scale-95"
+                    >
+                      <Download className="w-4 h-4" /> Download .DMG
+                    </a>
+                    <a
+                      href={getSafeReleaseUrl('macZip', 'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/NoorDrive-macOS.zip')}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                      title="Universal macOS .zip"
+                    >
+                      <Download className="w-3.5 h-3.5" /> .zip
+                    </a>
+                  </div>
                 </div>
 
                 <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300">
@@ -6036,10 +6060,7 @@ function DriveDashboardContent() {
                   </div>
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0 w-full sm:w-auto">
                     <a
-                      href={
-                        releasePlatforms?.linux ||
-                        'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive-linux.deb'
-                      }
+                      href={getSafeReleaseUrl('linux', 'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive-linux.deb')}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-sm transition active:scale-95"
@@ -6047,10 +6068,7 @@ function DriveDashboardContent() {
                       <Download className="w-4 h-4" /> Download .DEB
                     </a>
                     <a
-                      href={
-                        releasePlatforms?.linuxTar ||
-                        'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive-linux.tar.gz'
-                      }
+                      href={getSafeReleaseUrl('linuxTar', 'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive-linux.tar.gz')}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition"
@@ -6074,11 +6092,7 @@ function DriveDashboardContent() {
             {platformTab === 'android' && (
               <div className="space-y-4">
                 <a
-                  href={
-                    releasePlatforms?.apk ||
-                    process.env.NEXT_PUBLIC_ANDROID_APK_URL ||
-                    'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.apk'
-                  }
+                  href={getSafeReleaseUrl('apk', process.env.NEXT_PUBLIC_ANDROID_APK_URL || 'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.apk')}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl border border-emerald-200 dark:border-emerald-800/80 hover:border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20 transition group"
