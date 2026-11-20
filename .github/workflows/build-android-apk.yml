@@ -44,7 +44,7 @@ jobs:
         run: |
           flutter pub get
           dart run flutter_launcher_icons
-          flutter build apk --release --dart-define=API_URL=https://noor-cloud-vault.onrender.com/api --dart-define=APP_BUILD_NUMBER=${{ github.run_number }}
+          flutter build apk --release --dart-define=API_URL=https://drive.noor.is-a.dev/api --dart-define=APP_BUILD_NUMBER=${{ github.run_number }}
           cp build/app/outputs/flutter-apk/app-release.apk noor-drive.apk
 
       - name: Upload APK artifact

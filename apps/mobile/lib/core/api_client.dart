@@ -6,9 +6,9 @@ class ApiClient {
   // e.g. https://noor-drive-api.onrender.com/api
   static const String baseUrl = String.fromEnvironment(
     'API_URL',
-    defaultValue: 'https://noor-cloud-vault.onrender.com/api',
+    defaultValue: 'https://drive.noor.is-a.dev/api',
   );
-  static const int buildNumber = int.fromEnvironment('APP_BUILD_NUMBER', defaultValue: 1);
+  static const int buildNumber = int.fromEnvironment('APP_BUILD_NUMBER', defaultValue: 61);
 
   final Dio dio;
   final FlutterSecureStorage storage;

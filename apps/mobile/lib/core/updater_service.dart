@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'api_client.dart';
@@ -125,14 +126,31 @@ class UpdaterService {
       builder: (ctx) {
         bool downloading = false;
         double progress = 0;
+        String statusText = 'Ready to download update';
 
         return StatefulBuilder(
           builder: (ctx, setModalState) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             title: Row(
               children: [
-                const Icon(Icons.system_update_rounded, color: Color(0xFF4F46E5)),
-                const SizedBox(width: 8),
-                Text('Update to ${info.version}'),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEF2FF),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.system_update_rounded, color: Color(0xFF4F46E5), size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Update to ${info.version}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                      Text(platformName, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500)),
+                    ],
+                  ),
+                ),
               ],
             ),
             content: Column(
@@ -140,48 +158,85 @@ class UpdaterService {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'A new version of NOOR DRIVE is available for $platformName.',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+                  'A new official version of NOOR DRIVE is available for your device.',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  info.releaseNotes,
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Text(
+                    info.releaseNotes,
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11.5, color: Color(0xFF475569)),
+                  ),
                 ),
                 if (downloading) ...[
-                  const SizedBox(height: 14),
-                  LinearProgressIndicator(value: progress > 0 ? progress : null),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Downloading update... ${(progress * 100).round()}%',
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  const SizedBox(height: 16),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: progress > 0 ? progress : null,
+                      minHeight: 8,
+                      backgroundColor: const Color(0xFFE2E8F0),
+                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5)),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(statusText, style: const TextStyle(fontSize: 11.5, color: Color(0xFF4F46E5), fontWeight: FontWeight.w600)),
+                      Text('${(progress * 100).round()}%', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                    ],
                   ),
                 ],
               ],
             ),
             actions: [
-              if (!downloading)
+              if (!downloading) ...[
                 TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Later'),
+                  onPressed: () async {
+                    await apiClient.storage.write(key: 'dismissed_update_version', value: info.version);
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  },
+                  child: const Text('Later', style: TextStyle(color: Color(0xFF64748B))),
                 ),
+                TextButton.icon(
+                  icon: const Icon(Icons.open_in_browser, size: 16),
+                  label: const Text('Web Download', style: TextStyle(fontSize: 12)),
+                  onPressed: () async {
+                    final uri = Uri.parse(assetUrl);
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  },
+                ),
+              ],
               ElevatedButton.icon(
-                icon: const Icon(Icons.download_rounded),
+                icon: const Icon(Icons.download_rounded, size: 18),
                 label: Text(downloading ? 'Downloading...' : 'Update Now'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4F46E5),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
                 onPressed: downloading
                     ? null
                     : () async {
-                        if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
-                          // Desktop: Launch direct download URL in default browser / download manager
-                          final uri = Uri.parse(assetUrl);
-                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                          if (ctx.mounted) Navigator.pop(ctx);
-                        } else {
-                          // Android / Mobile: Download and trigger install
-                          setModalState(() => downloading = true);
-                          try {
+                        setModalState(() {
+                          downloading = true;
+                          progress = 0.05;
+                          statusText = 'Starting download...';
+                        });
+
+                        try {
+                          if (Platform.isAndroid) {
                             final dir = (await getExternalStorageDirectory()) ??
                                 (await getApplicationDocumentsDirectory());
                             final apkPath = '${dir.path}/noor-drive-${info.version}.apk';
@@ -190,24 +245,72 @@ class UpdaterService {
                               assetUrl,
                               apkPath,
                               onReceiveProgress: (rec, total) {
-                                if (total > 0) {
-                                  setModalState(() => progress = rec / total);
+                                if (total > 0 && ctx.mounted) {
+                                  setModalState(() {
+                                    progress = rec / total;
+                                    statusText = 'Downloading APK (${(rec / (1024 * 1024)).toStringAsFixed(1)} MB / ${(total / (1024 * 1024)).toStringAsFixed(1)} MB)';
+                                  });
                                 }
                               },
                             );
 
-                            await launchUrl(
-                              Uri.parse('content://$apkPath'),
-                              mode: LaunchMode.externalApplication,
+                            setModalState(() => statusText = 'Launching Installer...');
+                            final openRes = await OpenFilex.open(
+                              apkPath,
+                              type: 'application/vnd.android.package-archive',
                             );
-                            if (ctx.mounted) Navigator.pop(ctx);
-                          } catch (e) {
-                            setModalState(() => downloading = false);
-                            if (ctx.mounted) {
-                              ScaffoldMessenger.of(ctx).showSnackBar(
-                                SnackBar(content: Text('Update download failed: $e')),
-                              );
+
+                            if (openRes.type != ResultType.done) {
+                              // If internal package installer couldn't launch, fallback to system browser
+                              await launchUrl(Uri.parse(assetUrl), mode: LaunchMode.externalApplication);
                             }
+                            if (ctx.mounted) Navigator.pop(ctx);
+                          } else {
+                            // Desktop: Linux, Windows, macOS
+                            Directory? targetDir;
+                            try {
+                              targetDir = await getDownloadsDirectory();
+                            } catch (_) {}
+                            targetDir ??= await getApplicationDocumentsDirectory();
+
+                            final ext = Platform.isWindows ? 'exe' : (Platform.isLinux ? 'deb' : 'dmg');
+                            final installerPath = '${targetDir.path}/noor-drive-${info.version}.$ext';
+
+                            await Dio().download(
+                              assetUrl,
+                              installerPath,
+                              onReceiveProgress: (rec, total) {
+                                if (total > 0 && ctx.mounted) {
+                                  setModalState(() {
+                                    progress = rec / total;
+                                    statusText = 'Downloading Installer (${(rec / (1024 * 1024)).toStringAsFixed(1)} MB)...';
+                                  });
+                                }
+                              },
+                            );
+
+                            setModalState(() => statusText = 'Opening package installer...');
+                            final openRes = await OpenFilex.open(installerPath);
+                            if (openRes.type != ResultType.done) {
+                              await launchUrl(Uri.parse(assetUrl), mode: LaunchMode.externalApplication);
+                            }
+                            if (ctx.mounted) Navigator.pop(ctx);
+                          }
+                        } catch (e) {
+                          setModalState(() {
+                            downloading = false;
+                            statusText = 'Download failed. Use Web Download button.';
+                          });
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(
+                                content: Text('Download failed: $e. You can use Web Download.'),
+                                action: SnackBarAction(
+                                  label: 'Open Browser',
+                                  onPressed: () => launchUrl(Uri.parse(assetUrl), mode: LaunchMode.externalApplication),
+                                ),
+                              ),
+                            );
                           }
                         }
                       },

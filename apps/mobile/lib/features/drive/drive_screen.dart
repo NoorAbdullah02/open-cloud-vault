@@ -68,6 +68,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
   Timer? _searchDebounce;
   Timer? _realtimeSyncTimer;
   String? _authToken;
+  bool _isFetchingDrive = false;
 
   @override
   void initState() {
@@ -96,9 +97,9 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
       });
     }
 
-    // Real-Time Sync Engine: 4s background refresh
-    _realtimeSyncTimer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (mounted && _uploadingName == null && _view != 'offline') {
+    // Real-Time Sync Engine: 12s non-blocking background refresh
+    _realtimeSyncTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+      if (mounted && _uploadingName == null && _view != 'offline' && !_isFetchingDrive) {
         _loadDrive(silent: true);
       }
     });
@@ -210,6 +211,10 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     try {
       final info = await UpdaterService.checkUpdate();
       if (info != null && mounted) {
+        if (silent) {
+          final dismissed = await apiClient.storage.read(key: 'dismissed_update_version');
+          if (dismissed == info.version) return;
+        }
         await UpdaterService.showUpdateDialog(context, info);
       } else if (!silent && mounted) {
         _showSnack('You are on the latest version (Build #${ApiClient.buildNumber})');
@@ -258,75 +263,89 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _loadDrive({bool silent = false}) async {
-    _authToken ??= await apiClient.storage.read(key: 'access_token');
-    if (!silent) _selectedKeys.clear();
-
-    if (_view == 'offline') {
-      if (mounted) {
-        setState(() {
-          _folders = [];
-          _breadcrumbs = [{'id': 'offline', 'name': 'Offline Files'}];
-          _files = _offlineFiles.values.toList();
-          _loading = false;
-        });
-      }
-      return;
-    }
-
-    final cacheKey = '$_view:${_folderId ?? 'root'}:$_search:$_filterType';
-    final cached = _driveCache[cacheKey];
-    if (cached != null && !silent) {
-      setState(() {
-        _folders = cached['folders']!;
-        _files = cached['files']!;
-        _breadcrumbs = cached['breadcrumbs']!;
-        _loading = false;
-      });
-    } else if (!silent) {
-      setState(() => _loading = true);
-    }
+    if (_isFetchingDrive) return;
+    _isFetchingDrive = true;
 
     try {
-      final res = await apiClient.dio.get(
-        '/drive',
-        queryParameters: {
-          'view': _view,
-          if (_folderId != null) 'folderId': _folderId,
-          if (_search.isNotEmpty) 'search': _search,
-          if (_filterType != 'all') 'filterType': _filterType,
-        },
-      );
-      final folders = List<dynamic>.from(res.data['folders'] ?? []);
-      final files = List<dynamic>.from(res.data['files'] ?? []);
-      final breadcrumbs = List<dynamic>.from(res.data['breadcrumbs'] ?? []);
-      _driveCache[cacheKey] = {
-        'folders': folders,
-        'files': files,
-        'breadcrumbs': breadcrumbs,
-      };
-      if (mounted) {
-        setState(() {
-          _folders = folders;
-          _files = files;
-          _breadcrumbs = breadcrumbs;
-        });
-      }
-    } catch (e) {
-      if (_offlineFiles.isNotEmpty && _view != 'offline' && !silent) {
+      _authToken ??= await apiClient.storage.read(key: 'access_token');
+      if (!silent) _selectedKeys.clear();
+
+      if (_view == 'offline') {
         if (mounted) {
-          _showSnack('Offline Mode: Disconnected from network. Showing cached offline files.', isError: true);
           setState(() {
-            _view = 'offline';
             _folders = [];
             _breadcrumbs = [{'id': 'offline', 'name': 'Offline Files'}];
             _files = _offlineFiles.values.toList();
+            _loading = false;
           });
         }
-      } else if (mounted && !silent) {
+        return;
+      }
+
+      final cacheKey = '$_view:${_folderId ?? 'root'}:$_search:$_filterType';
+      final cached = _driveCache[cacheKey];
+      if (cached != null && !silent) {
+        setState(() {
+          _folders = cached['folders']!;
+          _files = cached['files']!;
+          _breadcrumbs = cached['breadcrumbs']!;
+          _loading = false;
+        });
+      } else if (!silent) {
+        setState(() => _loading = true);
+      }
+
+      try {
+        final res = await apiClient.dio.get(
+          '/drive',
+          queryParameters: {
+            'view': _view,
+            if (_folderId != null) 'folderId': _folderId,
+            if (_search.isNotEmpty) 'search': _search,
+            if (_filterType != 'all') 'filterType': _filterType,
+          },
+        );
+        final folders = List<dynamic>.from(res.data['folders'] ?? []);
+        final files = List<dynamic>.from(res.data['files'] ?? []);
+        final breadcrumbs = List<dynamic>.from(res.data['breadcrumbs'] ?? []);
+        _driveCache[cacheKey] = {
+          'folders': folders,
+          'files': files,
+          'breadcrumbs': breadcrumbs,
+        };
+
+        final hasChanged = _folders.length != folders.length ||
+            _files.length != files.length ||
+            _breadcrumbs.length != breadcrumbs.length;
+
+        if (mounted && (!silent || hasChanged)) {
+          setState(() {
+            _folders = folders;
+            _files = files;
+            _breadcrumbs = breadcrumbs;
+            _loading = false;
+          });
+        }
+      } catch (e) {
+        if (_offlineFiles.isNotEmpty && _view != 'offline' && !silent) {
+          if (mounted) {
+            _showSnack('Offline Mode: Disconnected from network. Showing cached offline files.', isError: true);
+            setState(() {
+              _view = 'offline';
+              _folders = [];
+              _breadcrumbs = [{'id': 'offline', 'name': 'Offline Files'}];
+              _files = _offlineFiles.values.toList();
+              _loading = false;
+            });
+          }
+        } else if (mounted && !silent) {
         _showSnack('Error loading drive: $e', isError: true);
       }
+      } finally {
+        if (mounted) setState(() => _loading = false);
+      }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      _isFetchingDrive = false;
     }
   }
 

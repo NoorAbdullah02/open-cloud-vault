@@ -38,8 +38,12 @@ jobs:
       - name: Build Flutter Linux Release
         working-directory: apps/mobile
         run: |
+          TARGET_TAG="${{ github.event.inputs.tag_name || github.event.release.tag_name || github.ref_name }}"
+          [ -z "$TARGET_TAG" ] && TARGET_TAG="v1.0.61"
+          BUILD_NUM=$(echo "$TARGET_TAG" | sed -n 's/.*v1\.0\.\([0-9]*\).*/\1/p')
+          [ -z "$BUILD_NUM" ] && BUILD_NUM="61"
           flutter pub get
-          flutter build linux --release
+          flutter build linux --release --dart-define=API_URL=https://drive.noor.is-a.dev/api --dart-define=APP_BUILD_NUMBER=$BUILD_NUM
 
       - name: Package Linux .deb and .tar.gz
         run: |
@@ -147,8 +151,12 @@ jobs:
         shell: pwsh
         run: |
           $env:CL = "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS"
+          $TargetTag = "${{ github.event.inputs.tag_name || github.event.release.tag_name || github.ref_name }}"
+          if (-not $TargetTag) { $TargetTag = "v1.0.61" }
+          $BuildNum = 61
+          if ($TargetTag -match 'v1\.0\.(\d+)') { $BuildNum = $matches[1] }
           flutter pub get
-          flutter build windows --release
+          flutter build windows --release --dart-define=API_URL=https://drive.noor.is-a.dev/api --dart-define=APP_BUILD_NUMBER=$BuildNum
 
       - name: Package Windows Bundle & Installer
         shell: pwsh
@@ -194,8 +202,12 @@ jobs:
       - name: Build macOS Release
         working-directory: apps/mobile
         run: |
+          TARGET_TAG="${{ github.event.inputs.tag_name || github.event.release.tag_name || github.ref_name }}"
+          [ -z "$TARGET_TAG" ] && TARGET_TAG="v1.0.61"
+          BUILD_NUM=$(echo "$TARGET_TAG" | sed -n 's/.*v1\.0\.\([0-9]*\).*/\1/p')
+          [ -z "$BUILD_NUM" ] && BUILD_NUM="61"
           flutter pub get
-          flutter build macos --release
+          flutter build macos --release --dart-define=API_URL=https://drive.noor.is-a.dev/api --dart-define=APP_BUILD_NUMBER=$BUILD_NUM
 
       - name: Package Native macOS .dmg & .zip
         run: |
