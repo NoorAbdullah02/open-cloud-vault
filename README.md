@@ -31,6 +31,7 @@
 * ☁️ **Render Cloud Primary:** [https://noor-cloud-vault.onrender.com](https://noor-cloud-vault.onrender.com)
 * 📱 **Download Android App:** [Latest Release APK](https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.apk)
 * 📚 **Free Domains & Subdomains Directory:** [FREE_DOMAINS_DIRECTORY.md](./docs/FREE_DOMAINS_DIRECTORY.md) • [Download PDF Guide](./docs/FREE_DOMAINS_DIRECTORY.pdf)
+* 📘 **Step-by-Step Free Domain & Subdomains Guide:** [HOW_TO_GET_FREE_DOMAIN.md](./docs/HOW_TO_GET_FREE_DOMAIN.md) • [Download Step-by-Step PDF Guide](./docs/HOW_TO_GET_FREE_DOMAIN.pdf)
 
 ---
 
