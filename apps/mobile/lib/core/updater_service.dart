@@ -125,6 +125,8 @@ class UpdaterService {
                 ? 'Ubuntu / Linux (.deb)'
                 : 'Android (.apk)';
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     await showDialog(
       context: context,
       barrierDismissible: false,
@@ -135,24 +137,44 @@ class UpdaterService {
 
         return StatefulBuilder(
           builder: (ctx, setModalState) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+              side: BorderSide(
+                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+              ),
+            ),
             title: Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEEF2FF),
+                    color: isDark ? const Color(0xFF1E1B4B) : const Color(0xFFEEF2FF),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.system_update_rounded, color: Color(0xFF4F46E5), size: 24),
+                  child: const Icon(Icons.system_update_rounded, color: Color(0xFF6366F1), size: 24),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Update to ${info.version}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-                      Text(platformName, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500)),
+                      Text(
+                        'Update to ${info.version}',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
+                      ),
+                      Text(
+                        platformName,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -164,22 +186,31 @@ class UpdaterService {
               children: [
                 Text(
                   'A new official version of NOOR DRIVE is available for your device.',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
+                    color: isDark ? const Color(0xFF131B2E) : const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                    ),
                   ),
                   child: Text(
                     info.releaseNotes,
                     maxLines: 4,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11.5, color: Color(0xFF475569)),
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+                    ),
                   ),
                 ),
                 if (downloading) ...[
@@ -189,16 +220,30 @@ class UpdaterService {
                     child: LinearProgressIndicator(
                       value: progress > 0 ? progress : null,
                       minHeight: 8,
-                      backgroundColor: const Color(0xFFE2E8F0),
-                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5)),
+                      backgroundColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
                     ),
                   ),
                   const SizedBox(height: 8),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(statusText, style: const TextStyle(fontSize: 11.5, color: Color(0xFF4F46E5), fontWeight: FontWeight.w600)),
-                      Text('${(progress * 100).round()}%', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                      Text(
+                        statusText,
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          color: Color(0xFF6366F1),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        '${(progress * 100).round()}%',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -209,14 +254,26 @@ class UpdaterService {
                 TextButton(
                   onPressed: () async {
                     await apiClient.storage.write(key: 'dismissed_update_version', value: info.version);
+                    await apiClient.storage.write(
+                      key: 'last_update_check_time',
+                      value: DateTime.now().millisecondsSinceEpoch.toString(),
+                    );
                     if (ctx.mounted) Navigator.pop(ctx);
                   },
-                  child: const Text('Later', style: TextStyle(color: Color(0xFF64748B))),
+                  child: Text(
+                    'Later',
+                    style: TextStyle(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                  ),
                 ),
                 TextButton.icon(
                   icon: const Icon(Icons.open_in_browser, size: 16),
                   label: const Text('Web Download', style: TextStyle(fontSize: 12)),
                   onPressed: () async {
+                    await apiClient.storage.write(key: 'dismissed_update_version', value: info.version);
+                    await apiClient.storage.write(
+                      key: 'last_update_check_time',
+                      value: DateTime.now().millisecondsSinceEpoch.toString(),
+                    );
                     final uri = Uri.parse(assetUrl);
                     await launchUrl(uri, mode: LaunchMode.externalApplication);
                     if (ctx.mounted) Navigator.pop(ctx);
@@ -227,13 +284,20 @@ class UpdaterService {
                 icon: const Icon(Icons.download_rounded, size: 18),
                 label: Text(downloading ? 'Downloading...' : 'Update Now'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF4F46E5),
+                  backgroundColor: const Color(0xFF6366F1),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 onPressed: downloading
                     ? null
                     : () async {
+                        // Mark as updated/acknowledged immediately to prevent infinite prompt loops
+                        await apiClient.storage.write(key: 'dismissed_update_version', value: info.version);
+                        await apiClient.storage.write(
+                          key: 'last_update_check_time',
+                          value: DateTime.now().millisecondsSinceEpoch.toString(),
+                        );
+
                         setModalState(() {
                           downloading = true;
                           progress = 0.05;

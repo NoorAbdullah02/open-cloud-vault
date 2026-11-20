@@ -16,21 +16,23 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 import 'package:xml/xml.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
 import '../../core/sharing_service.dart';
 import '../../core/desktop_sync_service.dart';
 import '../../core/system_tray_service.dart';
 import '../../core/updater_service.dart';
 import '../../core/encryption_service.dart';
+import '../../main.dart';
 
-class DriveScreen extends StatefulWidget {
+class DriveScreen extends ConsumerStatefulWidget {
   const DriveScreen({super.key});
 
   @override
-  State<DriveScreen> createState() => _DriveScreenState();
+  ConsumerState<DriveScreen> createState() => _DriveScreenState();
 }
 
-class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
+class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingObserver {
   String _view = 'my-drive';
   String? _folderId;
   String _search = '';
@@ -209,6 +211,18 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
 
   Future<void> _checkForAppUpdate({bool silent = false}) async {
     try {
+      if (silent) {
+        final lastCheckStr = await apiClient.storage.read(key: 'last_update_check_time');
+        if (lastCheckStr != null) {
+          final lastTime = int.tryParse(lastCheckStr) ?? 0;
+          final elapsedMs = DateTime.now().millisecondsSinceEpoch - lastTime;
+          // In background silent mode: check at most once every 24 hours
+          if (elapsedMs < const Duration(hours: 24).inMilliseconds) {
+            return;
+          }
+        }
+      }
+
       final info = await UpdaterService.checkUpdate();
       if (info != null && mounted) {
         if (silent) {
@@ -3737,6 +3751,25 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
               const Divider(),
               ListTile(
                 dense: true,
+                leading: Icon(
+                  Theme.of(context).brightness == Brightness.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                  color: Theme.of(context).brightness == Brightness.dark ? const Color(0xFFFBBF24) : const Color(0xFF6366F1),
+                  size: 20,
+                ),
+                title: Text(
+                  Theme.of(context).brightness == Brightness.dark ? 'Appearance: Dark Mode' : 'Appearance: Light Mode',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  Theme.of(context).brightness == Brightness.dark ? 'Tap to switch to Light Theme' : 'Tap to switch to Dark Theme',
+                  style: const TextStyle(fontSize: 10),
+                ),
+                onTap: () {
+                  ref.read(themeModeProvider.notifier).toggleTheme();
+                },
+              ),
+              ListTile(
+                dense: true,
                 leading: Icon(Icons.palette_outlined, color: _accentColor, size: 20),
                 title: const Text('Customize Theme Color', style: TextStyle(fontSize: 12)),
                 subtitle: Padding(
@@ -3869,6 +3902,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
         final screenWidth = constraints.maxWidth;
         final isWide = screenWidth >= 740;
         final effectiveDualSide = isWide && _isDualSide;
+        final isDark = Theme.of(context).brightness == Brightness.dark;
 
         return PopScope(
           canPop: !canGoBack,
@@ -3876,31 +3910,35 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
             if (!didPop && canGoBack) _goBack();
           },
           child: Scaffold(
-            backgroundColor: const Color(0xFFF6F7F9),
+            backgroundColor: isDark ? const Color(0xFF070B14) : const Color(0xFFF6F7F9),
             appBar: AppBar(
-              backgroundColor: Colors.white,
+              backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
               elevation: 0,
               leading: _selectedKeys.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.close, color: Color(0xFF0F172A)),
+                      icon: Icon(Icons.close, color: isDark ? Colors.white : const Color(0xFF0F172A)),
                       onPressed: () => setState(() => _selectedKeys.clear()),
                       tooltip: 'Cancel Selection',
                     )
                   : (canGoBack
                       ? IconButton(
-                          icon: const Icon(Icons.arrow_back, color: Color(0xFF0F172A)),
+                          icon: Icon(Icons.arrow_back, color: isDark ? Colors.white : const Color(0xFF0F172A)),
                           onPressed: _goBack,
                         )
                       : (effectiveDualSide
                           ? const Padding(
                               padding: EdgeInsets.only(left: 14),
-                              child: Icon(Icons.cloud_done_rounded, color: Color(0xFF4F46E5)),
+                              child: Icon(Icons.cloud_done_rounded, color: Color(0xFF6366F1)),
                             )
                           : null)),
               title: _selectedKeys.isNotEmpty
                   ? Text(
                       '${_selectedKeys.length} selected',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 18),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        fontSize: 18,
+                      ),
                     )
                   : GestureDetector(
                       onTap: () {
@@ -3914,22 +3952,32 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text(
+                          Text(
                             'NOOR DRIVE',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 18),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                              fontSize: 18,
+                            ),
                           ),
                           if (effectiveDualSide) ...[
                             const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFEEF2FF),
+                                color: isDark ? const Color(0xFF1E1B4B) : const Color(0xFFEEF2FF),
                                 borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: const Color(0xFFC7D2FE)),
+                                border: Border.all(
+                                  color: isDark ? const Color(0xFF312E81) : const Color(0xFFC7D2FE),
+                                ),
                               ),
-                              child: const Text(
+                              child: Text(
                                 'DUAL SIDE',
-                                style: TextStyle(color: Color(0xFF4F46E5), fontSize: 9, fontWeight: FontWeight.bold),
+                                style: TextStyle(
+                                  color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5),
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                           ],
@@ -3943,7 +3991,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                       _selectedKeys.length == (_folders.length + _files.length) && (_folders.length + _files.length) > 0
                           ? Icons.check_box
                           : Icons.check_box_outline_blank,
-                      color: const Color(0xFF4F46E5),
+                      color: const Color(0xFF6366F1),
                     ),
                     onPressed: _toggleSelectAll,
                     tooltip: _selectedKeys.length == (_folders.length + _files.length)
@@ -3984,9 +4032,20 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                       tooltip: 'Move to Trash',
                     ),
                 ] else ...[
+                  IconButton(
+                    icon: Icon(
+                      isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                      color: isDark ? const Color(0xFFFBBF24) : const Color(0xFF18181B),
+                    ),
+                    onPressed: () => ref.read(themeModeProvider.notifier).toggleTheme(),
+                    tooltip: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+                  ),
                   if (isWide)
                     IconButton(
-                      icon: Icon(_isDualSide ? Icons.view_sidebar_rounded : Icons.view_agenda_rounded, color: const Color(0xFF18181B)),
+                      icon: Icon(
+                        _isDualSide ? Icons.view_sidebar_rounded : Icons.view_agenda_rounded,
+                        color: isDark ? Colors.white70 : const Color(0xFF18181B),
+                      ),
                       onPressed: () {
                         setState(() => _isDualSide = !_isDualSide);
                         _showSnack(_isDualSide ? 'Dual-Side Mode Enabled' : 'Single-Side Mode Enabled');
@@ -3994,18 +4053,29 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                       tooltip: _isDualSide ? 'Switch to Single-Side View' : 'Switch to Dual-Side View',
                     ),
                   IconButton(
-                    icon: Icon(_isGrid ? Icons.view_list : Icons.grid_view, color: const Color(0xFF18181B)),
+                    icon: Icon(
+                      _isGrid ? Icons.view_list : Icons.grid_view,
+                      color: isDark ? Colors.white70 : const Color(0xFF18181B),
+                    ),
                     onPressed: () => setState(() => _isGrid = !_isGrid),
                     tooltip: 'Toggle Grid/List',
                   ),
                   IconButton(
-                    icon: const Icon(Icons.photo_library_outlined, color: Color(0xFF18181B)),
+                    icon: Icon(
+                      Icons.photo_library_outlined,
+                      color: isDark ? Colors.white70 : const Color(0xFF18181B),
+                    ),
                     onPressed: _backupGalleryPhotos,
                     tooltip: 'Backup Media (Camera Uploads)',
                   ),
                   PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert, color: Color(0xFF18181B)),
+                    icon: Icon(
+                      Icons.more_vert,
+                      color: isDark ? Colors.white70 : const Color(0xFF18181B),
+                    ),
+                    color: isDark ? const Color(0xFF0F172A) : Colors.white,
                     onSelected: (val) {
+                      if (val == 'toggle_theme') ref.read(themeModeProvider.notifier).toggleTheme();
                       if (val == 'select_all') _selectAll();
                       if (val == 'new_folder') _createFolder();
                       if (val == 'upload_folder') _uploadFolder();
@@ -4024,6 +4094,20 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                       }
                     },
                     itemBuilder: (ctx) => [
+                      PopupMenuItem(
+                        value: 'toggle_theme',
+                        child: Row(
+                          children: [
+                            Icon(
+                              isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                              size: 18,
+                              color: isDark ? const Color(0xFFFBBF24) : const Color(0xFF6366F1),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'),
+                          ],
+                        ),
+                      ),
                       if (_files.isNotEmpty || _folders.isNotEmpty)
                         const PopupMenuItem(
                           value: 'select_all',
@@ -4147,9 +4231,13 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                       SizedBox(
                         width: 270,
                         child: Container(
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            border: Border(right: BorderSide(color: Color(0xFFE2E8F0))),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                            border: Border(
+                              right: BorderSide(
+                                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                              ),
+                            ),
                           ),
                           child: _buildNavigationPanel(
                             isDualSide: true,
@@ -4173,20 +4261,33 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildMainContentArea(double availableWidth) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final cardBorder = isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0);
+    final cardSelectedBg = isDark ? const Color(0xFF1E1B4B) : const Color(0xFFEEF2FF);
+    final textPrimary = isDark ? Colors.white : const Color(0xFF0F172A);
+    final textSecondary = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
     return Column(
           children: [
             Padding(
               padding: const EdgeInsets.all(12),
               child: TextField(
                 controller: _searchController,
+                style: TextStyle(color: textPrimary),
                 decoration: InputDecoration(
                   hintText: 'Search NOOR DRIVE...',
-                  prefixIcon: const Icon(Icons.search),
+                  hintStyle: TextStyle(color: textSecondary),
+                  prefixIcon: Icon(Icons.search, color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5)),
                   filled: true,
-                  fillColor: Colors.white,
+                  fillColor: isDark ? const Color(0xFF0F172A) : Colors.white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    borderSide: BorderSide(color: cardBorder),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(color: cardBorder),
                   ),
                 ),
                 onChanged: (val) {
@@ -4220,15 +4321,15 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                         labelStyle: TextStyle(
                           fontSize: 12,
                           fontWeight: _filterType == chip.$1 ? FontWeight.bold : FontWeight.normal,
-                          color: _filterType == chip.$1 ? Colors.white : const Color(0xFF334155),
+                          color: _filterType == chip.$1 ? Colors.white : (isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155)),
                         ),
                         selectedColor: _accentColor,
-                        backgroundColor: Colors.white,
+                        backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
                         showCheckmark: false,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                           side: BorderSide(
-                            color: _filterType == chip.$1 ? _accentColor : const Color(0xFFE2E8F0),
+                            color: _filterType == chip.$1 ? _accentColor : cardBorder,
                           ),
                         ),
                         onSelected: (val) {
@@ -4415,13 +4516,13 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                   final folder = _folders[index];
                                   final isSelected = _selectedKeys.contains('folder:${folder['id']}');
                                   return Card(
-                                    color: isSelected ? const Color(0xFFEEF2FF) : Colors.white,
+                                    color: isSelected ? cardSelectedBg : cardBg,
                                     elevation: 0,
                                     clipBehavior: Clip.antiAlias,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(16),
                                       side: BorderSide(
-                                        color: isSelected ? const Color(0xFF4F46E5) : const Color(0xFFE2E8F0),
+                                        color: isSelected ? const Color(0xFF6366F1) : cardBorder,
                                         width: isSelected ? 2 : 1,
                                       ),
                                     ),
@@ -4463,7 +4564,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                                       maxLines: 2,
                                                       overflow: TextOverflow.ellipsis,
                                                       textAlign: TextAlign.center,
-                                                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                                                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: textPrimary),
                                                     ),
                                                   ),
                                                 ],
@@ -4524,13 +4625,13 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                 final file = _files[index - _folders.length];
                                 final isSelected = _selectedKeys.contains('file:${file['id']}');
                                 return Card(
-                                  color: isSelected ? const Color(0xFFEEF2FF) : Colors.white,
+                                  color: isSelected ? cardSelectedBg : cardBg,
                                   elevation: 0,
                                   clipBehavior: Clip.antiAlias,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(16),
                                     side: BorderSide(
-                                      color: isSelected ? const Color(0xFF4F46E5) : const Color(0xFFE2E8F0),
+                                      color: isSelected ? const Color(0xFF6366F1) : cardBorder,
                                       width: isSelected ? 2 : 1,
                                     ),
                                   ),
@@ -4576,7 +4677,7 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                                         file['name'],
                                                         maxLines: 1,
                                                         overflow: TextOverflow.ellipsis,
-                                                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                                                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: textPrimary),
                                                       ),
                                                     ),
                                                     Row(
@@ -4726,15 +4827,15 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                 for (final folder in _folders)
                                   Card(
                                     color: _selectedKeys.contains('folder:${folder['id']}')
-                                        ? const Color(0xFFEEF2FF)
-                                        : Colors.white,
+                                        ? cardSelectedBg
+                                        : cardBg,
                                     elevation: 0,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(16),
                                       side: BorderSide(
                                         color: _selectedKeys.contains('folder:${folder['id']}')
-                                            ? const Color(0xFF4F46E5)
-                                            : const Color(0xFFE2E8F0),
+                                            ? const Color(0xFF6366F1)
+                                            : cardBorder,
                                         width: _selectedKeys.contains('folder:${folder['id']}') ? 2 : 1,
                                       ),
                                     ),
@@ -4744,10 +4845,10 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                             ? Icons.check_circle
                                             : (_selectedKeys.isNotEmpty ? Icons.radio_button_unchecked : Icons.folder),
                                         color: _selectedKeys.contains('folder:${folder['id']}')
-                                            ? const Color(0xFF4F46E5)
+                                            ? const Color(0xFF6366F1)
                                             : (_selectedKeys.isNotEmpty ? const Color(0xFF94A3B8) : const Color(0xFFF59E0B)),
                                       ),
-                                      title: Text(folder['name'], style: const TextStyle(fontWeight: FontWeight.w600)),
+                                      title: Text(folder['name'], style: TextStyle(fontWeight: FontWeight.w600, color: textPrimary)),
                                       onLongPress: () => _toggleSelect('folder', folder['id']),
                                       onTap: () {
                                         if (_selectedKeys.isNotEmpty) {
@@ -4800,15 +4901,15 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                 for (final file in _files)
                                   Card(
                                     color: _selectedKeys.contains('file:${file['id']}')
-                                        ? const Color(0xFFEEF2FF)
-                                        : Colors.white,
+                                        ? cardSelectedBg
+                                        : cardBg,
                                     elevation: 0,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(16),
                                       side: BorderSide(
                                         color: _selectedKeys.contains('file:${file['id']}')
-                                            ? const Color(0xFF4F46E5)
-                                            : const Color(0xFFE2E8F0),
+                                            ? const Color(0xFF6366F1)
+                                            : cardBorder,
                                         width: _selectedKeys.contains('file:${file['id']}') ? 2 : 1,
                                       ),
                                     ),
@@ -4856,11 +4957,12 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                                                     ),
                                                   );
                                                 })),
-                                      title: Text(file['name'], maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      title: Text(file['name'], maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, color: textPrimary)),
                                       subtitle: Text(
                                         '${_formatBytes(file['sizeBytes'])}${file['createdAt'] != null ? ' • ${_formatDateTime(file['createdAt'])}' : ''}',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(fontSize: 11, color: textSecondary),
                                       ),
                                       onLongPress: () => _toggleSelect('file', file['id']),
                                       onTap: () {

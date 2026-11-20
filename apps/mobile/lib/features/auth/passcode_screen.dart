@@ -1,17 +1,19 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:local_auth/local_auth.dart';
 import '../../core/api_client.dart';
+import '../../main.dart';
 
-class PasscodeScreen extends StatefulWidget {
+class PasscodeScreen extends ConsumerStatefulWidget {
   const PasscodeScreen({super.key});
 
   @override
-  State<PasscodeScreen> createState() => _PasscodeScreenState();
+  ConsumerState<PasscodeScreen> createState() => _PasscodeScreenState();
 }
 
-class _PasscodeScreenState extends State<PasscodeScreen> {
+class _PasscodeScreenState extends ConsumerState<PasscodeScreen> {
   final _passcodeController = TextEditingController();
   final _totpController = TextEditingController();
   final _localAuth = LocalAuthentication();
@@ -20,6 +22,7 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
   bool _canUseBiometrics = false;
   bool _hasSavedCredentials = false;
   bool _rememberForBiometrics = true;
+  bool _obscurePasscode = true;
   String? _error;
 
   @override
@@ -152,288 +155,429 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 380),
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF0F172A).withValues(alpha: 0.06),
-                  blurRadius: 30,
-                  offset: const Offset(0, 12),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Top Private Badge
-                Container(
-                  margin: const EdgeInsets.only(bottom: 18),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      backgroundColor: isDark ? const Color(0xFF070B14) : const Color(0xFFF8FAFC),
+      body: Stack(
+        children: [
+          // Top theme switch button
+          Positioned(
+            top: 24,
+            right: 24,
+            child: SafeArea(
+              child: IconButton(
+                onPressed: () => ref.read(themeModeProvider.notifier).toggleTheme(),
+                tooltip: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFECFDF5),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFA7F3D0)),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.shield_rounded, size: 13, color: Color(0xFF059669)),
-                      SizedBox(width: 5),
-                      Text(
-                        'PRIVATE CLOUD VAULT',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
-                          color: Color(0xFF047857),
-                        ),
+                    color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+                        blurRadius: 10,
                       ),
                     ],
                   ),
+                  child: Icon(
+                    isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                    color: isDark ? const Color(0xFFFBBF24) : const Color(0xFF4F46E5),
+                    size: 20,
+                  ),
                 ),
-                // Glowing Owner Avatar with Badge
-                Stack(
-                  alignment: Alignment.bottomRight,
+              ),
+            ),
+          ),
+          Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 390),
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 34),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF0F172A).withValues(alpha: 0.95) : Colors.white,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isDark
+                          ? Colors.black.withValues(alpha: 0.5)
+                          : const Color(0xFF0F172A).withValues(alpha: 0.06),
+                      blurRadius: 36,
+                      offset: const Offset(0, 16),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Top Private Badge
                     Container(
-                      padding: const EdgeInsets.all(3.5),
+                      margin: const EdgeInsets.only(bottom: 18),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFF4F46E5), Color(0xFF0EA5E9), Color(0xFF6366F1)],
+                        color: isDark ? const Color(0xFF064E3B).withValues(alpha: 0.4) : const Color(0xFFECFDF5),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isDark ? const Color(0xFF047857) : const Color(0xFFA7F3D0),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF4F46E5).withValues(alpha: 0.35),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.shield_rounded,
+                            size: 13,
+                            color: isDark ? const Color(0xFF34D399) : const Color(0xFF059669),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            'PRIVATE CLOUD VAULT',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.8,
+                              color: isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857),
+                            ),
                           ),
                         ],
-                      ),
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white,
-                        ),
-                        child: const CircleAvatar(
-                          radius: 44,
-                          backgroundColor: Color(0xFFEEF2FF),
-                          backgroundImage: AssetImage('assets/owner.jpg'),
-                        ),
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0F172A),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.2),
-                            blurRadius: 4,
+                    // Glowing Owner Avatar with Badge
+                    Stack(
+                      alignment: Alignment.bottomRight,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(3.5),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF4F46E5), Color(0xFF0EA5E9), Color(0xFF6366F1)],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF4F46E5).withValues(alpha: 0.4),
+                                blurRadius: 22,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.all(2.5),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                            ),
+                            child: const CircleAvatar(
+                              radius: 44,
+                              backgroundColor: Color(0xFFEEF2FF),
+                              backgroundImage: AssetImage('assets/owner.jpg'),
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F172A),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isDark ? const Color(0xFF38BDF8) : Colors.white,
+                              width: 2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.25),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.cloud_done_rounded,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Welcome back, Noor',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: -0.3,
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Sheikh Noor Abdullah • Personal Cloud',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Enter your passcode to unlock NOOR DRIVE',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    if (_error != null)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF881337).withValues(alpha: 0.35) : const Color(0xFFFFF1F2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isDark ? const Color(0xFFBE123C) : const Color(0xFFFECDD3),
+                          ),
+                        ),
+                        child: Text(
+                          _error!,
+                          style: TextStyle(
+                            color: isDark ? const Color(0xFFFDA4AF) : const Color(0xFFE11D48),
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    TextField(
+                      controller: _requires2fa ? _totpController : _passcodeController,
+                      obscureText: _requires2fa ? false : _obscurePasscode,
+                      textAlign: TextAlign.center,
+                      keyboardType: TextInputType.number,
+                      style: TextStyle(
+                        fontSize: 20,
+                        letterSpacing: 6,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                      ),
+                      decoration: InputDecoration(
+                        hintText: _requires2fa ? '000000' : '•••••',
+                        hintStyle: TextStyle(
+                          color: isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+                        ),
+                        filled: true,
+                        fillColor: isDark ? const Color(0xFF131B2E) : const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(
+                            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(
+                            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        focusedBorder: const OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(16)),
+                          borderSide: BorderSide(color: Color(0xFF6366F1), width: 2),
+                        ),
+                        suffixIcon: !_requires2fa
+                            ? IconButton(
+                                icon: Icon(
+                                  _obscurePasscode ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                                  color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                                  size: 20,
+                                ),
+                                onPressed: () => setState(() => _obscurePasscode = !_obscurePasscode),
+                              )
+                            : null,
+                      ),
+                      onSubmitted: (_) => _unlock(),
+                    ),
+                    if (_canUseBiometrics && !_requires2fa) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Checkbox(
+                            value: _rememberForBiometrics,
+                            activeColor: const Color(0xFF6366F1),
+                            onChanged: (v) => setState(() => _rememberForBiometrics = v ?? true),
+                          ),
+                          Text(
+                            'Save for Fingerprint Unlock',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569),
+                            ),
                           ),
                         ],
                       ),
-                      child: const Icon(
-                        Icons.cloud_done_rounded,
+                    ],
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: _loading ? null : () => _unlock(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF6366F1),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 2,
+                        ),
+                        child: _loading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                              )
+                            : Text(
+                                _requires2fa ? 'Verify & Unlock' : 'Unlock Drive',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                              ),
+                      ),
+                    ),
+                    if (_canUseBiometrics && _hasSavedCredentials && !_requires2fa) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: OutlinedButton.icon(
+                          onPressed: _loading ? null : _unlockWithBiometrics,
+                          icon: const Icon(Icons.fingerprint, color: Color(0xFF6366F1)),
+                          label: Text(
+                            'Unlock with Fingerprint',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5),
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(
+                              color: isDark ? const Color(0xFF312E81) : const Color(0xFFC7D2FE),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    TextButton.icon(
+                      onPressed: _showServerUrlDialog,
+                      icon: Icon(
+                        Icons.dns_outlined,
                         size: 14,
-                        color: Colors.white,
+                        color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                      ),
+                      label: Text(
+                        'Server: ${Uri.tryParse(apiClient.currentBaseUrl)?.host ?? "Render Live"}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Welcome back, Noor',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: -0.3,
-                    color: Color(0xFF0F172A),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Sheikh Noor Abdullah • Personal Cloud',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF4F46E5),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Enter your passcode to unlock NOOR DRIVE',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
-                ),
-                const SizedBox(height: 24),
-                if (_error != null)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFF1F2),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFFECDD3)),
-                    ),
-                    child: Text(
-                      _error!,
-                      style: const TextStyle(color: Color(0xFFE11D48), fontSize: 13),
-                    ),
-                  ),
-                TextField(
-                  controller: _requires2fa ? _totpController : _passcodeController,
-                  obscureText: !_requires2fa,
-                  textAlign: TextAlign.center,
-                  keyboardType: TextInputType.number,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    letterSpacing: 6,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: _requires2fa ? '000000' : '•••••',
-                    filled: true,
-                    fillColor: const Color(0xFFF8FAFC),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                  ),
-                  onSubmitted: (_) => _unlock(),
-                ),
-                if (_canUseBiometrics && !_requires2fa) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Checkbox(
-                        value: _rememberForBiometrics,
-                        onChanged: (v) => setState(() => _rememberForBiometrics = v ?? true),
-                      ),
-                      const Text(
-                        'Save for Fingerprint Unlock',
-                        style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
-                      ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: _loading ? null : () => _unlock(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF4F46E5),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    child: _loading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                          )
-                        : Text(
-                            _requires2fa ? 'Verify & Unlock' : 'Unlock Drive',
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                  ),
-                ),
-                if (_canUseBiometrics && _hasSavedCredentials && !_requires2fa) ...[
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: OutlinedButton.icon(
-                      onPressed: _loading ? null : _unlockWithBiometrics,
-                      icon: const Icon(Icons.fingerprint, color: Color(0xFF4F46E5)),
-                      label: const Text(
-                        'Unlock with Fingerprint',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF4F46E5),
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFFC7D2FE)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                TextButton.icon(
-                  onPressed: _showServerUrlDialog,
-                  icon: const Icon(Icons.dns_outlined, size: 14, color: Color(0xFF64748B)),
-                  label: Text(
-                    'Server: ${Uri.tryParse(apiClient.currentBaseUrl)?.host ?? "Render Live"}',
-                    style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 
   Future<void> _showServerUrlDialog() async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final controller = TextEditingController(text: apiClient.currentBaseUrl);
     final newUrl = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Server Configuration', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(
+            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+          ),
+        ),
+        title: Text(
+          'Server Configuration',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : const Color(0xFF0F172A),
+          ),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Select or enter backend API URL:',
-              style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'https://drive.noor.is-a.dev/api',
-                border: OutlineInputBorder(),
+                filled: true,
+                fillColor: isDark ? const Color(0xFF131B2E) : const Color(0xFFF8FAFC),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: isDark ? const Color(0xFF1E293B) : const Color(0xFFCBD5E1),
+                  ),
+                ),
                 isDense: true,
               ),
-              style: const TextStyle(fontSize: 13),
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? Colors.white : const Color(0xFF0F172A),
+              ),
             ),
             const SizedBox(height: 10),
             Wrap(
               spacing: 6,
               children: [
                 ActionChip(
-                  label: const Text('is-a.dev', style: TextStyle(fontSize: 11)),
+                  backgroundColor: isDark ? const Color(0xFF1E1B4B) : const Color(0xFFEEF2FF),
+                  label: Text(
+                    'is-a.dev',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5),
+                    ),
+                  ),
                   onPressed: () => controller.text = 'https://drive.noor.is-a.dev/api',
                 ),
                 ActionChip(
-                  label: const Text('Render', style: TextStyle(fontSize: 11)),
+                  backgroundColor: isDark ? const Color(0xFF1E1B4B) : const Color(0xFFEEF2FF),
+                  label: Text(
+                    'Render',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5),
+                    ),
+                  ),
                   onPressed: () => controller.text = 'https://noor-cloud-vault.onrender.com/api',
                 ),
               ],
@@ -441,8 +585,19 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+            ),
+          ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6366F1),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
             child: const Text('Save'),
           ),
@@ -456,4 +611,3 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
     }
   }
 }
-
