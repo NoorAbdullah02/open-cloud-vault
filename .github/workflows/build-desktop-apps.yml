@@ -1,10 +1,17 @@
 name: Build Multi-Platform Desktop & Mobile Apps
 
 on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Target Release Tag Name (e.g. v1.0.60)'
+        required: false
+        default: 'v1.0.60'
+  release:
+    types: [published]
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -36,8 +43,12 @@ jobs:
 
       - name: Package Linux .deb and .tar.gz
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          [ -z "$VERSION" ] && VERSION="1.0.0"
+          TARGET_TAG="${{ github.event.inputs.tag_name || github.event.release.tag_name || github.ref_name }}"
+          [ -z "$TARGET_TAG" ] && TARGET_TAG="v1.0.60"
+          VERSION="${TARGET_TAG#v}"
+          if ! [[ "$VERSION" =~ ^[0-9] ]]; then
+            VERSION="1.0.60"
+          fi
 
           RELEASE_DIR="apps/mobile/build/linux/x64/release/bundle"
           DEB_DIR="deb_package/noor-drive_${VERSION}_amd64"
@@ -79,13 +90,26 @@ jobs:
           Categories=Utility;Network;
           EOF
 
-          dpkg-deb --build "deb_package/noor-drive_${VERSION}_amd64" noor-drive-linux.deb
-          tar -czvf noor-drive-linux.tar.gz -C "${RELEASE_DIR}" .
+          dpkg-deb --build "deb_package/noor-drive_${VERSION}_amd64" "$GITHUB_WORKSPACE/noor-drive-linux.deb"
+          tar -czvf "$GITHUB_WORKSPACE/noor-drive-linux.tar.gz" -C "${RELEASE_DIR}" .
+
+      - name: Determine Target Release Tag
+        id: get_tag
+        shell: bash
+        run: |
+          TAG="${{ github.event.inputs.tag_name || github.event.release.tag_name || github.ref_name }}"
+          if [ -z "$TAG" ] || [ "$TAG" = "master" ]; then
+            TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "v1.0.60")
+          fi
+          [ -z "$TAG" ] && TAG="v1.0.60"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Linux Assets to Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
         with:
+          tag_name: ${{ steps.get_tag.outputs.tag }}
           files: |
             noor-drive-linux.deb
             noor-drive-linux.tar.gz
@@ -118,13 +142,26 @@ jobs:
         shell: pwsh
         run: |
           $ReleaseDir = "apps/mobile/build/windows/x64/runner/Release"
-          Compress-Archive -Path "$ReleaseDir\*" -DestinationPath "NoorDrive-Windows-Portable.zip" -Force
+          Compress-Archive -Path "$ReleaseDir\*" -DestinationPath "$env:GITHUB_WORKSPACE\NoorDrive-Windows-Portable.zip" -Force
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" scripts/desktop/windows-installer.iss
+
+      - name: Determine Target Release Tag
+        id: get_tag
+        shell: bash
+        run: |
+          TAG="${{ github.event.inputs.tag_name || github.event.release.tag_name || github.ref_name }}"
+          if [ -z "$TAG" ] || [ "$TAG" = "master" ]; then
+            TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "v1.0.60")
+          fi
+          [ -z "$TAG" ] && TAG="v1.0.60"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Windows Assets to Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
         with:
+          tag_name: ${{ steps.get_tag.outputs.tag }}
           files: |
             NoorDrive-Setup.exe
             NoorDrive-Windows-Portable.zip
@@ -153,13 +190,26 @@ jobs:
           cd apps/mobile/build/macos/Build/Products/Release
           APP_NAME=$(ls -d *.app | head -n 1)
           echo "Packaging macOS Application: $APP_NAME"
-          hdiutil create -volname "NOOR DRIVE" -srcfolder "$APP_NAME" -ov -format UDZO ../../../../../../NoorDrive.dmg
-          zip -r -y ../../../../../../NoorDrive-macOS.zip "$APP_NAME"
+          hdiutil create -volname "NOOR DRIVE" -srcfolder "$APP_NAME" -ov -format UDZO "$GITHUB_WORKSPACE/NoorDrive.dmg"
+          zip -r -y "$GITHUB_WORKSPACE/NoorDrive-macOS.zip" "$APP_NAME"
+
+      - name: Determine Target Release Tag
+        id: get_tag
+        shell: bash
+        run: |
+          TAG="${{ github.event.inputs.tag_name || github.event.release.tag_name || github.ref_name }}"
+          if [ -z "$TAG" ] || [ "$TAG" = "master" ]; then
+            TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "v1.0.60")
+          fi
+          [ -z "$TAG" ] && TAG="v1.0.60"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload macOS Assets to Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
         with:
+          tag_name: ${{ steps.get_tag.outputs.tag }}
           files: |
             NoorDrive.dmg
             NoorDrive-macOS.zip

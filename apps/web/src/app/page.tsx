@@ -6082,7 +6082,7 @@ function DriveDashboardContent() {
                 <div className="p-3.5 rounded-2xl bg-slate-900 text-slate-200 font-mono text-xs space-y-1 overflow-x-auto">
                   <p className="text-slate-400 text-[10px] uppercase font-sans font-bold">1-Line Terminal Install (Ubuntu / Debian):</p>
                   <p className="select-all text-amber-300">
-                    wget -qO noordrive.deb https://drive.noor.is-a.dev/downloads/noor-drive-linux.deb &amp;&amp; sudo dpkg -i noordrive.deb
+                    wget -qO noordrive.deb {getSafeReleaseUrl('linux', 'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive-linux.deb')} &amp;&amp; sudo dpkg -i noordrive.deb
                   </p>
                 </div>
               </div>
@@ -6173,13 +6173,13 @@ function DriveDashboardContent() {
 
                   <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5">
                     <span className="font-mono text-xs text-indigo-600 dark:text-indigo-400 truncate select-all flex-1">
-                      {releasePlatforms?.webdavUrl || 'https://drive.noor.is-a.dev/api/webdav'}
+                      {releasePlatforms?.webdavUrl || 'https://noor-cloud-vault.onrender.com/api/webdav'}
                     </span>
                     <button
                       type="button"
                       onClick={() => {
                         navigator.clipboard.writeText(
-                          releasePlatforms?.webdavUrl || 'https://drive.noor.is-a.dev/api/webdav'
+                          releasePlatforms?.webdavUrl || 'https://noor-cloud-vault.onrender.com/api/webdav'
                         );
                         setWebdavCopied(true);
                         setTimeout(() => setWebdavCopied(false), 2000);

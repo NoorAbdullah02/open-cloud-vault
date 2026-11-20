@@ -103,6 +103,9 @@ export class SharesController {
     const linuxUrl = linuxAsset?.browser_download_url || `${baseReleaseUrl}/noor-drive-linux.deb`;
     const linuxTarUrl = linuxTarAsset?.browser_download_url || `${baseReleaseUrl}/noor-drive-linux.tar.gz`;
 
+    const publicBase = process.env.RENDER_EXTERNAL_URL || process.env.APP_URL || 'https://noor-cloud-vault.onrender.com';
+    const webdavUrl = `${publicBase.replace(/\/$/, '')}/api/webdav`;
+
     cachedRelease = {
       version,
       sizeBytes: Number(apkAsset?.size || 31574349),
@@ -139,7 +142,7 @@ export class SharesController {
           tarUrl: linuxTarUrl,
         },
       },
-      webdavUrl: 'https://drive.noor.is-a.dev/api/webdav',
+      webdavUrl,
       fetchedAt: Date.now(),
     };
 
