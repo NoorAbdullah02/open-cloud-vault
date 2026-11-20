@@ -10,6 +10,7 @@ import { StorageModule } from './storage/storage.module';
 import { DriveModule } from './drive/drive.module';
 import { SharesModule } from './shares/shares.module';
 import { MailModule } from './mail/mail.module';
+import { WebdavModule } from './webdav/webdav.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { MailModule } from './mail/mail.module';
     StorageModule,
     DriveModule,
     SharesModule,
+    WebdavModule,
   ],
   providers: [
     {

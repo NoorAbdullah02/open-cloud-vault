@@ -1,0 +1,148 @@
+name: Build Multi-Platform Desktop & Mobile Apps
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Build Linux (.deb & .tar.gz)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux Build Dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Build Flutter Linux Release
+        working-directory: apps/mobile
+        run: |
+          flutter pub get
+          flutter build linux --release
+
+      - name: Package Linux .deb and .tar.gz
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          [ -z "$VERSION" ] && VERSION="1.0.0"
+
+          RELEASE_DIR="apps/mobile/build/linux/x64/release/bundle"
+          DEB_DIR="deb_package/noor-drive_${VERSION}_amd64"
+          mkdir -p "${DEB_DIR}/usr/bin"
+          mkdir -p "${DEB_DIR}/usr/lib/noor-drive"
+          mkdir -p "${DEB_DIR}/usr/share/applications"
+          mkdir -p "${DEB_DIR}/DEBIAN"
+
+          cp -r ${RELEASE_DIR}/* "${DEB_DIR}/usr/lib/noor-drive/"
+          ln -s /usr/lib/noor-drive/noor_drive_app "${DEB_DIR}/usr/bin/noordrive"
+
+          cat << EOF > "${DEB_DIR}/DEBIAN/control"
+          Package: noor-drive
+          Version: ${VERSION}
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Noor Abdullah <noorabdullah@example.com>
+          Description: NOOR DRIVE Desktop Cloud Vault
+           Multi-platform personal cloud vault with ~/NoorDrive local folder auto-sync.
+          EOF
+
+          cat << EOF > "${DEB_DIR}/usr/share/applications/noor-drive.desktop"
+          [Desktop Entry]
+          Name=NOOR DRIVE
+          Comment=Personal Cloud Vault
+          Exec=/usr/bin/noordrive
+          Terminal=false
+          Type=Application
+          Categories=Utility;Network;
+          EOF
+
+          dpkg-deb --build "deb_package/noor-drive_${VERSION}_amd64" noor-drive-linux.deb
+          tar -czvf noor-drive-linux.tar.gz -C "${RELEASE_DIR}" .
+
+      - name: Upload Linux Assets to Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            noor-drive-linux.deb
+            noor-drive-linux.tar.gz
+
+  build-windows:
+    name: Build Windows (.exe / .zip)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Build Windows Release
+        working-directory: apps/mobile
+        run: |
+          flutter pub get
+          flutter build windows --release
+
+      - name: Package Windows Bundle
+        shell: pwsh
+        run: |
+          $ReleaseDir = "apps/mobile/build/windows/x64/runner/Release"
+          Compress-Archive -Path "$ReleaseDir\*" -DestinationPath "NoorDrive-Windows-Portable.zip" -Force
+          Copy-Item "$ReleaseDir\noor_drive_app.exe" -Destination "NoorDrive-Setup.exe"
+
+      - name: Upload Windows Assets to Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            NoorDrive-Setup.exe
+            NoorDrive-Windows-Portable.zip
+
+  build-macos:
+    name: Build macOS (.dmg / .zip)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Build macOS Release
+        working-directory: apps/mobile
+        run: |
+          flutter pub get
+          flutter build macos --release
+
+      - name: Package macOS App
+        run: |
+          cd apps/mobile/build/macos/Build/Products/Release
+          zip -r -y NoorDrive-macOS.zip "NOOR DRIVE.app" || zip -r -y NoorDrive-macOS.zip "noor_drive_app.app"
+          mv NoorDrive-macOS.zip ../../../../../../NoorDrive.dmg
+
+      - name: Upload macOS Assets to Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            NoorDrive.dmg

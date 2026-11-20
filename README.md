@@ -3,8 +3,11 @@
 <div align="center">
 
 [![Live Web App](https://img.shields.io/badge/Live%20Web%20App-drive.noor.is--a.dev-4F46E5?style=for-the-badge&logo=cloudflare&logoColor=white)](https://drive.noor.is-a.dev)
-[![Render Fallback](https://img.shields.io/badge/Render%20Cloud-noor--cloud--vault-46E3B7?style=for-the-badge&logo=render&logoColor=black)](https://noor-cloud-vault.onrender.com)
+[![Windows App](https://img.shields.io/badge/Windows-NoorDrive--Setup.exe-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest)
+[![macOS App](https://img.shields.io/badge/macOS-NoorDrive.dmg-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest)
+[![Ubuntu Linux](https://img.shields.io/badge/Ubuntu%20Linux-noor--drive.deb-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)](https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest)
 [![Download Android APK](https://img.shields.io/github/v/release/NoorAbdullah02/open-cloud-vault?color=7C3AED&label=Android%20APK&style=for-the-badge&logo=android&logoColor=white)](https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest)
+[![Zero-Install WebDAV](https://img.shields.io/badge/Zero--Install-WebDAV%20Mount-10B981?style=for-the-badge&logo=networkwired&logoColor=white)](https://drive.noor.is-a.dev)
 
 <br/>
 
@@ -29,6 +32,10 @@
 ## 📌 Quick Access Links
 * 🌐 **Live Custom Domain:** [https://drive.noor.is-a.dev](https://drive.noor.is-a.dev)
 * ☁️ **Render Cloud Primary:** [https://noor-cloud-vault.onrender.com](https://noor-cloud-vault.onrender.com)
+* 🪟 **Download for Windows:** [NoorDrive-Setup.exe](https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/NoorDrive-Setup.exe) (Tray resident + Local Sync)
+* 🍎 **Download for macOS:** [NoorDrive.dmg](https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/NoorDrive.dmg) (Apple Silicon & Intel)
+* 🐧 **Download for Ubuntu/Linux:** [noor-drive-linux.deb](https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive-linux.deb) • [noor-drive-linux.tar.gz](https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive-linux.tar.gz)
+* 🌐 **Zero-Install WebDAV Drive:** `https://drive.noor.is-a.dev/api/webdav` (Mountable as hard drive on Windows `Z:`, Ubuntu Files, macOS Finder)
 * 📱 **Download Android App:** [Latest Release APK](https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.apk)
 * 📚 **Free Domains & Subdomains Directory:** [FREE_DOMAINS_DIRECTORY.md](./docs/FREE_DOMAINS_DIRECTORY.md) • [Download PDF Guide](./docs/FREE_DOMAINS_DIRECTORY.pdf)
 * 📘 **Step-by-Step Free Domain & Subdomains Guide:** [HOW_TO_GET_FREE_DOMAIN.md](./docs/HOW_TO_GET_FREE_DOMAIN.md) • [Download Step-by-Step PDF Guide](./docs/HOW_TO_GET_FREE_DOMAIN.pdf)

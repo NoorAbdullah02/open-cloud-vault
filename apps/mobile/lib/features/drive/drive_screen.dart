@@ -18,6 +18,10 @@ import 'package:video_player/video_player.dart';
 import 'package:xml/xml.dart';
 import '../../core/api_client.dart';
 import '../../core/sharing_service.dart';
+import '../../core/desktop_sync_service.dart';
+import '../../core/system_tray_service.dart';
+import '../../core/updater_service.dart';
+import '../../core/encryption_service.dart';
 
 class DriveScreen extends StatefulWidget {
   const DriveScreen({super.key});
@@ -75,14 +79,21 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     _loadDrive();
     _checkForAppUpdate(silent: true);
 
-    const MethodChannel('com.noordrive.app/sharing').setMethodCallHandler((call) async {
-      if (call.method == 'onFilesShared') {
+    if (Platform.isAndroid || Platform.isIOS) {
+      const MethodChannel('com.noordrive.app/sharing').setMethodCallHandler((call) async {
+        if (call.method == 'onFilesShared') {
+          _checkIncomingSharedFiles();
+        }
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         _checkIncomingSharedFiles();
-      }
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkIncomingSharedFiles();
-    });
+      });
+    } else {
+      // Desktop platforms: Initialize ~/NoorDrive local folder sync
+      DesktopSyncService.instance.initialize().then((_) {
+        DesktopSyncService.instance.start();
+      });
+    }
 
     // Real-Time Sync Engine: 4s background refresh
     _realtimeSyncTimer = Timer.periodic(const Duration(seconds: 4), (_) {
@@ -95,7 +106,9 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _checkIncomingSharedFiles();
+      if (Platform.isAndroid || Platform.isIOS) {
+        _checkIncomingSharedFiles();
+      }
     }
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       if (_vaultUnlocked) {
@@ -194,110 +207,16 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
 
   Future<void> _checkForAppUpdate({bool silent = false}) async {
     try {
-      String tag = '';
-      String downloadUrl =
-          'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.apk';
-
-      try {
-        final apiRes = await Dio(
-          BaseOptions(connectTimeout: const Duration(seconds: 20)),
-        ).get('${apiClient.currentBaseUrl}/shares/app-release');
-        tag = (apiRes.data['version'] ?? '') as String;
-        if (apiRes.data['downloadUrl'] != null) {
-          downloadUrl = apiRes.data['downloadUrl'].toString();
-        }
-      } catch (_) {
-        final ghRes = await Dio().get(
-          'https://api.github.com/repos/NoorAbdullah02/open-cloud-vault/releases/latest',
-        );
-        tag = (ghRes.data['tag_name'] ?? '') as String;
-        final apkAsset = (ghRes.data['assets'] as List?)?.firstWhere(
-          (a) => (a['name'] ?? '').toString().endsWith('.apk'),
-          orElse: () => null,
-        );
-        if (apkAsset != null && apkAsset['browser_download_url'] != null) {
-          downloadUrl = apkAsset['browser_download_url'].toString();
-        }
-      }
-
-      final match = RegExp(r'v1\.0\.(\d+)').firstMatch(tag);
-      final remoteBuild = match != null ? int.tryParse(match.group(1)!) ?? 0 : 0;
-
-      if (remoteBuild > ApiClient.buildNumber && mounted) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) {
-            bool downloading = false;
-            double progress = 0;
-            return StatefulBuilder(
-              builder: (ctx, setModalState) => AlertDialog(
-                title: const Text('Update Available!'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('NOOR DRIVE Build #$remoteBuild is ready to install (Current: #${ApiClient.buildNumber}).'),
-                    if (downloading) ...[
-                      const SizedBox(height: 14),
-                      LinearProgressIndicator(value: progress > 0 ? progress : null),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Downloading update... ${(progress * 100).round()}%',
-                        style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                      ),
-                    ],
-                  ],
-                ),
-                actions: [
-                  if (!downloading)
-                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Later')),
-                  ElevatedButton(
-                    onPressed: downloading
-                        ? null
-                        : () async {
-                            setModalState(() => downloading = true);
-                            try {
-                              final dir = (await getExternalStorageDirectory()) ??
-                                  (await getApplicationDocumentsDirectory());
-                              final apkPath = '${dir.path}/noor-drive-update-v$remoteBuild.apk';
-                              await Dio().download(
-                                downloadUrl,
-                                apkPath,
-                                onReceiveProgress: (rec, total) {
-                                  if (total > 0) {
-                                    setModalState(() => progress = rec / total);
-                                  }
-                                },
-                              );
-                              if (ctx.mounted) Navigator.pop(ctx);
-                              final result = await OpenFilex.open(
-                                apkPath,
-                                type: 'application/vnd.android.package-archive',
-                              );
-                              if (result.type != ResultType.done && mounted) {
-                                _showSnack(
-                                  'Allow "Install unknown apps" for NOOR DRIVE in Android Settings, then tap Check for Updates again.',
-                                  isError: true,
-                                );
-                              }
-                            } catch (e) {
-                              setModalState(() => downloading = false);
-                              _showSnack('Update download failed: $e', isError: true);
-                            }
-                          },
-                    child: Text(downloading ? 'Downloading...' : 'Download & Update'),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
+      final info = await UpdaterService.checkUpdate();
+      if (info != null && mounted) {
+        await UpdaterService.showUpdateDialog(context, info);
       } else if (!silent && mounted) {
         _showSnack('You are on the latest version (Build #${ApiClient.buildNumber})');
       }
-    } catch (_) {
-      if (!silent && mounted) _showSnack('Could not check for updates', isError: true);
+    } catch (e) {
+      if (!silent && mounted) {
+        _showSnack('Update check failed: $e', isError: true);
+      }
     }
   }
 
@@ -1186,6 +1105,81 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _uploadEncryptedFiles() async {
+    final passphraseController = TextEditingController();
+    final passphrase = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.enhanced_encryption, color: Color(0xFF4F46E5)),
+            SizedBox(width: 8),
+            Text('Zero-Knowledge Encrypt'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Files will be encrypted with AES-256 before uploading to cloud. Passphrase is never sent to the server.',
+              style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passphraseController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Encryption Passphrase',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.key),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, passphraseController.text.trim()),
+            child: const Text('Choose Files & Encrypt'),
+          ),
+        ],
+      ),
+    );
+
+    if (passphrase == null || passphrase.isEmpty) return;
+
+    final result = await FilePicker.platform.pickFiles(allowMultiple: true, withData: true);
+    if (result == null || result.files.isEmpty) return;
+
+    try {
+      final targetFolder = _folderId ?? (_view == 'vault' ? (_breadcrumbs.isNotEmpty ? _breadcrumbs.first['id'] : 'vault') : null);
+      for (final f in result.files) {
+        Uint8List? rawBytes = f.bytes;
+        if (rawBytes == null && f.path != null) {
+          rawBytes = await File(f.path!).readAsBytes();
+        }
+        if (rawBytes == null) continue;
+        final encrypted = EncryptionService.encryptBytes(rawBytes, passphrase);
+        final encName = '${f.name}.ndenc';
+        await _uploadSingleFile(null, encName, targetFolder, bytes: encrypted);
+      }
+      _showSnack('Zero-Knowledge Encrypted & Uploaded!');
+      await _loadDrive(silent: true);
+      await _loadUser();
+    } catch (e) {
+      _showSnack('Encrypted upload failed: $e', isError: true);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _uploadingName = null;
+          _syncingDrive = false;
+          _uploadCancelToken = null;
+        });
+      }
+    }
+  }
+
   bool _isCheckingSharedFiles = false;
 
   Future<void> _checkIncomingSharedFiles() async {
@@ -1491,6 +1485,22 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                 onTap: () {
                   Navigator.pop(ctx);
                   _uploadFiles();
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3E8FF),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.enhanced_encryption, color: Color(0xFF9333EA)),
+                ),
+                title: const Text('Encrypt & Upload (AES-256)', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Zero-Knowledge encryption before leaving device', style: TextStyle(fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _uploadEncryptedFiles();
                 },
               ),
               ListTile(
@@ -3658,6 +3668,28 @@ class _DriveScreenState extends State<DriveScreen> with WidgetsBindingObserver {
                         _checkForAppUpdate(silent: false);
                       },
                     ),
+                    if (DesktopSyncService.isDesktopPlatform) ...[
+                      ListTile(
+                        leading: const Icon(Icons.folder_special_rounded, color: Color(0xFF4F46E5)),
+                        title: const Text('Open Local Folder (~/NoorDrive)'),
+                        subtitle: const Text('Open computer sync folder in Files/Explorer', style: TextStyle(fontSize: 11)),
+                        onTap: () {
+                          Navigator.pop(context);
+                          SystemTrayService.openLocalSyncFolder();
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.sync_rounded, color: Color(0xFF0EA5E9)),
+                        title: const Text('Sync ~/NoorDrive Now'),
+                        subtitle: Text(DesktopSyncService.instance.statusMessage, style: const TextStyle(fontSize: 11)),
+                        onTap: () {
+                          DesktopSyncService.instance.triggerSync();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Syncing ~/NoorDrive folder...')),
+                          );
+                        },
+                      ),
+                    ],
                     ListTile(
                       leading: const Icon(Icons.tips_and_updates_outlined, color: Color(0xFF6366F1)),
                       title: const Text('Shortcuts & Gestures Guide', style: TextStyle(fontWeight: FontWeight.w600)),

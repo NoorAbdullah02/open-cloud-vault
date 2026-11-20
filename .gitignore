@@ -12,4 +12,10 @@ storage/chunks/*
 *.tsbuildinfo
 .DS_Store
 .dart_tool/
+apps/mobile/build/
+apps/mobile/.flutter-plugins-dependencies
+apps/mobile/.idea/
+apps/mobile/*.iml
+.idea/
+*.iml
 

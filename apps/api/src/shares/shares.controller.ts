@@ -21,7 +21,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser, AuthUser } from '../common/decorators/current-user.decorator';
 import { SharesService } from './shares.service';
 
-let cachedRelease: { version: string; sizeBytes: number; downloadUrl: string; fetchedAt: number } | null = null;
+let cachedRelease: any = null;
 
 function getAccurateMimeType(ext: string, fallbackMime?: string): string {
   const cleanExt = (ext || '').toLowerCase().replace(/^\./, '');
@@ -71,6 +71,15 @@ export class SharesController {
     if (cachedRelease && Date.now() - cachedRelease.fetchedAt < 60_000) {
       return cachedRelease;
     }
+    const defaultTag = 'v1.0.53';
+    const baseReleaseUrl = 'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download';
+    let version = defaultTag;
+    let apkAsset: any = null;
+    let windowsAsset: any = null;
+    let macAsset: any = null;
+    let linuxAsset: any = null;
+    let linuxTarAsset: any = null;
+
     try {
       const res = await fetch(
         'https://api.github.com/repos/NoorAbdullah02/open-cloud-vault/releases/latest',
@@ -78,24 +87,56 @@ export class SharesController {
       );
       if (res.ok) {
         const data: any = await res.json();
-        const apk = (data.assets || []).find((a: any) => String(a.name).endsWith('.apk'));
-        if (apk) {
-          cachedRelease = {
-            version: data.tag_name || 'latest',
-            sizeBytes: Number(apk.size || 0),
-            downloadUrl: apk.browser_download_url,
-            fetchedAt: Date.now(),
-          };
-          return cachedRelease;
-        }
+        version = data.tag_name || defaultTag;
+        const assets = data.assets || [];
+        apkAsset = assets.find((a: any) => String(a.name).endsWith('.apk'));
+        windowsAsset = assets.find((a: any) => String(a.name).endsWith('.exe') || String(a.name).includes('Windows'));
+        macAsset = assets.find((a: any) => String(a.name).endsWith('.dmg') || String(a.name).includes('macOS') || String(a.name).includes('mac'));
+        linuxAsset = assets.find((a: any) => String(a.name).endsWith('.deb'));
+        linuxTarAsset = assets.find((a: any) => String(a.name).endsWith('.tar.gz') && String(a.name).includes('linux'));
       }
     } catch {}
-    return {
-      version: 'v1.0.53',
-      sizeBytes: 31574349,
-      downloadUrl:
-        'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.apk',
+
+    const apkUrl = apkAsset?.browser_download_url || `${baseReleaseUrl}/noor-drive.apk`;
+    const windowsUrl = windowsAsset?.browser_download_url || `${baseReleaseUrl}/NoorDrive-Setup.exe`;
+    const macUrl = macAsset?.browser_download_url || `${baseReleaseUrl}/NoorDrive.dmg`;
+    const linuxUrl = linuxAsset?.browser_download_url || `${baseReleaseUrl}/noor-drive-linux.deb`;
+    const linuxTarUrl = linuxTarAsset?.browser_download_url || `${baseReleaseUrl}/noor-drive-linux.tar.gz`;
+
+    cachedRelease = {
+      version,
+      sizeBytes: Number(apkAsset?.size || 31574349),
+      downloadUrl: apkUrl,
+      platforms: {
+        android: {
+          name: 'noor-drive.apk',
+          url: apkUrl,
+          sizeBytes: Number(apkAsset?.size || 31574349),
+        },
+        windows: {
+          name: 'NoorDrive-Setup.exe',
+          url: windowsUrl,
+          sizeBytes: Number(windowsAsset?.size || 45200000),
+          portableUrl: `${baseReleaseUrl}/NoorDrive-Windows-Portable.zip`,
+        },
+        mac: {
+          name: 'NoorDrive.dmg',
+          url: macUrl,
+          sizeBytes: Number(macAsset?.size || 41800000),
+          zipUrl: `${baseReleaseUrl}/NoorDrive-macOS.zip`,
+        },
+        linux: {
+          name: 'noor-drive-linux.deb',
+          url: linuxUrl,
+          sizeBytes: Number(linuxAsset?.size || 38400000),
+          tarUrl: linuxTarUrl,
+        },
+      },
+      webdavUrl: 'https://drive.noor.is-a.dev/api/webdav',
+      fetchedAt: Date.now(),
     };
+
+    return cachedRelease;
   }
 
   // Authenticated Owner Endpoints

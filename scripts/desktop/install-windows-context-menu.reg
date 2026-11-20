@@ -1,0 +1,22 @@
+Windows Registry Editor Version 5.00
+
+; ==============================================================================
+; NOOR DRIVE — Windows Right-Click Context Menu Integration
+; Adds "Upload to NOOR DRIVE" to Windows File Explorer context menu for files & folders
+; ==============================================================================
+
+; For all files
+[HKEY_CLASSES_ROOT\*\shell\UploadToNoorDrive]
+@="Upload to NOOR DRIVE"
+"Icon"="shell32.dll,275"
+
+[HKEY_CLASSES_ROOT\*\shell\UploadToNoorDrive\command]
+@="cmd.exe /c copy \"%1\" \"%USERPROFILE%\\NoorDrive\\\" && msg * Copied to NOOR DRIVE Local Sync folder!"
+
+; For all directories / folders
+[HKEY_CLASSES_ROOT\Directory\shell\UploadToNoorDrive]
+@="Upload to NOOR DRIVE"
+"Icon"="shell32.dll,275"
+
+[HKEY_CLASSES_ROOT\Directory\shell\UploadToNoorDrive\command]
+@="cmd.exe /c xcopy /E /I /Y \"%1\" \"%USERPROFILE%\\NoorDrive\\%~nx1\" && msg * Copied folder to NOOR DRIVE Local Sync folder!"

@@ -67,6 +67,10 @@ import {
   Music2,
   Apple,
   RefreshCw,
+  Laptop,
+  Terminal,
+  ExternalLink,
+  Globe,
 } from 'lucide-react';
 import {
   apiFetch,
@@ -791,7 +795,10 @@ function DriveDashboardContent() {
   const [storageModalOpen, setStorageModalOpen] = useState(false);
   const [securityModalOpen, setSecurityModalOpen] = useState(false);
   const [appDownloadModalOpen, setAppDownloadModalOpen] = useState(false);
-  const [mobilePlatformTab, setMobilePlatformTab] = useState<'android' | 'ios'>('android');
+  const [platformTab, setPlatformTab] = useState<'windows' | 'mac' | 'linux' | 'android' | 'ios' | 'webdav'>('windows');
+  const [detectedPlatform, setDetectedPlatform] = useState<'windows' | 'mac' | 'linux' | 'android' | 'ios' | 'webdav'>('windows');
+  const [releasePlatforms, setReleasePlatforms] = useState<any>(null);
+  const [webdavCopied, setWebdavCopied] = useState(false);
   const [apkSizeBytes, setApkSizeBytes] = useState<string | null>(null);
   const [apkVersion, setApkVersion] = useState<string | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
@@ -955,6 +962,27 @@ function DriveDashboardContent() {
       const savedTags = localStorage.getItem('noor_color_tags');
       if (savedTags) setColorTags(JSON.parse(savedTags));
     } catch {}
+
+    if (typeof window !== 'undefined') {
+      const ua = window.navigator.userAgent.toLowerCase();
+      let detected: 'windows' | 'mac' | 'linux' | 'android' | 'ios' | 'webdav' = 'windows';
+      if (ua.includes('win')) detected = 'windows';
+      else if (ua.includes('mac') && !ua.includes('iphone') && !ua.includes('ipad')) detected = 'mac';
+      else if (ua.includes('linux') && !ua.includes('android')) detected = 'linux';
+      else if (ua.includes('android')) detected = 'android';
+      else if (ua.includes('iphone') || ua.includes('ipad')) detected = 'ios';
+      setDetectedPlatform(detected);
+      setPlatformTab(detected);
+    }
+
+    fetch(`${getApiUrl()}/shares/app-release`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.platforms) setReleasePlatforms(d.platforms);
+        if (d?.sizeBytes) setApkSizeBytes(String(d.sizeBytes));
+        if (d?.version) setApkVersion(d.version);
+      })
+      .catch(() => {});
   }, []);
 
   const setColorTag = (itemId: string, color: string | null) => {
@@ -2775,6 +2803,7 @@ function DriveDashboardContent() {
                 fetch(`${getApiUrl()}/shares/app-release`)
                   .then((r) => (r.ok ? r.json() : null))
                   .then((d) => {
+                    if (d?.platforms) setReleasePlatforms(d.platforms);
                     if (d?.sizeBytes) setApkSizeBytes(String(d.sizeBytes));
                     if (d?.version) setApkVersion(d.version);
                   })
@@ -2782,8 +2811,8 @@ function DriveDashboardContent() {
               }}
               className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 transition"
             >
-              <Smartphone className="w-4 h-4 text-indigo-500" />
-              <span>Get Mobile Apps (iOS &amp; Android)</span>
+              <HardDrive className="w-4 h-4 text-indigo-500" />
+              <span>Download Apps (Desktop &amp; Mobile)</span>
             </button>
           </div>
         </nav>
@@ -3002,6 +3031,27 @@ function DriveDashboardContent() {
                 <Command className="w-3.5 h-3.5 text-indigo-500" />
                 <span className="hidden lg:inline">Spotlight</span>
                 <kbd className="hidden sm:inline px-1 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-700 font-mono text-slate-500 dark:text-slate-400">⌘K</kbd>
+              </button>
+
+              {/* Apps Download Hub Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setAppDownloadModalOpen(true);
+                  fetch(`${getApiUrl()}/shares/app-release`)
+                    .then((r) => (r.ok ? r.json() : null))
+                    .then((d) => {
+                      if (d?.platforms) setReleasePlatforms(d.platforms);
+                      if (d?.sizeBytes) setApkSizeBytes(String(d.sizeBytes));
+                      if (d?.version) setApkVersion(d.version);
+                    })
+                    .catch(() => {});
+                }}
+                title="Download Apps for Windows, Mac, Linux, Android & iOS"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-950/40 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition shadow-xs"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Apps</span>
               </button>
 
               {/* Info Inspector Toggle */}
@@ -5752,66 +5802,225 @@ function DriveDashboardContent() {
         </div>
       </nav>
 
-      {/* Download App Modal */}
+      {/* Universal Desktop & Mobile Download Hub Modal */}
       {appDownloadModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/35 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="animate-modal-pop w-full max-w-lg bg-white/95 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[26px] p-6 shadow-[0_25px_70px_-15px_rgba(15,23,42,0.22)] space-y-5 max-h-[85vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="animate-modal-pop w-full max-w-2xl bg-white/95 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[28px] p-6 sm:p-7 shadow-[0_25px_70px_-15px_rgba(15,23,42,0.25)] space-y-5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-zinc-900 text-white flex items-center justify-center shadow-sm">
-                  <Smartphone className="w-5 h-5" />
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-800 text-white flex items-center justify-center shadow-md">
+                  <HardDrive className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                    Get NOOR DRIVE Mobile
-                  </h3>
-                  <p className="text-xs text-slate-500">Android &amp; iPhone (iOS) Apps</p>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                      NOOR DRIVE Ecosystem
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300">
+                      Multi-Platform
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Windows, Mac, Ubuntu/Linux, Android, iOS &amp; Zero-Install WebDAV
+                  </p>
                 </div>
               </div>
-              <button onClick={() => setAppDownloadModalOpen(false)}>
-                <X className="w-5 h-5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" />
+              <button
+                onClick={() => setAppDownloadModalOpen(false)}
+                className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Platform Tabs */}
-            <div className="grid grid-cols-2 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl gap-1">
-              <button
-                type="button"
-                onClick={() => setMobilePlatformTab('android')}
-                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition ${
-                  mobilePlatformTab === 'android'
-                    ? 'bg-white dark:bg-slate-900 text-zinc-900 dark:text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                <Smartphone className="w-3.5 h-3.5 text-emerald-500" />
-                <span>Android</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setMobilePlatformTab('ios')}
-                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition ${
-                  mobilePlatformTab === 'ios'
-                    ? 'bg-white dark:bg-slate-900 text-zinc-900 dark:text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                <Apple className="w-3.5 h-3.5 text-indigo-500" />
-                <span>iPhone (iOS)</span>
-              </button>
+            {/* Platform Selection Tabs */}
+            <div className="grid grid-cols-3 sm:grid-cols-6 p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl gap-1">
+              {[
+                { id: 'windows', label: 'Windows', icon: Laptop, color: 'text-sky-500' },
+                { id: 'mac', label: 'macOS', icon: Apple, color: 'text-indigo-500' },
+                { id: 'linux', label: 'Linux', icon: Terminal, color: 'text-orange-500' },
+                { id: 'android', label: 'Android', icon: Smartphone, color: 'text-emerald-500' },
+                { id: 'ios', label: 'iPhone', icon: Apple, color: 'text-purple-500' },
+                { id: 'webdav', label: 'WebDAV', icon: Globe, color: 'text-blue-500' },
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const isDetected = detectedPlatform === tab.id;
+                const isActive = platformTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setPlatformTab(tab.id as any)}
+                    className={`relative flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 py-2 px-2 rounded-xl text-xs font-bold transition ${
+                      isActive
+                        ? 'bg-white dark:bg-slate-900 text-zinc-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/10'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <Icon className={`w-3.5 h-3.5 ${tab.color}`} />
+                    <span className="truncate">{tab.label}</span>
+                    {isDetected && (
+                      <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900" title="Your Current Device" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
+
+            {/* Windows Content */}
+            {platformTab === 'windows' && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl border border-sky-100 dark:border-sky-900/40 bg-sky-50/60 dark:bg-sky-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                        NOOR DRIVE for Windows 10 / 11
+                      </h4>
+                      {detectedPlatform === 'windows' && (
+                        <span className="px-2 py-0.5 rounded-full bg-sky-600 text-white text-[10px] font-bold">
+                          Recommended
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Includes System Tray resident, <code className="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-800 font-mono text-[11px]">C:\Users\Name\NoorDrive</code> auto-sync &amp; background updater.
+                    </p>
+                  </div>
+                  <a
+                    href={
+                      releasePlatforms?.windows ||
+                      'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/NoorDrive-Setup.exe'
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold flex items-center gap-2 shadow-sm transition active:scale-95"
+                  >
+                    <Download className="w-4 h-4" /> Download .EXE
+                  </a>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800">
+                    <p className="font-semibold text-slate-900 dark:text-white">🔄 Auto-Sync Folder</p>
+                    <p className="text-slate-500 mt-1 text-[11px]">Drop any file into your local NoorDrive folder to sync automatically.</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800">
+                    <p className="font-semibold text-slate-900 dark:text-white">🕒 System Tray Icon</p>
+                    <p className="text-slate-500 mt-1 text-[11px]">Lives quietly near your clock with 1-click status and folder shortcuts.</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800">
+                    <p className="font-semibold text-slate-900 dark:text-white">🔒 Zero-Knowledge</p>
+                    <p className="text-slate-500 mt-1 text-[11px]">Client-side AES-256 encryption before leaving your PC.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* macOS Content */}
+            {platformTab === 'mac' && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/60 dark:bg-indigo-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                        NOOR DRIVE for macOS (Apple Silicon &amp; Intel)
+                      </h4>
+                      {detectedPlatform === 'mac' && (
+                        <span className="px-2 py-0.5 rounded-full bg-indigo-600 text-white text-[10px] font-bold">
+                          Recommended
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Menu Bar status icon, <code className="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-800 font-mono text-[11px]">~/NoorDrive</code> auto-sync &amp; native Finder integration.
+                    </p>
+                  </div>
+                  <a
+                    href={
+                      releasePlatforms?.mac ||
+                      'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/NoorDrive.dmg'
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center gap-2 shadow-sm transition active:scale-95"
+                  >
+                    <Download className="w-4 h-4" /> Download .DMG
+                  </a>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300">
+                  <strong>🍏 Installation:</strong> Open the downloaded <code className="font-mono">.dmg</code>, drag <code className="font-mono">NOOR DRIVE.app</code> to Applications, and launch.
+                </div>
+              </div>
+            )}
+
+            {/* Linux Content */}
+            {platformTab === 'linux' && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl border border-orange-100 dark:border-orange-900/40 bg-orange-50/60 dark:bg-orange-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                        NOOR DRIVE for Ubuntu / Debian / Linux
+                      </h4>
+                      {detectedPlatform === 'linux' && (
+                        <span className="px-2 py-0.5 rounded-full bg-orange-600 text-white text-[10px] font-bold">
+                          Recommended
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Native <code className="font-mono text-[11px]">.deb</code> package for Ubuntu 20.04/22.04/24.04 with <code className="font-mono text-[11px]">~/NoorDrive</code> sync.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <a
+                      href={
+                        releasePlatforms?.linux ||
+                        'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive-linux.deb'
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold flex items-center gap-2 shadow-sm transition active:scale-95"
+                    >
+                      <Download className="w-4 h-4" /> Download .DEB
+                    </a>
+                    <a
+                      href={
+                        releasePlatforms?.linuxTar ||
+                        'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive-linux.tar.gz'
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                      title="Universal Linux tar.gz"
+                    >
+                      <Download className="w-3.5 h-3.5" /> .tar.gz
+                    </a>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-900 text-slate-200 font-mono text-xs space-y-1 overflow-x-auto">
+                  <p className="text-slate-400 text-[10px] uppercase font-sans font-bold">1-Line Terminal Install (Ubuntu / Debian):</p>
+                  <p className="select-all text-amber-300">
+                    wget -qO noordrive.deb https://drive.noor.is-a.dev/downloads/noor-drive-linux.deb &amp;&amp; sudo dpkg -i noordrive.deb
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Android Content */}
-            {mobilePlatformTab === 'android' && (
-              <div className="space-y-3">
+            {platformTab === 'android' && (
+              <div className="space-y-4">
                 <a
                   href={
+                    releasePlatforms?.apk ||
                     process.env.NEXT_PUBLIC_ANDROID_APK_URL ||
                     'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.apk'
                   }
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-between p-4 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-zinc-400 bg-slate-50/70 dark:bg-slate-800/50 transition group"
+                  className="flex items-center justify-between p-4 rounded-2xl border border-emerald-200 dark:border-emerald-800/80 hover:border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20 transition group"
                 >
                   <div className="min-w-0 pr-2">
                     <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
@@ -5820,30 +6029,29 @@ function DriveDashboardContent() {
                     <p className="text-xs text-slate-500 mt-0.5 truncate">
                       {apkSizeBytes
                         ? `${apkVersion || 'Latest'} • Size: ${formatBytes(apkSizeBytes)}`
-                        : 'Official Release APK • Free Direct Download'}
+                        : 'Official Release APK • Direct Download & Auto-Update'}
                     </p>
                   </div>
-                  <div className="shrink-0 px-3.5 py-2 rounded-xl bg-zinc-900 group-hover:bg-zinc-800 text-white text-xs font-semibold flex items-center gap-1.5 transition">
+                  <div className="shrink-0 px-4 py-2.5 rounded-xl bg-emerald-600 group-hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 transition shadow-sm">
                     <Download className="w-3.5 h-3.5" /> Download .APK
                   </div>
                 </a>
 
                 <div className="p-3.5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 text-xs text-slate-600 dark:text-slate-300">
-                  <strong>💡 Instant Install:</strong> You can also tap <strong>Add to Home Screen</strong> in Chrome/Brave on your phone to install without downloading.
+                  <strong>💡 Instant PWA Install:</strong> You can also tap <strong>Add to Home Screen</strong> in Chrome/Brave on your phone to install without downloading.
                 </div>
               </div>
             )}
 
             {/* iOS Content */}
-            {mobilePlatformTab === 'ios' && (
-              <div className="space-y-3">
-                {/* Method 1: Instant Safari PWA (Recommended) */}
-                <div className="p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20 space-y-2">
+            {platformTab === 'ios' && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl border border-purple-100 dark:border-purple-900/50 bg-purple-50/50 dark:bg-purple-950/20 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wide">
+                    <span className="text-xs font-bold text-purple-700 dark:text-purple-300 uppercase tracking-wide">
                       Method 1: Instant Install (No PC, 100% Free)
                     </span>
-                    <span className="px-2 py-0.5 rounded-full bg-indigo-600 text-white text-[10px] font-bold">
+                    <span className="px-2 py-0.5 rounded-full bg-purple-600 text-white text-[10px] font-bold">
                       Recommended
                     </span>
                   </div>
@@ -5852,7 +6060,6 @@ function DriveDashboardContent() {
                   </p>
                 </div>
 
-                {/* Method 2: Sideload IPA */}
                 <a
                   href="https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.ipa"
                   target="_blank"
@@ -5871,6 +6078,65 @@ function DriveDashboardContent() {
                     <Download className="w-3.5 h-3.5" /> Download .IPA
                   </div>
                 </a>
+              </div>
+            )}
+
+            {/* Zero-Install WebDAV Network Drive Content */}
+            {platformTab === 'webdav' && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl border border-blue-200 dark:border-blue-800/80 bg-blue-50/60 dark:bg-blue-950/30 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                        Zero-Install Network Drive (WebDAV RFC 4918)
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Mount NOOR DRIVE directly as a real hard drive in Windows Explorer, Ubuntu Files or Mac Finder without installing any software.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5">
+                    <span className="font-mono text-xs text-indigo-600 dark:text-indigo-400 truncate select-all flex-1">
+                      {releasePlatforms?.webdavUrl || 'https://drive.noor.is-a.dev/api/webdav'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          releasePlatforms?.webdavUrl || 'https://drive.noor.is-a.dev/api/webdav'
+                        );
+                        setWebdavCopied(true);
+                        setTimeout(() => setWebdavCopied(false), 2000);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-300 text-xs font-semibold flex items-center gap-1 shrink-0 hover:bg-indigo-100 transition"
+                    >
+                      {webdavCopied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{webdavCopied ? 'Copied!' : 'Copy URL'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800 space-y-1">
+                    <p className="font-bold text-slate-900 dark:text-white">🐧 Ubuntu / Linux</p>
+                    <p className="text-slate-500 text-[11px]">
+                      Open <strong>Files</strong> ➔ <strong>+ Other Locations</strong> ➔ Paste URL in <em>Connect to Server</em>.
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800 space-y-1">
+                    <p className="font-bold text-slate-900 dark:text-white">🪟 Windows 10/11</p>
+                    <p className="text-slate-500 text-[11px]">
+                      File Explorer ➔ Right-click <strong>This PC</strong> ➔ <strong>Map network drive</strong> ➔ Drive <code className="font-mono">Z:</code>.
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800 space-y-1">
+                    <p className="font-bold text-slate-900 dark:text-white">🍎 macOS Finder</p>
+                    <p className="text-slate-500 text-[11px]">
+                      Press <kbd className="font-mono">⌘K</kbd> (Connect to Server) ➔ Paste URL ➔ Enter your NOOR DRIVE email &amp; passcode.
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
           </div>
