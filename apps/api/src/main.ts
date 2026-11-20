@@ -28,7 +28,7 @@ async function bootstrap() {
 
   const configuredOrigins = (
     process.env.CORS_ORIGIN ||
-    'http://localhost:3000,https://noor-cloud-vault.onrender.com,https://noordrive.is-a.dev'
+    'http://localhost:3000,https://noor-cloud-vault.onrender.com,https://drive.noor.is-a.dev,https://noordrive.is-a.dev'
   )
     .split(',')
     .map((o) => o.trim())
@@ -38,6 +38,7 @@ async function bootstrap() {
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'https://noor-cloud-vault.onrender.com',
+    'https://drive.noor.is-a.dev',
     'https://noordrive.is-a.dev',
   ];
 

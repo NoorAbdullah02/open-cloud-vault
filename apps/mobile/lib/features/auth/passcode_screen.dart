@@ -340,7 +340,7 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
             TextField(
               controller: controller,
               decoration: const InputDecoration(
-                hintText: 'https://noordrive.is-a.dev/api',
+                hintText: 'https://drive.noor.is-a.dev/api',
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
@@ -352,7 +352,7 @@ class _PasscodeScreenState extends State<PasscodeScreen> {
               children: [
                 ActionChip(
                   label: const Text('is-a.dev', style: TextStyle(fontSize: 11)),
-                  onPressed: () => controller.text = 'https://noordrive.is-a.dev/api',
+                  onPressed: () => controller.text = 'https://drive.noor.is-a.dev/api',
                 ),
                 ActionChip(
                   label: const Text('Render', style: TextStyle(fontSize: 11)),

@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Live Web App](https://img.shields.io/badge/Live%20Web%20App-noordrive.is--a.dev-4F46E5?style=for-the-badge&logo=cloudflare&logoColor=white)](https://noordrive.is-a.dev)
+[![Live Web App](https://img.shields.io/badge/Live%20Web%20App-drive.noor.is--a.dev-4F46E5?style=for-the-badge&logo=cloudflare&logoColor=white)](https://drive.noor.is-a.dev)
 [![Render Fallback](https://img.shields.io/badge/Render%20Cloud-noor--cloud--vault-46E3B7?style=for-the-badge&logo=render&logoColor=black)](https://noor-cloud-vault.onrender.com)
 [![Download Android APK](https://img.shields.io/github/v/release/NoorAbdullah02/open-cloud-vault?color=7C3AED&label=Android%20APK&style=for-the-badge&logo=android&logoColor=white)](https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest)
 
@@ -27,7 +27,7 @@
 ---
 
 ## 📌 Quick Access Links
-* 🌐 **Live Custom Domain:** [https://noordrive.is-a.dev](https://noordrive.is-a.dev)
+* 🌐 **Live Custom Domain:** [https://drive.noor.is-a.dev](https://drive.noor.is-a.dev)
 * ☁️ **Render Cloud Primary:** [https://noor-cloud-vault.onrender.com](https://noor-cloud-vault.onrender.com)
 * 📱 **Download Android App:** [Latest Release APK](https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download/noor-drive.apk)
 * 📚 **Free Domains & Subdomains Directory:** [FREE_DOMAINS_DIRECTORY.md](./docs/FREE_DOMAINS_DIRECTORY.md) • [Download PDF Guide](./docs/FREE_DOMAINS_DIRECTORY.pdf)
@@ -117,7 +117,7 @@
 * **Direct Social Sharing:** 1-click sharing to WhatsApp, Telegram, Email, and dynamic QR Code generation for mobile scanning.
 
 ### 6. 📱 Mobile App Dynamic Server Switcher
-* **Zero-Recompilation Domain Switching:** Tap the server chip on the mobile lock screen to switch between `https://noordrive.is-a.dev/api` and `https://noor-cloud-vault.onrender.com/api` without rebuilding the APK.
+* **Zero-Recompilation Domain Switching:** Tap the server chip on the mobile lock screen to switch between `https://drive.noor.is-a.dev/api` and `https://noor-cloud-vault.onrender.com/api` without rebuilding the APK.
 
 ### 7. ⏱️ 24/7 Keep-Alive Automation (Zero Cold Starts)
 * GitHub Actions workflow (`.github/workflows/keep-alive.yml`) automatically pings the live Render instances every 10 minutes to prevent the 15-minute free-tier spin-down, eliminating 50-second cold starts.
@@ -133,7 +133,7 @@
 
 ### 🍏 iOS Support (iPhone & iPad)
 * **Option A — Instant Progressive Web App (PWA):**
-  1. Open Safari on your iPhone and visit [https://noordrive.is-a.dev](https://noordrive.is-a.dev).
+  1. Open Safari on your iPhone and visit [https://drive.noor.is-a.dev](https://drive.noor.is-a.dev).
   2. Tap the Safari **Share** icon (square with upward arrow).
   3. Scroll down and tap **Add to Home Screen**.
   4. NOOR DRIVE installs as a full-screen, standalone native-like app with offline caching!
@@ -208,7 +208,7 @@ open-cloud-vault/
 | `TELEGRAM_API_HASH` | Telegram API Hash from my.telegram.org | **Yes** | `3eaa11c52cabf03482173270e32338f9` |
 | `TELEGRAM_SESSION_STRING` | Generated Telegram session string | **Yes** | `1BQANOTEuMTA4...` |
 | `TELEGRAM_TARGET_CHANNEL` | Storage destination (`me` for Saved Messages or Channel ID)| **Yes** | `me` |
-| `CORS_ORIGIN` | Allowed web origins (comma-separated) | **Yes** | `http://localhost:3000,https://noordrive.is-a.dev` |
+| `CORS_ORIGIN` | Allowed web origins (comma-separated) | **Yes** | `http://localhost:3000,https://drive.noor.is-a.dev` |
 | `PORT` | Public combined HTTP server port | No | `3000` |
 | `API_PORT` | Internal NestJS API port | No | `4000` |
 | `NEXT_PUBLIC_API_URL` | Frontend API URL on localhost | No | `http://localhost:4000/api` |
@@ -271,11 +271,11 @@ This repository includes [`render.yaml`](./render.yaml) to host both the Next.js
 
 ---
 
-## 🌐 Connecting Your Free Custom Domain (`noordrive.is-a.dev`)
+## 🌐 Connecting Your Free Custom Domain (`drive.noor.is-a.dev`)
 
-1. Submit a registration Pull Request on [is-a-dev/register](https://github.com/is-a-dev/register) targeting `noor-cloud-vault.onrender.com`.
+1. Submit a registration Pull Request on [is-a-dev/register](https://github.com/is-a-dev/register) targeting `noor-cloud-vault.onrender.com` (create `domains/drive.noor.json`).
 2. In **Render Dashboard** → Select `noor-cloud-vault` → **Settings** → **Custom Domains**.
-3. Add `noordrive.is-a.dev` and save.
+3. Add `drive.noor.is-a.dev` and save.
 4. Once the PR is merged, Render automatically verifies the CNAME challenge and issues a free Let's Encrypt SSL certificate!
 
 ---

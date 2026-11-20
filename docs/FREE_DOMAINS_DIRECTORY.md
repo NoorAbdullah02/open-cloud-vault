@@ -90,6 +90,6 @@ If your project requires an official top-level domain without any subdomain exte
 ## 7. Quick Guide: Connecting Any Free Domain to Render
 
 1. In the **Render Dashboard**, navigate to your web service (e.g. `noor-cloud-vault`) > **Settings** > **Custom Domains**.
-2. Click **Add Custom Domain** and enter your registered subdomain (e.g. `noordrive.is-a.dev` or `myproject.eu.org`).
+2. Click **Add Custom Domain** and enter your registered subdomain (e.g. `drive.noor.is-a.dev` or `myproject.eu.org`).
 3. In your domain provider's DNS panel (or GitHub PR for `is-a.dev`), set a **CNAME** record pointing to your Render address: `noor-cloud-vault.onrender.com`.
 4. Render automatically validates the DNS challenge and provisions a free **Let's Encrypt SSL/TLS Certificate** within minutes.
