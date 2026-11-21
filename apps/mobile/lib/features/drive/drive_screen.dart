@@ -206,7 +206,8 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
 
   Future<void> _setAccentColor(Color color) async {
     setState(() => _accentColor = color);
-    await apiClient.storage.write(key: 'accent_color', value: color.toARGB32().toString());
+    // ignore: deprecated_member_use
+    await apiClient.storage.write(key: 'accent_color', value: color.value.toString());
   }
 
   Future<void> _checkForAppUpdate({bool silent = false}) async {
@@ -2881,7 +2882,8 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   DropdownButtonFormField<String>(
-                    initialValue: permission,
+                    // ignore: deprecated_member_use
+                    value: permission,
                     decoration: const InputDecoration(labelText: 'Permission'),
                     items: [
                       const DropdownMenuItem(value: 'VIEWER', child: Text('Viewer (View & Download)')),
@@ -2892,7 +2894,8 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<int>(
-                    initialValue: expiresHours,
+                    // ignore: deprecated_member_use
+                    value: expiresHours,
                     decoration: const InputDecoration(labelText: 'Expiration'),
                     items: const [
                       DropdownMenuItem(value: 1440, child: Text('2 Months (60 Days - Default)')),
@@ -3794,7 +3797,7 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                             decoration: BoxDecoration(
                               color: c,
                               shape: BoxShape.circle,
-                              border: _accentColor.toARGB32() == c.toARGB32()
+                              border: _accentColor == c
                                   ? Border.all(color: Colors.black26, width: 3)
                                   : null,
                             ),
