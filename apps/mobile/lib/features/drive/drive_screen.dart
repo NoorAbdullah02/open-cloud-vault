@@ -726,7 +726,8 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                   title: const Text('Auto-Sync Gallery Photos', style: TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: const Text('Automatically detect and sync new photos when app is active or resumed'),
                   value: _autoSyncEnabled,
-                  activeThumbColor: const Color(0xFF4F46E5),
+                  // ignore: deprecated_member_use
+                  activeColor: const Color(0xFF4F46E5),
                   onChanged: (val) {
                     setState(() => _autoSyncEnabled = val);
                     setSheetState(() {});
@@ -738,7 +739,8 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                   title: const Text('Wi-Fi Only', style: TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: const Text('Avoid using mobile cellular data for background syncing'),
                   value: _autoSyncWifiOnly,
-                  activeThumbColor: const Color(0xFF4F46E5),
+                  // ignore: deprecated_member_use
+                  activeColor: const Color(0xFF4F46E5),
                   onChanged: _autoSyncEnabled
                       ? (val) {
                           setState(() => _autoSyncWifiOnly = val);
