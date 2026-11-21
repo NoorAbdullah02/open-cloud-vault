@@ -52,7 +52,7 @@ class ApiClient {
     'API_URL',
     defaultValue: 'https://drive.noor.is-a.dev/api',
   );
-  static const int buildNumber = int.fromEnvironment('APP_BUILD_NUMBER', defaultValue: 70);
+  static const int buildNumber = int.fromEnvironment('APP_BUILD_NUMBER', defaultValue: 71);
 
   final Dio dio;
   final CachedSecureStorage storage;
