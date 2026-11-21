@@ -206,7 +206,7 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
 
   Future<void> _setAccentColor(Color color) async {
     setState(() => _accentColor = color);
-    await apiClient.storage.write(key: 'accent_color', value: color.value.toString());
+    await apiClient.storage.write(key: 'accent_color', value: color.toARGB32().toString());
   }
 
   Future<void> _checkForAppUpdate({bool silent = false}) async {
@@ -725,7 +725,7 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                   title: const Text('Auto-Sync Gallery Photos', style: TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: const Text('Automatically detect and sync new photos when app is active or resumed'),
                   value: _autoSyncEnabled,
-                  activeColor: const Color(0xFF4F46E5),
+                  activeThumbColor: const Color(0xFF4F46E5),
                   onChanged: (val) {
                     setState(() => _autoSyncEnabled = val);
                     setSheetState(() {});
@@ -737,7 +737,7 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                   title: const Text('Wi-Fi Only', style: TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: const Text('Avoid using mobile cellular data for background syncing'),
                   value: _autoSyncWifiOnly,
-                  activeColor: const Color(0xFF4F46E5),
+                  activeThumbColor: const Color(0xFF4F46E5),
                   onChanged: _autoSyncEnabled
                       ? (val) {
                           setState(() => _autoSyncWifiOnly = val);
@@ -2342,6 +2342,7 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
 
     // 3. In-App Word (.docx) Preview
     if (ext == 'docx' || mime.contains('wordprocessingml')) {
+      if (!mounted) return;
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -2403,6 +2404,7 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
 
     // 4. In-App PowerPoint (.pptx) Slide Preview
     if (ext == 'pptx' || mime.contains('presentationml')) {
+      if (!mounted) return;
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -2562,9 +2564,9 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: Colors.amber.withOpacity(0.2),
+                                  color: Colors.amber.withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: Colors.amber.withOpacity(0.4)),
+                                  border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
                                 ),
                                 child: const Text(
                                   'Unsaved',
@@ -2879,7 +2881,7 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   DropdownButtonFormField<String>(
-                    value: permission,
+                    initialValue: permission,
                     decoration: const InputDecoration(labelText: 'Permission'),
                     items: [
                       const DropdownMenuItem(value: 'VIEWER', child: Text('Viewer (View & Download)')),
@@ -2890,7 +2892,7 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<int>(
-                    value: expiresHours,
+                    initialValue: expiresHours,
                     decoration: const InputDecoration(labelText: 'Expiration'),
                     items: const [
                       DropdownMenuItem(value: 1440, child: Text('2 Months (60 Days - Default)')),
@@ -3792,7 +3794,7 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                             decoration: BoxDecoration(
                               color: c,
                               shape: BoxShape.circle,
-                              border: _accentColor.value == c.value
+                              border: _accentColor.toARGB32() == c.toARGB32()
                                   ? Border.all(color: Colors.black26, width: 3)
                                   : null,
                             ),
@@ -5276,8 +5278,8 @@ class _MobileZoomableImageViewerState extends State<_MobileZoomableImageViewer>
     } else {
       final pos = _doubleTapDetails?.localPosition ?? Offset.zero;
       final target = Matrix4.identity()
-        ..translate(-pos.dx * 1.5, -pos.dy * 1.5)
-        ..scale(2.5);
+        ..translateByDouble(-pos.dx * 1.5, -pos.dy * 1.5, 0.0, 1.0)
+        ..scaleByDouble(2.5, 2.5, 1.0, 1.0);
       _animateTo(target);
       widget.onZoomChanged?.call(true);
     }
@@ -5286,7 +5288,7 @@ class _MobileZoomableImageViewerState extends State<_MobileZoomableImageViewer>
   void _zoomIn() {
     final scale = _transformationController.value.getMaxScaleOnAxis();
     final targetScale = (scale * 1.35).clamp(1.0, 5.0);
-    final target = Matrix4.identity()..scale(targetScale);
+    final target = Matrix4.identity()..scaleByDouble(targetScale, targetScale, 1.0, 1.0);
     _animateTo(target);
     widget.onZoomChanged?.call(targetScale > 1.05);
   }
@@ -5294,7 +5296,9 @@ class _MobileZoomableImageViewerState extends State<_MobileZoomableImageViewer>
   void _zoomOut() {
     final scale = _transformationController.value.getMaxScaleOnAxis();
     final targetScale = (scale / 1.35).clamp(1.0, 5.0);
-    final target = targetScale <= 1.05 ? Matrix4.identity() : (Matrix4.identity()..scale(targetScale));
+    final target = targetScale <= 1.05
+        ? Matrix4.identity()
+        : (Matrix4.identity()..scaleByDouble(targetScale, targetScale, 1.0, 1.0));
     _animateTo(target);
     widget.onZoomChanged?.call(targetScale > 1.05);
   }
@@ -5582,7 +5586,7 @@ class _MobileVideoPlayerDialogState extends State<_MobileVideoPlayerDialog> {
       child: Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
-          backgroundColor: Colors.black.withOpacity(0.85),
+          backgroundColor: Colors.black.withValues(alpha: 0.85),
           foregroundColor: Colors.white,
           elevation: 0,
           leading: IconButton(
@@ -5708,7 +5712,7 @@ class _MobileVideoPlayerDialogState extends State<_MobileVideoPlayerDialog> {
                                     borderRadius: BorderRadius.circular(32),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: const Color(0xFF6366F1).withOpacity(0.4),
+                                        color: const Color(0xFF6366F1).withValues(alpha: 0.4),
                                         blurRadius: 28,
                                         offset: const Offset(0, 10),
                                       ),
@@ -5772,7 +5776,7 @@ class _MobileVideoPlayerDialogState extends State<_MobileVideoPlayerDialog> {
                                       shape: BoxShape.circle,
                                       boxShadow: [
                                         BoxShadow(
-                                          color: const Color(0xFF6366F1).withOpacity(0.5),
+                                          color: const Color(0xFF6366F1).withValues(alpha: 0.5),
                                           blurRadius: 18,
                                         ),
                                       ],

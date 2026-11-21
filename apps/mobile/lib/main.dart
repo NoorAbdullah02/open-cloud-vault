@@ -82,7 +82,7 @@ class NoorDriveApp extends ConsumerWidget {
         colorSchemeSeed: const Color(0xFF4F46E5),
         scaffoldBackgroundColor: const Color(0xFFF8FAFC),
         cardColor: Colors.white,
-        dialogBackgroundColor: Colors.white,
+        dialogTheme: const DialogThemeData(backgroundColor: Colors.white),
         dividerColor: const Color(0xFFE2E8F0),
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.white,
@@ -102,7 +102,7 @@ class NoorDriveApp extends ConsumerWidget {
         ),
         scaffoldBackgroundColor: const Color(0xFF070B14),
         cardColor: const Color(0xFF0F172A),
-        dialogBackgroundColor: const Color(0xFF0F172A),
+        dialogTheme: const DialogThemeData(backgroundColor: Color(0xFF0F172A)),
         dividerColor: const Color(0xFF1E293B),
         appBarTheme: const AppBarTheme(
           backgroundColor: Color(0xFF0F172A),
