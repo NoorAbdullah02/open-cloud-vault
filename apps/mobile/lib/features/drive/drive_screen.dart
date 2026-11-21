@@ -3600,6 +3600,15 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
     required int usedBytes,
     required int quotaBytes,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? const Color(0xFFF1F5F9) : const Color(0xFF0F172A);
+    final secondaryTextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final activeNavColor = isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5);
+    final activeNavBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFEEF2FF);
+    final dividerColor = isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0);
+    final storageCardBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC);
+    final storageCardBorder = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
     return Column(
       children: [
         Expanded(
@@ -3622,7 +3631,9 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [_accentColor, const Color(0xFF1E40AF)],
+                      colors: isDark
+                          ? [_accentColor.withValues(alpha: 0.85), const Color(0xFF0B1120)]
+                          : [_accentColor, const Color(0xFF1E40AF)],
                     ),
                   ),
                   child: Column(
@@ -3695,6 +3706,7 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                   ),
                 ),
               ),
+              const SizedBox(height: 6),
               for (final item in [
                 ('my-drive', 'My Drive', Icons.folder_outlined),
                 ('vault', 'Secret Vault', Icons.lock_outline),
@@ -3706,30 +3718,49 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                 ('documents', 'Documents', Icons.description_outlined),
                 ('trash', 'Trash', Icons.delete_outline),
               ])
-                ListTile(
-                  leading: Icon(item.$3, color: _view == item.$1 ? const Color(0xFF2563EB) : null),
-                  title: Text(item.$2, style: TextStyle(fontSize: 13, fontWeight: _view == item.$1 ? FontWeight.bold : FontWeight.normal)),
-                  selected: _view == item.$1,
-                  dense: true,
-                  onTap: () async {
-                    if (!isDualSide) Navigator.pop(context);
-                    if (item.$1 == 'vault') {
-                      final ok = await _authenticateVault();
-                      if (!ok) return;
-                    }
-                    setState(() {
-                      _view = item.$1;
-                      _folderId = null;
-                    });
-                    _loadDrive();
-                  },
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: _view == item.$1 ? activeNavBg : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: ListTile(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    dense: true,
+                    leading: Icon(
+                      item.$3,
+                      color: _view == item.$1 ? activeNavColor : secondaryTextColor,
+                      size: 20,
+                    ),
+                    title: Text(
+                      item.$2,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: _view == item.$1 ? FontWeight.bold : FontWeight.w500,
+                        color: _view == item.$1 ? activeNavColor : primaryTextColor,
+                      ),
+                    ),
+                    selected: _view == item.$1,
+                    onTap: () async {
+                      if (!isDualSide) Navigator.pop(context);
+                      if (item.$1 == 'vault') {
+                        final ok = await _authenticateVault();
+                        if (!ok) return;
+                      }
+                      setState(() {
+                        _view = item.$1;
+                        _folderId = null;
+                      });
+                      _loadDrive();
+                    },
+                  ),
                 ),
-              const Divider(),
+              Divider(color: dividerColor, height: 16),
               ListTile(
                 dense: true,
                 leading: const Icon(Icons.photo_library_outlined, color: Color(0xFF4F46E5), size: 20),
-                title: const Text('Backup Gallery Photos', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-                subtitle: const Text('Sync phone photos to Camera Uploads', style: TextStyle(fontSize: 10)),
+                title: Text('Backup Gallery Photos', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: primaryTextColor)),
+                subtitle: Text('Sync phone photos to Camera Uploads', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
                 onTap: () {
                   if (!isDualSide) Navigator.pop(context);
                   _backupGalleryPhotos();
@@ -3738,8 +3769,8 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
               ListTile(
                 dense: true,
                 leading: const Icon(Icons.sync, color: Color(0xFF4F46E5), size: 20),
-                title: const Text('Background Auto-Sync', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-                subtitle: Text(_autoSyncEnabled ? 'Auto-sync active' : 'Disabled • Tap to configure', style: const TextStyle(fontSize: 10)),
+                title: Text('Background Auto-Sync', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: primaryTextColor)),
+                subtitle: Text(_autoSyncEnabled ? 'Auto-sync active' : 'Disabled • Tap to configure', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
                 onTap: () {
                   if (!isDualSide) Navigator.pop(context);
                   _showAutoSyncDialog();
@@ -3748,28 +3779,28 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
               ListTile(
                 dense: true,
                 leading: const Icon(Icons.cleaning_services_outlined, color: Color(0xFFD97706), size: 20),
-                title: const Text('Storage Cleaner & Duplicates', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-                subtitle: const Text('Find SHA-256 duplicate files & free space', style: TextStyle(fontSize: 10)),
+                title: Text('Storage Cleaner & Duplicates', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: primaryTextColor)),
+                subtitle: Text('Find SHA-256 duplicate files & free space', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
                 onTap: () {
                   if (!isDualSide) Navigator.pop(context);
                   _showDuplicateCleanerDialog();
                 },
               ),
-              const Divider(),
+              Divider(color: dividerColor, height: 16),
               ListTile(
                 dense: true,
                 leading: Icon(
-                  Theme.of(context).brightness == Brightness.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                  color: Theme.of(context).brightness == Brightness.dark ? const Color(0xFFFBBF24) : const Color(0xFF6366F1),
+                  isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                  color: isDark ? const Color(0xFFFBBF24) : const Color(0xFF6366F1),
                   size: 20,
                 ),
                 title: Text(
-                  Theme.of(context).brightness == Brightness.dark ? 'Appearance: Dark Mode' : 'Appearance: Light Mode',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  isDark ? 'Appearance: Dark Mode' : 'Appearance: Light Mode',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTextColor),
                 ),
                 subtitle: Text(
-                  Theme.of(context).brightness == Brightness.dark ? 'Tap to switch to Light Theme' : 'Tap to switch to Dark Theme',
-                  style: const TextStyle(fontSize: 10),
+                  isDark ? 'Tap to switch to Light Theme' : 'Tap to switch to Dark Theme',
+                  style: TextStyle(fontSize: 10, color: secondaryTextColor),
                 ),
                 onTap: () {
                   ref.read(themeModeProvider.notifier).toggleTheme();
@@ -3778,7 +3809,7 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
               ListTile(
                 dense: true,
                 leading: Icon(Icons.palette_outlined, color: _accentColor, size: 20),
-                title: const Text('Customize Theme Color', style: TextStyle(fontSize: 12)),
+                title: Text('Customize Theme Color', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTextColor)),
                 subtitle: Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Row(
@@ -3800,7 +3831,7 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                               color: c,
                               shape: BoxShape.circle,
                               border: _accentColor == c
-                                  ? Border.all(color: Colors.black26, width: 3)
+                                  ? Border.all(color: isDark ? Colors.white : Colors.black45, width: 3)
                                   : null,
                             ),
                           ),
@@ -3809,11 +3840,11 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                   ),
                 ),
               ),
-              const Divider(),
+              Divider(color: dividerColor, height: 16),
               ListTile(
                 dense: true,
                 leading: const Icon(Icons.security, color: Color(0xFF059669), size: 20),
-                title: const Text('Passcode & Security', style: TextStyle(fontSize: 12)),
+                title: Text('Passcode & Security', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTextColor)),
                 onTap: () {
                   if (!isDualSide) Navigator.pop(context);
                   _openSecurityDialog();
@@ -3822,7 +3853,8 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
               ListTile(
                 dense: true,
                 leading: const Icon(Icons.system_update, color: Color(0xFF2563EB), size: 20),
-                title: const Text('Check for App Update', style: TextStyle(fontSize: 12)),
+                title: Text('Check for App Update', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTextColor)),
+                subtitle: Text('Current: v1.0.${ApiClient.buildNumber}', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
                 onTap: () {
                   if (!isDualSide) Navigator.pop(context);
                   _checkForAppUpdate(silent: false);
@@ -3832,8 +3864,8 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                 ListTile(
                   dense: true,
                   leading: const Icon(Icons.folder_special_rounded, color: Color(0xFF4F46E5), size: 20),
-                  title: const Text('Open Local Folder (~/NoorDrive)', style: TextStyle(fontSize: 12)),
-                  subtitle: const Text('Open computer sync folder in Files/Explorer', style: TextStyle(fontSize: 10)),
+                  title: Text('Open Local Folder (~/NoorDrive)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTextColor)),
+                  subtitle: Text('Open computer sync folder in Files/Explorer', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
                   onTap: () {
                     if (!isDualSide) Navigator.pop(context);
                     SystemTrayService.openLocalSyncFolder();
@@ -3842,8 +3874,8 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                 ListTile(
                   dense: true,
                   leading: const Icon(Icons.sync_rounded, color: Color(0xFF0EA5E9), size: 20),
-                  title: const Text('Sync ~/NoorDrive Now', style: TextStyle(fontSize: 12)),
-                  subtitle: Text(DesktopSyncService.instance.statusMessage, style: const TextStyle(fontSize: 10)),
+                  title: Text('Sync ~/NoorDrive Now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTextColor)),
+                  subtitle: Text(DesktopSyncService.instance.statusMessage, style: TextStyle(fontSize: 10, color: secondaryTextColor)),
                   onTap: () {
                     DesktopSyncService.instance.triggerSync();
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -3855,8 +3887,8 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
               ListTile(
                 dense: true,
                 leading: const Icon(Icons.tips_and_updates_outlined, color: Color(0xFF6366F1), size: 20),
-                title: const Text('Shortcuts & Gestures Guide', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-                subtitle: const Text('Touch gestures, secret vault & tricks', style: TextStyle(fontSize: 10)),
+                title: Text('Shortcuts & Gestures Guide', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: primaryTextColor)),
+                subtitle: Text('Touch gestures, secret vault & tricks', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
                 onTap: () {
                   if (!isDualSide) Navigator.pop(context);
                   _showShortcutsAndGesturesDialog();
@@ -3870,22 +3902,43 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
+              color: storageCardBg,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: storageCardBorder),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('NOOR DRIVE Storage', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 5),
-                LinearProgressIndicator(value: usedRatio, minHeight: 5, borderRadius: BorderRadius.circular(4)),
-                const SizedBox(height: 5),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('NOOR DRIVE Storage', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: primaryTextColor)),
+                    Text(
+                      isUnlimited ? '∞' : '${(usedRatio * 100).toStringAsFixed(0)}%',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: activeNavColor,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                LinearProgressIndicator(
+                  value: usedRatio,
+                  minHeight: 5,
+                  borderRadius: BorderRadius.circular(4),
+                  backgroundColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    usedRatio > 0.9 ? const Color(0xFFEF4444) : activeNavColor,
+                  ),
+                ),
+                const SizedBox(height: 6),
                 Text(
                   isUnlimited
                       ? '${_formatBytes(usedBytes)} used (Unlimited)'
                       : '${_formatBytes(usedBytes)} of ${_formatBytes(quotaBytes)}',
-                  style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
+                  style: TextStyle(fontSize: 10, color: secondaryTextColor),
                 ),
               ],
             ),
@@ -4210,7 +4263,7 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
             drawer: effectiveDualSide
                 ? null
                 : Drawer(
-                    backgroundColor: Colors.white,
+                    backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
                     child: _buildNavigationPanel(
                       isDualSide: false,
                       usedRatio: usedRatio,
