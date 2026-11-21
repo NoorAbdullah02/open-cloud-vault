@@ -5277,9 +5277,8 @@ class _MobileZoomableImageViewerState extends State<_MobileZoomableImageViewer>
       widget.onZoomChanged?.call(false);
     } else {
       final pos = _doubleTapDetails?.localPosition ?? Offset.zero;
-      final target = Matrix4.identity()
-        ..translateByDouble(-pos.dx * 1.5, -pos.dy * 1.5, 0.0, 1.0)
-        ..scaleByDouble(2.5, 2.5, 1.0, 1.0);
+      final target = Matrix4.translationValues(-pos.dx * 1.5, -pos.dy * 1.5, 0.0) *
+          Matrix4.diagonal3Values(2.5, 2.5, 1.0);
       _animateTo(target);
       widget.onZoomChanged?.call(true);
     }
@@ -5288,7 +5287,7 @@ class _MobileZoomableImageViewerState extends State<_MobileZoomableImageViewer>
   void _zoomIn() {
     final scale = _transformationController.value.getMaxScaleOnAxis();
     final targetScale = (scale * 1.35).clamp(1.0, 5.0);
-    final target = Matrix4.identity()..scaleByDouble(targetScale, targetScale, 1.0, 1.0);
+    final target = Matrix4.diagonal3Values(targetScale, targetScale, 1.0);
     _animateTo(target);
     widget.onZoomChanged?.call(targetScale > 1.05);
   }
@@ -5298,7 +5297,7 @@ class _MobileZoomableImageViewerState extends State<_MobileZoomableImageViewer>
     final targetScale = (scale / 1.35).clamp(1.0, 5.0);
     final target = targetScale <= 1.05
         ? Matrix4.identity()
-        : (Matrix4.identity()..scaleByDouble(targetScale, targetScale, 1.0, 1.0));
+        : Matrix4.diagonal3Values(targetScale, targetScale, 1.0);
     _animateTo(target);
     widget.onZoomChanged?.call(targetScale > 1.05);
   }
