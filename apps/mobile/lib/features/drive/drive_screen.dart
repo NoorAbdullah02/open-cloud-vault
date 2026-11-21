@@ -34,6 +34,7 @@ class DriveScreen extends ConsumerStatefulWidget {
 }
 
 class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingObserver {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   String _view = 'my-drive';
   String? _folderId;
   String _search = '';
@@ -3610,342 +3611,381 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
     final storageCardBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC);
     final storageCardBorder = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
 
-    return Column(
-      children: [
-        Expanded(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _folderId = null;
-                    _view = 'my-drive';
-                    _searchController.clear();
-                  });
-                  if (!isDualSide) Navigator.pop(context);
-                  _loadDrive();
-                },
-                child: Container(
-                  padding: EdgeInsets.fromLTRB(16, isDualSide ? 20 : 48, 16, 16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: isDark
-                          ? [_accentColor.withValues(alpha: 0.85), const Color(0xFF0B1120)]
-                          : [_accentColor, const Color(0xFF1E40AF)],
+    return Material(
+      color: isDark ? const Color(0xFF0F172A) : Colors.white,
+      child: Column(
+        children: [
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _folderId = null;
+                      _view = 'my-drive';
+                      _searchController.clear();
+                    });
+                    if (!isDualSide) Navigator.pop(context);
+                    _loadDrive();
+                  },
+                  child: Container(
+                    padding: EdgeInsets.fromLTRB(16, isDualSide ? 20 : 48, 16, 16),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: isDark
+                            ? [
+                                _accentColor == const Color(0xFF18181B)
+                                    ? const Color(0xFF1E1B4B)
+                                    : _accentColor.withValues(alpha: 0.85),
+                                const Color(0xFF0F172A),
+                              ]
+                            : [_accentColor, const Color(0xFF1E40AF)],
+                      ),
+                      border: Border(
+                        bottom: BorderSide(
+                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                        ),
+                      ),
                     ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.5),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.5),
+                              ),
+                              child: const CircleAvatar(
+                                radius: 24,
+                                backgroundImage: AssetImage('assets/owner.jpg'),
+                              ),
                             ),
-                            child: const CircleAvatar(
-                              radius: 24,
-                              backgroundImage: AssetImage('assets/owner.jpg'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Sheikh Noor',
-                                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withValues(alpha: 0.2),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: const Text('Owner', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold)),
-                                    ),
-                                    if (isDualSide) ...[
-                                      const SizedBox(width: 4),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Sheikh Noor',
+                                    style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Row(
+                                    children: [
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFF38BDF8).withValues(alpha: 0.3),
+                                          color: Colors.white.withValues(alpha: 0.2),
                                           borderRadius: BorderRadius.circular(4),
                                         ),
-                                        child: const Text('Dual-Side', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                                        child: const Text('Owner', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold)),
                                       ),
+                                      if (isDualSide) ...[
+                                        const SizedBox(width: 4),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF38BDF8).withValues(alpha: 0.3),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: const Text('Dual-Side', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                                        ),
+                                      ],
                                     ],
-                                  ],
-                                ),
-                              ],
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      const Row(
-                        children: [
-                          Icon(Icons.cloud_done_rounded, size: 14, color: Colors.white70),
-                          SizedBox(width: 6),
-                          Text(
-                            'NOOR DRIVE • Root Vault',
-                            style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              for (final item in [
-                ('my-drive', 'My Drive', Icons.folder_outlined),
-                ('vault', 'Secret Vault', Icons.lock_outline),
-                ('offline', 'Offline Files', Icons.offline_pin_outlined),
-                ('recent', 'Recent', Icons.access_time),
-                ('starred', 'Starred', Icons.star_outline),
-                ('photos', 'Photos', Icons.image_outlined),
-                ('videos', 'Videos', Icons.videocam_outlined),
-                ('documents', 'Documents', Icons.description_outlined),
-                ('trash', 'Trash', Icons.delete_outline),
-              ])
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1.5),
-                  decoration: BoxDecoration(
-                    color: _view == item.$1 ? activeNavBg : Colors.transparent,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: ListTile(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    dense: true,
-                    leading: Icon(
-                      item.$3,
-                      color: _view == item.$1 ? activeNavColor : secondaryTextColor,
-                      size: 20,
-                    ),
-                    title: Text(
-                      item.$2,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: _view == item.$1 ? FontWeight.bold : FontWeight.w500,
-                        color: _view == item.$1 ? activeNavColor : primaryTextColor,
-                      ),
-                    ),
-                    selected: _view == item.$1,
-                    onTap: () async {
-                      if (!isDualSide) Navigator.pop(context);
-                      if (item.$1 == 'vault') {
-                        final ok = await _authenticateVault();
-                        if (!ok) return;
-                      }
-                      setState(() {
-                        _view = item.$1;
-                        _folderId = null;
-                      });
-                      _loadDrive();
-                    },
-                  ),
-                ),
-              Divider(color: dividerColor, height: 16),
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.photo_library_outlined, color: Color(0xFF4F46E5), size: 20),
-                title: Text('Backup Gallery Photos', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: primaryTextColor)),
-                subtitle: Text('Sync phone photos to Camera Uploads', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
-                onTap: () {
-                  if (!isDualSide) Navigator.pop(context);
-                  _backupGalleryPhotos();
-                },
-              ),
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.sync, color: Color(0xFF4F46E5), size: 20),
-                title: Text('Background Auto-Sync', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: primaryTextColor)),
-                subtitle: Text(_autoSyncEnabled ? 'Auto-sync active' : 'Disabled • Tap to configure', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
-                onTap: () {
-                  if (!isDualSide) Navigator.pop(context);
-                  _showAutoSyncDialog();
-                },
-              ),
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.cleaning_services_outlined, color: Color(0xFFD97706), size: 20),
-                title: Text('Storage Cleaner & Duplicates', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: primaryTextColor)),
-                subtitle: Text('Find SHA-256 duplicate files & free space', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
-                onTap: () {
-                  if (!isDualSide) Navigator.pop(context);
-                  _showDuplicateCleanerDialog();
-                },
-              ),
-              Divider(color: dividerColor, height: 16),
-              ListTile(
-                dense: true,
-                leading: Icon(
-                  isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                  color: isDark ? const Color(0xFFFBBF24) : const Color(0xFF6366F1),
-                  size: 20,
-                ),
-                title: Text(
-                  isDark ? 'Appearance: Dark Mode' : 'Appearance: Light Mode',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTextColor),
-                ),
-                subtitle: Text(
-                  isDark ? 'Tap to switch to Light Theme' : 'Tap to switch to Dark Theme',
-                  style: TextStyle(fontSize: 10, color: secondaryTextColor),
-                ),
-                onTap: () {
-                  ref.read(themeModeProvider.notifier).toggleTheme();
-                },
-              ),
-              ListTile(
-                dense: true,
-                leading: Icon(Icons.palette_outlined, color: _accentColor, size: 20),
-                title: Text('Customize Theme Color', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTextColor)),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Row(
-                    children: [
-                      for (final c in const [
-                        Color(0xFF18181B),
-                        Color(0xFF2563EB),
-                        Color(0xFF4F46E5),
-                        Color(0xFF059669),
-                        Color(0xFFE11D48),
-                      ])
-                        GestureDetector(
-                          onTap: () => _setAccentColor(c),
-                          child: Container(
-                            margin: const EdgeInsets.only(right: 10),
-                            width: 22,
-                            height: 22,
-                            decoration: BoxDecoration(
-                              color: c,
-                              shape: BoxShape.circle,
-                              border: _accentColor == c
-                                  ? Border.all(color: isDark ? Colors.white : Colors.black45, width: 3)
-                                  : null,
-                            ),
-                          ),
+                          ],
                         ),
-                    ],
+                        const SizedBox(height: 12),
+                        const Row(
+                          children: [
+                            Icon(Icons.cloud_done_rounded, size: 14, color: Colors.white70),
+                            SizedBox(width: 6),
+                            Text(
+                              'NOOR DRIVE • Root Vault',
+                              style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              Divider(color: dividerColor, height: 16),
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.security, color: Color(0xFF059669), size: 20),
-                title: Text('Passcode & Security', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTextColor)),
-                onTap: () {
-                  if (!isDualSide) Navigator.pop(context);
-                  _openSecurityDialog();
-                },
-              ),
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.system_update, color: Color(0xFF2563EB), size: 20),
-                title: Text('Check for App Update', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTextColor)),
-                subtitle: Text('Current: v1.0.${ApiClient.buildNumber}', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
-                onTap: () {
-                  if (!isDualSide) Navigator.pop(context);
-                  _checkForAppUpdate(silent: false);
-                },
-              ),
-              if (DesktopSyncService.isDesktopPlatform) ...[
+                const SizedBox(height: 6),
+                for (final item in [
+                  ('my-drive', 'My Drive', Icons.folder_outlined),
+                  ('vault', 'Secret Vault', Icons.lock_outline),
+                  ('offline', 'Offline Files', Icons.offline_pin_outlined),
+                  ('recent', 'Recent', Icons.access_time),
+                  ('starred', 'Starred', Icons.star_outline),
+                  ('photos', 'Photos', Icons.image_outlined),
+                  ('videos', 'Videos', Icons.videocam_outlined),
+                  ('documents', 'Documents', Icons.description_outlined),
+                  ('trash', 'Trash', Icons.delete_outline),
+                ])
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: _view == item.$1 ? activeNavBg : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: ListTile(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      dense: true,
+                      selected: _view == item.$1,
+                      selectedColor: activeNavColor,
+                      selectedTileColor: activeNavBg,
+                      iconColor: _view == item.$1 ? activeNavColor : secondaryTextColor,
+                      textColor: _view == item.$1 ? activeNavColor : primaryTextColor,
+                      leading: Icon(
+                        item.$3,
+                        color: _view == item.$1 ? activeNavColor : secondaryTextColor,
+                        size: 20,
+                      ),
+                      title: Text(
+                        item.$2,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: _view == item.$1 ? FontWeight.bold : FontWeight.w500,
+                          color: _view == item.$1 ? activeNavColor : primaryTextColor,
+                        ),
+                      ),
+                      onTap: () async {
+                        if (!isDualSide) Navigator.pop(context);
+                        if (item.$1 == 'vault') {
+                          final ok = await _authenticateVault();
+                          if (!ok) return;
+                        }
+                        setState(() {
+                          _view = item.$1;
+                          _folderId = null;
+                        });
+                        _loadDrive();
+                      },
+                    ),
+                  ),
+                Divider(color: dividerColor, height: 16),
                 ListTile(
                   dense: true,
-                  leading: const Icon(Icons.folder_special_rounded, color: Color(0xFF4F46E5), size: 20),
-                  title: Text('Open Local Folder (~/NoorDrive)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTextColor)),
-                  subtitle: Text('Open computer sync folder in Files/Explorer', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
+                  iconColor: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5),
+                  textColor: primaryTextColor,
+                  leading: Icon(Icons.photo_library_outlined, color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5), size: 20),
+                  title: Text('Backup Gallery Photos', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: primaryTextColor)),
+                  subtitle: Text('Sync phone photos to Camera Uploads', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
                   onTap: () {
                     if (!isDualSide) Navigator.pop(context);
-                    SystemTrayService.openLocalSyncFolder();
+                    _backupGalleryPhotos();
                   },
                 ),
                 ListTile(
                   dense: true,
-                  leading: const Icon(Icons.sync_rounded, color: Color(0xFF0EA5E9), size: 20),
-                  title: Text('Sync ~/NoorDrive Now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTextColor)),
-                  subtitle: Text(DesktopSyncService.instance.statusMessage, style: TextStyle(fontSize: 10, color: secondaryTextColor)),
+                  iconColor: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5),
+                  textColor: primaryTextColor,
+                  leading: Icon(Icons.sync, color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5), size: 20),
+                  title: Text('Background Auto-Sync', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: primaryTextColor)),
+                  subtitle: Text(_autoSyncEnabled ? 'Auto-sync active' : 'Disabled • Tap to configure', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
                   onTap: () {
-                    DesktopSyncService.instance.triggerSync();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Syncing ~/NoorDrive folder...')),
-                    );
+                    if (!isDualSide) Navigator.pop(context);
+                    _showAutoSyncDialog();
+                  },
+                ),
+                ListTile(
+                  dense: true,
+                  iconColor: isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706),
+                  textColor: primaryTextColor,
+                  leading: Icon(Icons.cleaning_services_outlined, color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706), size: 20),
+                  title: Text('Storage Cleaner & Duplicates', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: primaryTextColor)),
+                  subtitle: Text('Find SHA-256 duplicate files & free space', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
+                  onTap: () {
+                    if (!isDualSide) Navigator.pop(context);
+                    _showDuplicateCleanerDialog();
+                  },
+                ),
+                Divider(color: dividerColor, height: 16),
+                ListTile(
+                  dense: true,
+                  textColor: primaryTextColor,
+                  leading: Icon(
+                    isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                    color: isDark ? const Color(0xFFFBBF24) : const Color(0xFF6366F1),
+                    size: 20,
+                  ),
+                  title: Text(
+                    isDark ? 'Appearance: Dark Mode' : 'Appearance: Light Mode',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTextColor),
+                  ),
+                  subtitle: Text(
+                    isDark ? 'Tap to switch to Light Theme' : 'Tap to switch to Dark Theme',
+                    style: TextStyle(fontSize: 10, color: secondaryTextColor),
+                  ),
+                  onTap: () {
+                    ref.read(themeModeProvider.notifier).toggleTheme();
+                  },
+                ),
+                ListTile(
+                  dense: true,
+                  textColor: primaryTextColor,
+                  leading: Icon(
+                    Icons.palette_outlined,
+                    color: _accentColor == const Color(0xFF18181B) && isDark ? const Color(0xFF818CF8) : _accentColor,
+                    size: 20,
+                  ),
+                  title: Text('Customize Theme Color', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTextColor)),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      children: [
+                        for (final c in const [
+                          Color(0xFF18181B),
+                          Color(0xFF2563EB),
+                          Color(0xFF4F46E5),
+                          Color(0xFF059669),
+                          Color(0xFFE11D48),
+                        ])
+                          GestureDetector(
+                            onTap: () => _setAccentColor(c),
+                            child: Container(
+                              margin: const EdgeInsets.only(right: 10),
+                              width: 22,
+                              height: 22,
+                              decoration: BoxDecoration(
+                                color: c,
+                                shape: BoxShape.circle,
+                                border: _accentColor == c
+                                    ? Border.all(color: isDark ? Colors.white : Colors.black45, width: 3)
+                                    : null,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                Divider(color: dividerColor, height: 16),
+                ListTile(
+                  dense: true,
+                  iconColor: isDark ? const Color(0xFF34D399) : const Color(0xFF059669),
+                  textColor: primaryTextColor,
+                  leading: Icon(Icons.security, color: isDark ? const Color(0xFF34D399) : const Color(0xFF059669), size: 20),
+                  title: Text('Passcode & Security', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTextColor)),
+                  onTap: () {
+                    if (!isDualSide) Navigator.pop(context);
+                    _openSecurityDialog();
+                  },
+                ),
+                ListTile(
+                  dense: true,
+                  iconColor: isDark ? const Color(0xFF38BDF8) : const Color(0xFF2563EB),
+                  textColor: primaryTextColor,
+                  leading: Icon(Icons.system_update, color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF2563EB), size: 20),
+                  title: Text('Check for App Update', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTextColor)),
+                  subtitle: Text('Current: v1.0.${ApiClient.buildNumber}', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
+                  onTap: () {
+                    if (!isDualSide) Navigator.pop(context);
+                    _checkForAppUpdate(silent: false);
+                  },
+                ),
+                if (DesktopSyncService.isDesktopPlatform) ...[
+                  ListTile(
+                    dense: true,
+                    iconColor: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5),
+                    textColor: primaryTextColor,
+                    leading: Icon(Icons.folder_special_rounded, color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5), size: 20),
+                    title: Text('Open Local Folder (~/NoorDrive)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTextColor)),
+                    subtitle: Text('Open computer sync folder in Files/Explorer', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
+                    onTap: () {
+                      if (!isDualSide) Navigator.pop(context);
+                      SystemTrayService.openLocalSyncFolder();
+                    },
+                  ),
+                  ListTile(
+                    dense: true,
+                    iconColor: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0EA5E9),
+                    textColor: primaryTextColor,
+                    leading: Icon(Icons.sync_rounded, color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0EA5E9), size: 20),
+                    title: Text('Sync ~/NoorDrive Now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTextColor)),
+                    subtitle: Text(DesktopSyncService.instance.statusMessage, style: TextStyle(fontSize: 10, color: secondaryTextColor)),
+                    onTap: () {
+                      DesktopSyncService.instance.triggerSync();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Syncing ~/NoorDrive folder...')),
+                      );
+                    },
+                  ),
+                ],
+                ListTile(
+                  dense: true,
+                  iconColor: isDark ? const Color(0xFF818CF8) : const Color(0xFF6366F1),
+                  textColor: primaryTextColor,
+                  leading: Icon(Icons.tips_and_updates_outlined, color: isDark ? const Color(0xFF818CF8) : const Color(0xFF6366F1), size: 20),
+                  title: Text('Shortcuts & Gestures Guide', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: primaryTextColor)),
+                  subtitle: Text('Touch gestures, secret vault & tricks', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
+                  onTap: () {
+                    if (!isDualSide) Navigator.pop(context);
+                    _showShortcutsAndGesturesDialog();
                   },
                 ),
               ],
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.tips_and_updates_outlined, color: Color(0xFF6366F1), size: 20),
-                title: Text('Shortcuts & Gestures Guide', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: primaryTextColor)),
-                subtitle: Text('Touch gestures, secret vault & tricks', style: TextStyle(fontSize: 10, color: secondaryTextColor)),
-                onTap: () {
-                  if (!isDualSide) Navigator.pop(context);
-                  _showShortcutsAndGesturesDialog();
-                },
-              ),
-            ],
+            ),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Container(
+          Padding(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: storageCardBg,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: storageCardBorder),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('NOOR DRIVE Storage', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: primaryTextColor)),
-                    Text(
-                      isUnlimited ? '∞' : '${(usedRatio * 100).toStringAsFixed(0)}%',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: activeNavColor,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: storageCardBg,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: storageCardBorder),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('NOOR DRIVE Storage', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: primaryTextColor)),
+                      Text(
+                        isUnlimited ? '∞' : '${(usedRatio * 100).toStringAsFixed(0)}%',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: activeNavColor,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                LinearProgressIndicator(
-                  value: usedRatio,
-                  minHeight: 5,
-                  borderRadius: BorderRadius.circular(4),
-                  backgroundColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    usedRatio > 0.9 ? const Color(0xFFEF4444) : activeNavColor,
+                    ],
                   ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  isUnlimited
-                      ? '${_formatBytes(usedBytes)} used (Unlimited)'
-                      : '${_formatBytes(usedBytes)} of ${_formatBytes(quotaBytes)}',
-                  style: TextStyle(fontSize: 10, color: secondaryTextColor),
-                ),
-              ],
+                  const SizedBox(height: 6),
+                  LinearProgressIndicator(
+                    value: usedRatio,
+                    minHeight: 5,
+                    borderRadius: BorderRadius.circular(4),
+                    backgroundColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      usedRatio > 0.9 ? const Color(0xFFEF4444) : activeNavColor,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    isUnlimited
+                        ? '${_formatBytes(usedBytes)} used (Unlimited)'
+                        : '${_formatBytes(usedBytes)} of ${_formatBytes(quotaBytes)}',
+                    style: TextStyle(fontSize: 10, color: secondaryTextColor),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -3971,6 +4011,7 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
             if (!didPop && canGoBack) _goBack();
           },
           child: Scaffold(
+            key: _scaffoldKey,
             backgroundColor: isDark ? const Color(0xFF070B14) : const Color(0xFFF6F7F9),
             appBar: AppBar(
               backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
@@ -3991,7 +4032,11 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                               padding: EdgeInsets.only(left: 14),
                               child: Icon(Icons.cloud_done_rounded, color: Color(0xFF6366F1)),
                             )
-                          : null)),
+                          : IconButton(
+                              icon: Icon(Icons.menu_rounded, color: isDark ? Colors.white : const Color(0xFF0F172A)),
+                              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                              tooltip: 'Open Sidebar',
+                            ))),
               title: _selectedKeys.isNotEmpty
                   ? Text(
                       '${_selectedKeys.length} selected',
@@ -4121,6 +4166,12 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                     onPressed: () => setState(() => _isGrid = !_isGrid),
                     tooltip: 'Toggle Grid/List',
                   ),
+                  if (!effectiveDualSide && canGoBack)
+                    IconButton(
+                      icon: Icon(Icons.menu_rounded, color: isDark ? Colors.white70 : const Color(0xFF18181B)),
+                      onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                      tooltip: 'Open Sidebar',
+                    ),
                   IconButton(
                     icon: Icon(
                       Icons.photo_library_outlined,
@@ -4141,8 +4192,13 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                       if (val == 'new_folder') _createFolder();
                       if (val == 'upload_folder') _uploadFolder();
                       if (val == 'toggle_dual_side') {
-                        setState(() => _isDualSide = !_isDualSide);
-                        _showSnack(_isDualSide ? 'Dual-Side Mode Enabled' : 'Single-Side Mode Enabled');
+                        if (!isWide) {
+                          _scaffoldKey.currentState?.openDrawer();
+                          _showSnack('Navigation Sidebar opened');
+                        } else {
+                          setState(() => _isDualSide = !_isDualSide);
+                          _showSnack(_isDualSide ? 'Dual-Side Mode Enabled' : 'Single-Side Mode Enabled');
+                        }
                       }
                       if (val == 'lock_vault') _lockVault();
                       if (val == 'empty_trash') {
@@ -4165,18 +4221,21 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                               color: isDark ? const Color(0xFFFBBF24) : const Color(0xFF6366F1),
                             ),
                             const SizedBox(width: 10),
-                            Text(isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'),
+                            Text(
+                              isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+                              style: TextStyle(color: isDark ? Colors.white : const Color(0xFF0F172A)),
+                            ),
                           ],
                         ),
                       ),
                       if (_files.isNotEmpty || _folders.isNotEmpty)
-                        const PopupMenuItem(
+                        PopupMenuItem(
                           value: 'select_all',
                           child: Row(
                             children: [
-                              Icon(Icons.select_all, size: 18, color: Color(0xFF4F46E5)),
-                              SizedBox(width: 10),
-                              Text('Select All'),
+                              Icon(Icons.select_all, size: 18, color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5)),
+                              const SizedBox(width: 10),
+                              Text('Select All', style: TextStyle(color: isDark ? Colors.white : const Color(0xFF0F172A))),
                             ],
                           ),
                         ),
@@ -4184,51 +4243,60 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                         value: 'toggle_dual_side',
                         child: Row(
                           children: [
-                            Icon(_isDualSide ? Icons.view_sidebar_rounded : Icons.view_agenda_rounded, size: 18, color: const Color(0xFF4F46E5)),
+                            Icon(
+                              _isDualSide ? Icons.view_sidebar_rounded : Icons.view_agenda_rounded,
+                              size: 18,
+                              color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5),
+                            ),
                             const SizedBox(width: 10),
-                            Text(_isDualSide ? 'Single-Side View' : 'Dual-Side View'),
+                            Text(
+                              isWide
+                                  ? (_isDualSide ? 'Single-Side View' : 'Dual-Side View')
+                                  : 'Open Sidebar',
+                              style: TextStyle(color: isDark ? Colors.white : const Color(0xFF0F172A)),
+                            ),
                           ],
                         ),
                       ),
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'new_folder',
                         child: Row(
                           children: [
-                            Icon(Icons.create_new_folder_outlined, size: 18, color: Color(0xFF18181B)),
-                            SizedBox(width: 10),
-                            Text('New Folder'),
+                            Icon(Icons.create_new_folder_outlined, size: 18, color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5)),
+                            const SizedBox(width: 10),
+                            Text('New Folder', style: TextStyle(color: isDark ? Colors.white : const Color(0xFF0F172A))),
                           ],
                         ),
                       ),
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'upload_folder',
                         child: Row(
                           children: [
-                            Icon(Icons.drive_folder_upload_outlined, size: 18, color: Color(0xFF18181B)),
-                            SizedBox(width: 10),
-                            Text('Upload Folder'),
+                            Icon(Icons.drive_folder_upload_outlined, size: 18, color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0EA5E9)),
+                            const SizedBox(width: 10),
+                            Text('Upload Folder', style: TextStyle(color: isDark ? Colors.white : const Color(0xFF0F172A))),
                           ],
                         ),
                       ),
                       if (_vaultUnlocked)
-                        const PopupMenuItem(
+                        PopupMenuItem(
                           value: 'lock_vault',
                           child: Row(
                             children: [
-                              Icon(Icons.lock_outline, size: 18, color: Color(0xFFE11D48)),
-                              SizedBox(width: 10),
-                              Text('Lock Vault'),
+                              const Icon(Icons.lock_outline, size: 18, color: Color(0xFFE11D48)),
+                              const SizedBox(width: 10),
+                              Text('Lock Vault', style: TextStyle(color: isDark ? Colors.white : const Color(0xFF0F172A))),
                             ],
                           ),
                         ),
                       if (_view == 'trash' && (_files.isNotEmpty || _folders.isNotEmpty))
-                        const PopupMenuItem(
+                        PopupMenuItem(
                           value: 'empty_trash',
                           child: Row(
                             children: [
-                              Icon(Icons.delete_sweep, size: 18, color: Color(0xFFE11D48)),
-                              SizedBox(width: 10),
-                              Text('Empty Trash'),
+                              const Icon(Icons.delete_sweep, size: 18, color: Color(0xFFE11D48)),
+                              const SizedBox(width: 10),
+                              Text('Empty Trash', style: TextStyle(color: isDark ? Colors.white : const Color(0xFF0F172A))),
                             ],
                           ),
                         ),
@@ -4265,12 +4333,17 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                 ? null
                 : Drawer(
                     backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-                    child: _buildNavigationPanel(
-                      isDualSide: false,
-                      usedRatio: usedRatio,
-                      isUnlimited: isUnlimited,
-                      usedBytes: usedBytes,
-                      quotaBytes: quotaBytes,
+                    surfaceTintColor: Colors.transparent,
+                    child: SafeArea(
+                      bottom: true,
+                      top: false,
+                      child: _buildNavigationPanel(
+                        isDualSide: false,
+                        usedRatio: usedRatio,
+                        isUnlimited: isUnlimited,
+                        usedBytes: usedBytes,
+                        quotaBytes: quotaBytes,
+                      ),
                     ),
                   ),
             floatingActionButton: FloatingActionButton.extended(

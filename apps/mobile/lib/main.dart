@@ -88,6 +88,12 @@ class NoorDriveApp extends ConsumerWidget {
           surfaceTintColor: Colors.transparent,
         ),
         dividerColor: const Color(0xFFE2E8F0),
+        listTileTheme: const ListTileThemeData(
+          textColor: Color(0xFF0F172A),
+          iconColor: Color(0xFF64748B),
+          selectedColor: Color(0xFF4F46E5),
+          selectedTileColor: Color(0xFFEEF2FF),
+        ),
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.white,
           foregroundColor: Color(0xFF0F172A),
@@ -112,6 +118,12 @@ class NoorDriveApp extends ConsumerWidget {
           surfaceTintColor: Colors.transparent,
         ),
         dividerColor: const Color(0xFF1E293B),
+        listTileTheme: const ListTileThemeData(
+          textColor: Color(0xFFF1F5F9),
+          iconColor: Color(0xFF94A3B8),
+          selectedColor: Color(0xFF818CF8),
+          selectedTileColor: Color(0xFF1E293B),
+        ),
         appBarTheme: const AppBarTheme(
           backgroundColor: Color(0xFF0F172A),
           foregroundColor: Colors.white,
