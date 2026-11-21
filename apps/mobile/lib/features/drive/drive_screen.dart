@@ -3630,7 +3630,7 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                     _loadDrive();
                   },
                   child: Container(
-                    padding: EdgeInsets.fromLTRB(16, isDualSide ? 20 : 48, 16, 16),
+                    padding: EdgeInsets.fromLTRB(16, isDualSide ? 20 : 16, 16, 16),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
@@ -3706,13 +3706,16 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                           ],
                         ),
                         const SizedBox(height: 12),
-                        const Row(
+                        Row(
                           children: [
-                            Icon(Icons.cloud_done_rounded, size: 14, color: Colors.white70),
-                            SizedBox(width: 6),
-                            Text(
-                              'NOOR DRIVE • Root Vault',
-                              style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
+                            const Icon(Icons.cloud_done_rounded, size: 14, color: Colors.white70),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                'NOOR DRIVE • Root Vault',
+                                style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ],
                         ),
@@ -3732,34 +3735,34 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                   ('documents', 'Documents', Icons.description_outlined),
                   ('trash', 'Trash', Icons.delete_outline),
                 ])
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1.5),
-                    decoration: BoxDecoration(
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1.5),
+                    child: Material(
                       color: _view == item.$1 ? activeNavBg : Colors.transparent,
                       borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: ListTile(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      dense: true,
-                      selected: _view == item.$1,
-                      selectedColor: activeNavColor,
-                      selectedTileColor: activeNavBg,
-                      iconColor: _view == item.$1 ? activeNavColor : secondaryTextColor,
-                      textColor: _view == item.$1 ? activeNavColor : primaryTextColor,
-                      leading: Icon(
-                        item.$3,
-                        color: _view == item.$1 ? activeNavColor : secondaryTextColor,
-                        size: 20,
-                      ),
-                      title: Text(
-                        item.$2,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: _view == item.$1 ? FontWeight.bold : FontWeight.w500,
-                          color: _view == item.$1 ? activeNavColor : primaryTextColor,
+                      clipBehavior: Clip.antiAlias,
+                      child: ListTile(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        dense: true,
+                        selected: _view == item.$1,
+                        selectedColor: activeNavColor,
+                        selectedTileColor: activeNavBg,
+                        iconColor: _view == item.$1 ? activeNavColor : secondaryTextColor,
+                        textColor: _view == item.$1 ? activeNavColor : primaryTextColor,
+                        leading: Icon(
+                          item.$3,
+                          color: _view == item.$1 ? activeNavColor : secondaryTextColor,
+                          size: 20,
                         ),
-                      ),
-                      onTap: () async {
+                        title: Text(
+                          item.$2,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: _view == item.$1 ? FontWeight.bold : FontWeight.w500,
+                            color: _view == item.$1 ? activeNavColor : primaryTextColor,
+                          ),
+                        ),
+                        onTap: () async {
                         if (!isDualSide) Navigator.pop(context);
                         if (item.$1 == 'vault') {
                           final ok = await _authenticateVault();
@@ -3773,6 +3776,7 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                       },
                     ),
                   ),
+                ),
                 Divider(color: dividerColor, height: 16),
                 ListTile(
                   dense: true,
@@ -4336,7 +4340,7 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                     surfaceTintColor: Colors.transparent,
                     child: SafeArea(
                       bottom: true,
-                      top: false,
+                      top: true,
                       child: _buildNavigationPanel(
                         isDualSide: false,
                         usedRatio: usedRatio,

@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Target Release Tag Name (e.g. v1.0.71)'
+        description: 'Target Release Tag Name (e.g. v1.0.72)'
         required: false
-        default: 'v1.0.71'
+        default: 'v1.0.72'
   release:
     types: [published]
   push:
@@ -39,12 +39,12 @@ jobs:
         working-directory: apps/mobile
         run: |
           TARGET_TAG="${{ github.event.inputs.tag_name || github.event.release.tag_name || github.ref_name }}"
-          [ -z "$TARGET_TAG" ] && TARGET_TAG="v1.0.71"
+          [ -z "$TARGET_TAG" ] && TARGET_TAG="v1.0.72"
           BUILD_NUM=$(echo "$TARGET_TAG" | sed -n 's/.*v1\.0\.\([0-9]*\).*/\1/p')
-          [ -z "$BUILD_NUM" ] && BUILD_NUM="71"
+          [ -z "$BUILD_NUM" ] && BUILD_NUM="72"
           VERSION="${TARGET_TAG#v}"
           if ! [[ "$VERSION" =~ ^[0-9] ]]; then
-            VERSION="1.0.71"
+            VERSION="1.0.72"
           fi
           flutter pub get
           flutter build linux --release --build-name=$VERSION --build-number=$BUILD_NUM --dart-define=API_URL=https://drive.noor.is-a.dev/api --dart-define=APP_BUILD_NUMBER=$BUILD_NUM
@@ -52,10 +52,10 @@ jobs:
       - name: Package Linux .deb and .tar.gz
         run: |
           TARGET_TAG="${{ github.event.inputs.tag_name || github.event.release.tag_name || github.ref_name }}"
-          [ -z "$TARGET_TAG" ] && TARGET_TAG="v1.0.71"
+          [ -z "$TARGET_TAG" ] && TARGET_TAG="v1.0.72"
           VERSION="${TARGET_TAG#v}"
           if ! [[ "$VERSION" =~ ^[0-9] ]]; then
-            VERSION="1.0.71"
+            VERSION="1.0.72"
           fi
 
           RELEASE_DIR="apps/mobile/build/linux/x64/release/bundle"
@@ -130,9 +130,9 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.tag_name || github.event.release.tag_name || github.ref_name }}"
           if [ -z "$TAG" ] || [ "$TAG" = "master" ]; then
-            TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "v1.0.71")
+            TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "v1.0.72")
           fi
-          [ -z "$TAG" ] && TAG="v1.0.71"
+          [ -z "$TAG" ] && TAG="v1.0.72"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -169,11 +169,11 @@ jobs:
         run: |
           $env:CL = "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS"
           $TargetTag = "${{ github.event.inputs.tag_name || github.event.release.tag_name || github.ref_name }}"
-          if (-not $TargetTag) { $TargetTag = "v1.0.71" }
+          if (-not $TargetTag) { $TargetTag = "v1.0.72" }
           $BuildNum = 71
           if ($TargetTag -match 'v1\.0\.(\d+)') { $BuildNum = $matches[1] }
           $Version = $TargetTag.TrimStart('v')
-          if ($Version -notmatch '^\d') { $Version = "1.0.71" }
+          if ($Version -notmatch '^\d') { $Version = "1.0.72" }
           flutter pub get
           flutter build windows --release --build-name=$Version --build-number=$BuildNum --dart-define=API_URL=https://drive.noor.is-a.dev/api --dart-define=APP_BUILD_NUMBER=$BuildNum
 
@@ -190,9 +190,9 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.tag_name || github.event.release.tag_name || github.ref_name }}"
           if [ -z "$TAG" ] || [ "$TAG" = "master" ]; then
-            TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "v1.0.71")
+            TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "v1.0.72")
           fi
-          [ -z "$TAG" ] && TAG="v1.0.71"
+          [ -z "$TAG" ] && TAG="v1.0.72"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -222,12 +222,12 @@ jobs:
         working-directory: apps/mobile
         run: |
           TARGET_TAG="${{ github.event.inputs.tag_name || github.event.release.tag_name || github.ref_name }}"
-          [ -z "$TARGET_TAG" ] && TARGET_TAG="v1.0.71"
+          [ -z "$TARGET_TAG" ] && TARGET_TAG="v1.0.72"
           BUILD_NUM=$(echo "$TARGET_TAG" | sed -n 's/.*v1\.0\.\([0-9]*\).*/\1/p')
-          [ -z "$BUILD_NUM" ] && BUILD_NUM="71"
+          [ -z "$BUILD_NUM" ] && BUILD_NUM="72"
           VERSION="${TARGET_TAG#v}"
           if ! [[ "$VERSION" =~ ^[0-9] ]]; then
-            VERSION="1.0.71"
+            VERSION="1.0.72"
           fi
           flutter pub get
           flutter build macos --release --build-name=$VERSION --build-number=$BUILD_NUM --dart-define=API_URL=https://drive.noor.is-a.dev/api --dart-define=APP_BUILD_NUMBER=$BUILD_NUM
@@ -246,9 +246,9 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.tag_name || github.event.release.tag_name || github.ref_name }}"
           if [ -z "$TAG" ] || [ "$TAG" = "master" ]; then
-            TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "v1.0.71")
+            TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "v1.0.72")
           fi
-          [ -z "$TAG" ] && TAG="v1.0.71"
+          [ -z "$TAG" ] && TAG="v1.0.72"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
