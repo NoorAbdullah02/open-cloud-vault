@@ -64,23 +64,51 @@ def patch():
         if idx != -1:
             content = content[:idx + len(marker)] + share_filters + content[idx + len(marker):]
 
-    # Patch root build.gradle and build.gradle.kts to bypass subproject AarMetadata checks
-    for gradle_file in ["android/build.gradle", "android/build.gradle.kts"]:
-        if os.path.exists(gradle_file):
-            with open(gradle_file, "r", encoding="utf-8") as f:
-                gcontent = f.read()
-            aar_patch = """
+    # Patch root build.gradle or build.gradle.kts so subprojects use compileSdkVersion 34
+    if os.path.exists("android/build.gradle.kts"):
+        with open("android/build.gradle.kts", "r", encoding="utf-8") as f:
+            gcontent = f.read()
+        kts_patch = """
 subprojects {
-    tasks.matching { it.name.contains("AarMetadata") }.configureEach {
-        enabled = false
+    if (project.name != "app") {
+        afterEvaluate {
+            if (project.hasProperty("android")) {
+                val androidExt = project.extensions.findByName("android")
+                if (androidExt is com.android.build.gradle.BaseExtension) {
+                    androidExt.compileSdkVersion(34)
+                }
+            }
+        }
     }
 }
 """
-            if "AarMetadata" not in gcontent:
-                gcontent += "\n" + aar_patch
-                with open(gradle_file, "w", encoding="utf-8") as f:
-                    f.write(gcontent)
-                print(f"✅ Successfully patched {gradle_file} with AarMetadata bypass!")
+        if "compileSdkVersion(34)" not in gcontent:
+            gcontent += "\n" + kts_patch
+            with open("android/build.gradle.kts", "w", encoding="utf-8") as f:
+                f.write(gcontent)
+            print("✅ Successfully patched android/build.gradle.kts with subprojects compileSdkVersion(34)!")
+
+    if os.path.exists("android/build.gradle"):
+        with open("android/build.gradle", "r", encoding="utf-8") as f:
+            gcontent = f.read()
+        groovy_patch = """
+subprojects {
+    if (project.name != "app") {
+        afterEvaluate { project ->
+            if (project.hasProperty("android")) {
+                project.android {
+                    compileSdkVersion 34
+                }
+            }
+        }
+    }
+}
+"""
+        if "compileSdkVersion 34" not in gcontent:
+            gcontent += "\n" + groovy_patch
+            with open("android/build.gradle", "w", encoding="utf-8") as f:
+                f.write(gcontent)
+            print("✅ Successfully patched android/build.gradle with subprojects compileSdkVersion 34!")
 
     # Validate XML parsing
     try:
