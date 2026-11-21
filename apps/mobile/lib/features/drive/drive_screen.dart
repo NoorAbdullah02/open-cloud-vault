@@ -23,6 +23,7 @@ import '../../core/desktop_sync_service.dart';
 import '../../core/system_tray_service.dart';
 import '../../core/updater_service.dart';
 import '../../core/encryption_service.dart';
+import '../../widgets/celestial_constellation_canvas.dart';
 import '../../main.dart';
 
 class DriveScreen extends ConsumerStatefulWidget {
@@ -4328,7 +4329,16 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
     final textPrimary = isDark ? Colors.white : const Color(0xFF0F172A);
     final textSecondary = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
 
-    return Column(
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: CelestialConstellationCanvas(
+            isDark: isDark,
+            opacity: isDark ? 0.22 : 0.12,
+            particleCount: 45,
+          ),
+        ),
+        Column(
           children: [
             Padding(
               padding: const EdgeInsets.all(12),
@@ -5146,13 +5156,24 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
                     ),
             ),
           ],
-        );
+        ),
+      ],
+    );
   }
 
   Widget _buildEmptyState(bool isDark) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        return SingleChildScrollView(
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: CelestialConstellationCanvas(
+                isDark: isDark,
+                opacity: isDark ? 0.55 : 0.35,
+                particleCount: 55,
+              ),
+            ),
+            SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: constraints.maxHeight),
@@ -5253,10 +5274,12 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
               ),
             ),
           ),
-        );
-      },
+        ),
+      ],
     );
-  }
+  },
+);
+}
 }
 
 class _MobileZoomableImageViewer extends StatefulWidget {

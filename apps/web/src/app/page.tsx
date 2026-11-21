@@ -94,6 +94,7 @@ import ZipViewer from '@/components/ZipViewer';
 import CodeViewer from '@/components/CodeViewer';
 import TextEditorViewer from '@/components/TextEditorViewer';
 import SpotlightPalette from '@/components/SpotlightPalette';
+import ThreeConstellationBackground from '@/components/ThreeConstellationBackground';
 import {
   savePendingUpload,
   removePendingUpload,
@@ -2632,7 +2633,10 @@ function DriveDashboardContent() {
   ];
 
   return (
-    <div className="min-h-screen flex bg-[#f6f7f9] dark:bg-[#0b0f17] text-zinc-900 dark:text-slate-100">
+    <div className="min-h-screen flex bg-[#f6f7f9] dark:bg-[#0b0f17] text-zinc-900 dark:text-slate-100 relative overflow-hidden">
+      {/* 3D Three.js Constellation Background */}
+      <ThreeConstellationBackground isDark={darkMode} opacity={darkMode ? 0.35 : 0.22} />
+
       {/* Top Animated Navigation Loading Indicator */}
       {(loading || navigatingFolderId) && (
         <div className="fixed top-0 left-0 right-0 z-50 h-1 bg-gradient-to-r from-indigo-500 via-sky-400 to-indigo-600 animate-pulse shadow-xs" />
