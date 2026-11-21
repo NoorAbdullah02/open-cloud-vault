@@ -71,7 +71,7 @@ export class SharesController {
     if (cachedRelease && Date.now() - cachedRelease.fetchedAt < 60_000) {
       return cachedRelease;
     }
-    const defaultTag = 'v1.0.61';
+    const defaultTag = 'v1.0.69';
     const baseReleaseUrl = 'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download';
     let version = defaultTag;
     let apkAsset: any = null;
@@ -84,34 +84,32 @@ export class SharesController {
 
     try {
       const res = await fetch(
-        'https://api.github.com/repos/NoorAbdullah02/open-cloud-vault/releases?per_page=5',
+        'https://api.github.com/repos/NoorAbdullah02/open-cloud-vault/releases/latest',
         { headers: { 'User-Agent': 'NoorDrive-API' } },
       );
       if (res.ok) {
-        const releases: any[] = await res.json();
-        if (releases && releases.length > 0) {
-          version = releases[0].tag_name || defaultTag;
-          for (const rel of releases) {
-            const assets = rel.assets || [];
-            if (!apkAsset) apkAsset = assets.find((a: any) => String(a.name).endsWith('.apk'));
-            if (!windowsAsset) windowsAsset = assets.find((a: any) => String(a.name).endsWith('.exe'));
-            if (!windowsPortableAsset) windowsPortableAsset = assets.find((a: any) => String(a.name).includes('Portable') || (String(a.name).endsWith('.zip') && String(a.name).includes('Windows')));
-            if (!macAsset) macAsset = assets.find((a: any) => String(a.name).endsWith('.dmg'));
-            if (!macZipAsset) macZipAsset = assets.find((a: any) => String(a.name).includes('macOS') && String(a.name).endsWith('.zip'));
-            if (!linuxAsset) linuxAsset = assets.find((a: any) => String(a.name).endsWith('.deb'));
-            if (!linuxTarAsset) linuxTarAsset = assets.find((a: any) => String(a.name).endsWith('.tar.gz') && String(a.name).includes('linux'));
-          }
+        const latestRel: any = await res.json();
+        if (latestRel) {
+          version = latestRel.tag_name || defaultTag;
+          const assets = latestRel.assets || [];
+          apkAsset = assets.find((a: any) => String(a.name).endsWith('.apk'));
+          windowsAsset = assets.find((a: any) => String(a.name).endsWith('.exe'));
+          windowsPortableAsset = assets.find((a: any) => String(a.name).includes('Portable') || (String(a.name).endsWith('.zip') && String(a.name).includes('Windows')));
+          macAsset = assets.find((a: any) => String(a.name).endsWith('.dmg'));
+          macZipAsset = assets.find((a: any) => String(a.name).includes('macOS') && String(a.name).endsWith('.zip'));
+          linuxAsset = assets.find((a: any) => String(a.name).endsWith('.deb'));
+          linuxTarAsset = assets.find((a: any) => String(a.name).endsWith('.tar.gz') && String(a.name).includes('linux'));
         }
       }
     } catch {}
 
-    const apkUrl = apkAsset?.browser_download_url || `${baseReleaseUrl}/noor-drive.apk`;
-    const windowsUrl = windowsAsset?.browser_download_url || `${baseReleaseUrl}/NoorDrive-Setup.exe`;
-    const windowsPortableUrl = windowsPortableAsset?.browser_download_url || `${baseReleaseUrl}/NoorDrive-Windows-Portable.zip`;
-    const macUrl = macAsset?.browser_download_url || `${baseReleaseUrl}/NoorDrive.dmg`;
-    const macZipUrl = macZipAsset?.browser_download_url || `${baseReleaseUrl}/NoorDrive-macOS.zip`;
-    const linuxUrl = linuxAsset?.browser_download_url || `${baseReleaseUrl}/noor-drive-linux.deb`;
-    const linuxTarUrl = linuxTarAsset?.browser_download_url || `${baseReleaseUrl}/noor-drive-linux.tar.gz`;
+    const apkUrl = `${baseReleaseUrl}/noor-drive.apk`;
+    const windowsUrl = `${baseReleaseUrl}/NoorDrive-Setup.exe`;
+    const windowsPortableUrl = `${baseReleaseUrl}/NoorDrive-Windows-Portable.zip`;
+    const macUrl = `${baseReleaseUrl}/NoorDrive.dmg`;
+    const macZipUrl = `${baseReleaseUrl}/NoorDrive-macOS.zip`;
+    const linuxUrl = `${baseReleaseUrl}/noor-drive-linux.deb`;
+    const linuxTarUrl = `${baseReleaseUrl}/noor-drive-linux.tar.gz`;
 
     const publicBase = process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || 'https://drive.noor.is-a.dev';
     const webdavUrl = `${publicBase.replace(/\/$/, '')}/api/webdav`;

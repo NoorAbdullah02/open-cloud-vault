@@ -1,6 +1,50 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+/// In-memory cached secure storage wrapper to prevent DBus IPC lockups on Linux
+/// and eliminate redundant disk/keyring queries on desktop and mobile.
+class CachedSecureStorage {
+  final FlutterSecureStorage _storage;
+  final Map<String, String?> _cache = {};
+
+  CachedSecureStorage([FlutterSecureStorage? storage])
+      : _storage = storage ?? const FlutterSecureStorage();
+
+  Future<String?> read({required String key}) async {
+    if (_cache.containsKey(key)) {
+      return _cache[key];
+    }
+    try {
+      final val = await _storage.read(key: key);
+      _cache[key] = val;
+      return val;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> write({required String key, required String? value}) async {
+    _cache[key] = value;
+    try {
+      await _storage.write(key: key, value: value);
+    } catch (_) {}
+  }
+
+  Future<void> delete({required String key}) async {
+    _cache.remove(key);
+    try {
+      await _storage.delete(key: key);
+    } catch (_) {}
+  }
+
+  Future<void> deleteAll() async {
+    _cache.clear();
+    try {
+      await _storage.deleteAll();
+    } catch (_) {}
+  }
+}
+
 class ApiClient {
   // Change this to your deployed Render API URL when building for release:
   // e.g. https://noor-drive-api.onrender.com/api
@@ -8,13 +52,13 @@ class ApiClient {
     'API_URL',
     defaultValue: 'https://drive.noor.is-a.dev/api',
   );
-  static const int buildNumber = int.fromEnvironment('APP_BUILD_NUMBER', defaultValue: 66);
+  static const int buildNumber = int.fromEnvironment('APP_BUILD_NUMBER', defaultValue: 69);
 
   final Dio dio;
-  final FlutterSecureStorage storage;
+  final CachedSecureStorage storage;
 
   ApiClient()
-      : storage = const FlutterSecureStorage(),
+      : storage = CachedSecureStorage(const FlutterSecureStorage()),
         dio = Dio(
           BaseOptions(
             baseUrl: baseUrl,
@@ -27,7 +71,7 @@ class ApiClient {
       InterceptorsWrapper(
         onRequest: (options, handler) async {
           final token = await storage.read(key: 'access_token');
-          if (token != null) {
+          if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
           return handler.next(options);
@@ -35,7 +79,7 @@ class ApiClient {
         onError: (error, handler) async {
           if (error.response?.statusCode == 401) {
             final refreshToken = await storage.read(key: 'refresh_token');
-            if (refreshToken != null) {
+            if (refreshToken != null && refreshToken.isNotEmpty) {
               try {
                 final refreshDio = Dio(BaseOptions(baseUrl: dio.options.baseUrl));
                 final res = await refreshDio.post(
@@ -81,4 +125,3 @@ class ApiClient {
 }
 
 final apiClient = ApiClient();
-

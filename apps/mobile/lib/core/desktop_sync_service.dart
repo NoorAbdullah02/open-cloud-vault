@@ -102,7 +102,7 @@ class DesktopSyncService extends ChangeNotifier {
     // Perform immediate sync once, then start loop
     triggerSync();
 
-    _pollTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (_isRunning && !_isSyncing) {
         triggerSync();
       }

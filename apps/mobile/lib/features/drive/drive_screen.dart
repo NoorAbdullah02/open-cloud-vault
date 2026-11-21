@@ -99,8 +99,8 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
       });
     }
 
-    // Real-Time Sync Engine: 12s non-blocking background refresh
-    _realtimeSyncTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+    // Real-Time Sync Engine: 25s non-blocking background refresh
+    _realtimeSyncTimer = Timer.periodic(const Duration(seconds: 25), (_) {
       if (mounted && _uploadingName == null && _view != 'offline' && !_isFetchingDrive) {
         _loadDrive(silent: true);
       }
@@ -4499,10 +4499,15 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
-                  : RefreshIndicator(
-                      onRefresh: () => _loadDrive(silent: true),
-                      child: _isGrid
-                          ? GridView.builder(
+                  : (_folders.isEmpty && _files.isEmpty)
+                      ? RefreshIndicator(
+                          onRefresh: () => _loadDrive(silent: true),
+                          child: _buildEmptyState(isDark),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: () => _loadDrive(silent: true),
+                          child: _isGrid
+                              ? GridView.builder(
                               padding: const EdgeInsets.all(12),
                               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                                 crossAxisCount: _getResponsiveCrossAxisCount(availableWidth),
@@ -5082,6 +5087,115 @@ class _DriveScreenState extends ConsumerState<DriveScreen> with WidgetsBindingOb
             ),
           ],
         );
+  }
+
+  Widget _buildEmptyState(bool isDark) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 96,
+                      height: 96,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isDark
+                            ? const Color(0xFF6366F1).withValues(alpha: 0.12)
+                            : const Color(0xFF4F46E5).withValues(alpha: 0.08),
+                        border: Border.all(
+                          color: isDark
+                              ? const Color(0xFF00F0FF).withValues(alpha: 0.35)
+                              : const Color(0xFF6366F1).withValues(alpha: 0.25),
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: isDark
+                                ? const Color(0xFF00F0FF).withValues(alpha: 0.15)
+                                : const Color(0xFF4F46E5).withValues(alpha: 0.1),
+                            blurRadius: 28,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Icon(
+                          _view == 'trash'
+                              ? Icons.delete_outline_rounded
+                              : (_view == 'starred'
+                                  ? Icons.star_border_rounded
+                                  : (_view == 'vault'
+                                      ? Icons.lock_outline_rounded
+                                      : Icons.cloud_upload_outlined)),
+                          size: 44,
+                          color: isDark ? const Color(0xFF00F0FF) : const Color(0xFF4F46E5),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      _view == 'trash'
+                          ? 'Trash is Empty'
+                          : (_view == 'starred'
+                              ? 'No Starred Items'
+                              : (_view == 'vault'
+                                  ? 'Secret Vault is Empty'
+                                  : 'No files in this folder')),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _view == 'trash'
+                          ? 'Items moved to trash will appear here.'
+                          : (_view == 'starred'
+                              ? 'Star important files for quick instant access.'
+                              : (_view == 'vault'
+                                  ? 'Store your sensitive documents securely in your encrypted vault.'
+                                  : 'Drag and drop files here, or tap below to upload.')),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                        height: 1.4,
+                      ),
+                    ),
+                    if (_view != 'trash' && _view != 'starred') ...[
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        onPressed: _showUploadMenu,
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('Upload Files', style: TextStyle(fontWeight: FontWeight.w600)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF4F46E5),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          elevation: 2,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 

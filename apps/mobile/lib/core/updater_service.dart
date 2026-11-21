@@ -69,31 +69,36 @@ class UpdaterService {
           });
         }
       } catch (_) {
-        // Fallback to GitHub Releases API with multi-release scanning
+        // Fallback to GitHub Releases API latest release
         final ghRes = await Dio(
           BaseOptions(connectTimeout: const Duration(seconds: 15)),
-        ).get('https://api.github.com/repos/NoorAbdullah02/open-cloud-vault/releases?per_page=5');
+        ).get('https://api.github.com/repos/NoorAbdullah02/open-cloud-vault/releases/latest');
 
-        final releases = (ghRes.data as List?) ?? [];
-        if (releases.isNotEmpty) {
-          final first = releases[0];
-          tag = (first['tag_name'] ?? '') as String;
-          notes = (first['body'] ?? notes) as String;
+        if (ghRes.data is Map) {
+          final rel = ghRes.data as Map;
+          tag = (rel['tag_name'] ?? '') as String;
+          notes = (rel['body'] ?? notes) as String;
 
-          for (final rel in releases) {
-            final assets = (rel['assets'] as List?) ?? [];
-            for (final a in assets) {
-              final name = (a['name'] ?? '').toString().toLowerCase();
-              final url = (a['browser_download_url'] ?? '').toString();
-              if (name.endsWith('.apk') && !platforms.containsKey('apk')) platforms['apk'] = url;
-              if (name.endsWith('.exe') && !platforms.containsKey('windows')) platforms['windows'] = url;
-              if (name.endsWith('.dmg') && !platforms.containsKey('mac')) platforms['mac'] = url;
-              if (name.endsWith('.deb') && !platforms.containsKey('linux')) platforms['linux'] = url;
-              if (name.endsWith('.tar.gz') && !platforms.containsKey('linuxTar')) platforms['linuxTar'] = url;
-            }
+          final assets = (rel['assets'] as List?) ?? [];
+          for (final a in assets) {
+            final name = (a['name'] ?? '').toString().toLowerCase();
+            final url = (a['browser_download_url'] ?? '').toString();
+            if (name.endsWith('.apk') && !platforms.containsKey('apk')) platforms['apk'] = url;
+            if (name.endsWith('.exe') && !platforms.containsKey('windows')) platforms['windows'] = url;
+            if (name.endsWith('.dmg') && !platforms.containsKey('mac')) platforms['mac'] = url;
+            if (name.endsWith('.deb') && !platforms.containsKey('linux')) platforms['linux'] = url;
+            if (name.endsWith('.tar.gz') && !platforms.containsKey('linuxTar')) platforms['linuxTar'] = url;
           }
         }
       }
+
+      // Ensure platform download URLs always fall back to verified latest release assets
+      const baseLatest = 'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download';
+      platforms.putIfAbsent('apk', () => '$baseLatest/noor-drive.apk');
+      platforms.putIfAbsent('windows', () => '$baseLatest/NoorDrive-Setup.exe');
+      platforms.putIfAbsent('mac', () => '$baseLatest/NoorDrive.dmg');
+      platforms.putIfAbsent('linux', () => '$baseLatest/noor-drive-linux.deb');
+      platforms.putIfAbsent('linuxTar', () => '$baseLatest/noor-drive-linux.tar.gz');
 
       final match = RegExp(r'v1\.0\.(\d+)').firstMatch(tag);
       final remoteBuild = match != null ? int.tryParse(match.group(1)!) ?? 0 : 0;
@@ -385,9 +390,22 @@ class UpdaterService {
                             );
 
                             setModalState(() => statusText = 'Opening package installer...');
-                            final openRes = await OpenFilex.open(installerPath);
-                            if (openRes.type != ResultType.done) {
-                              await launchUrl(Uri.parse(assetUrl), mode: LaunchMode.externalApplication);
+                            if (Platform.isLinux) {
+                              // On Linux: Run asynchronously detached to avoid blocking the GTK UI isolate
+                              try {
+                                await Process.start('xdg-open', [installerPath], mode: ProcessStartMode.detached);
+                              } catch (_) {
+                                await launchUrl(Uri.parse(assetUrl), mode: LaunchMode.externalApplication);
+                              }
+                            } else {
+                              try {
+                                final openRes = await OpenFilex.open(installerPath);
+                                if (openRes.type != ResultType.done) {
+                                  await launchUrl(Uri.parse(assetUrl), mode: LaunchMode.externalApplication);
+                                }
+                              } catch (_) {
+                                await launchUrl(Uri.parse(assetUrl), mode: LaunchMode.externalApplication);
+                              }
                             }
                             if (ctx.mounted) Navigator.pop(ctx);
                           }
