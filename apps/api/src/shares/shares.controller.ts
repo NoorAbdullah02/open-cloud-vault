@@ -71,7 +71,7 @@ export class SharesController {
     if (cachedRelease && Date.now() - cachedRelease.fetchedAt < 60_000) {
       return cachedRelease;
     }
-    const defaultTag = 'v1.0.72';
+    const defaultTag = 'v1.0.73';
     const baseReleaseUrl = 'https://github.com/NoorAbdullah02/open-cloud-vault/releases/latest/download';
     let version = defaultTag;
     let apkAsset: any = null;
