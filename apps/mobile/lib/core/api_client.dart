@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -56,6 +57,7 @@ class ApiClient {
 
   final Dio dio;
   final CachedSecureStorage storage;
+  Completer<bool>? _refreshCompleter;
 
   ApiClient()
       : storage = CachedSecureStorage(const FlutterSecureStorage()),
@@ -77,26 +79,19 @@ class ApiClient {
           return handler.next(options);
         },
         onError: (error, handler) async {
-          if (error.response?.statusCode == 401) {
-            final refreshToken = await storage.read(key: 'refresh_token');
-            if (refreshToken != null && refreshToken.isNotEmpty) {
-              try {
-                final refreshDio = Dio(BaseOptions(baseUrl: dio.options.baseUrl));
-                final res = await refreshDio.post(
-                  '/auth/refresh',
-                  data: {'refreshToken': refreshToken},
-                );
-                final newAccess = res.data['accessToken'];
-                final newRefresh = res.data['refreshToken'];
-                await storage.write(key: 'access_token', value: newAccess);
-                await storage.write(key: 'refresh_token', value: newRefresh);
-
+          if (error.response?.statusCode == 401 &&
+              !error.requestOptions.path.contains('/auth/refresh')) {
+            final refreshed = await _refreshTokensOnce();
+            if (refreshed) {
+              final newAccess = await storage.read(key: 'access_token');
+              if (newAccess != null && newAccess.isNotEmpty) {
                 error.requestOptions.headers['Authorization'] = 'Bearer $newAccess';
-                final cloned = await dio.fetch(error.requestOptions);
-                return handler.resolve(cloned);
-              } catch (_) {
-                await storage.delete(key: 'access_token');
-                await storage.delete(key: 'refresh_token');
+                try {
+                  final cloned = await dio.fetch(error.requestOptions);
+                  return handler.resolve(cloned);
+                } catch (retryErr) {
+                  return handler.next(retryErr is DioException ? retryErr : error);
+                }
               }
             }
           }
@@ -104,6 +99,45 @@ class ApiClient {
         },
       ),
     );
+  }
+
+  Future<bool> _refreshTokensOnce() async {
+    if (_refreshCompleter != null) {
+      return _refreshCompleter!.future;
+    }
+    final completer = Completer<bool>();
+    _refreshCompleter = completer;
+
+    try {
+      final refreshToken = await storage.read(key: 'refresh_token');
+      if (refreshToken == null || refreshToken.isEmpty) {
+        completer.complete(false);
+        return false;
+      }
+
+      final refreshDio = Dio(BaseOptions(baseUrl: dio.options.baseUrl));
+      final res = await refreshDio.post(
+        '/auth/refresh',
+        data: {'refreshToken': refreshToken},
+      );
+      final newAccess = res.data['accessToken']?.toString();
+      final newRefresh = res.data['refreshToken']?.toString();
+      if (newAccess == null || newRefresh == null) {
+        completer.complete(false);
+        return false;
+      }
+      await storage.write(key: 'access_token', value: newAccess);
+      await storage.write(key: 'refresh_token', value: newRefresh);
+      completer.complete(true);
+      return true;
+    } catch (_) {
+      await storage.delete(key: 'access_token');
+      await storage.delete(key: 'refresh_token');
+      completer.complete(false);
+      return false;
+    } finally {
+      _refreshCompleter = null;
+    }
   }
 
   String get currentBaseUrl => dio.options.baseUrl;

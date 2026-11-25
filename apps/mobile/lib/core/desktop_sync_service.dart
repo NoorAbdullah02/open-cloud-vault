@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -83,6 +84,7 @@ class DesktopSyncService extends ChangeNotifier {
       if (!await _syncFolder!.exists()) {
         await _syncFolder!.create(recursive: true);
       }
+      await _loadSyncRegistry();
       _isInitialized = true;
       _statusMessage = 'Ready (${_syncFolder!.path})';
       notifyListeners();
@@ -90,6 +92,44 @@ class DesktopSyncService extends ChangeNotifier {
       _statusMessage = 'Failed to init sync folder: $e';
       notifyListeners();
     }
+  }
+
+  Future<File?> _getRegistryFile() async {
+    try {
+      final supportDir = await getApplicationSupportDirectory();
+      if (!await supportDir.exists()) {
+        await supportDir.create(recursive: true);
+      }
+      return File('${supportDir.path}${Platform.pathSeparator}desktop_sync_registry.json');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _loadSyncRegistry() async {
+    try {
+      final regFile = await _getRegistryFile();
+      if (regFile != null && await regFile.exists()) {
+        final raw = await regFile.readAsString();
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) {
+          decoded.forEach((k, v) {
+            if (v is int) {
+              _knownFileModified[k.toString()] = v;
+            }
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveSyncRegistry() async {
+    try {
+      final regFile = await _getRegistryFile();
+      if (regFile != null) {
+        await regFile.writeAsString(jsonEncode(_knownFileModified));
+      }
+    } catch (_) {}
   }
 
   /// Start background sync loop (polls local folder every 10 seconds)
@@ -143,7 +183,8 @@ class DesktopSyncService extends ChangeNotifier {
       _syncedFiles = 0;
 
       for (final file in localFiles) {
-        final relPath = file.path.replaceFirst('${_syncFolder!.path}/', '');
+        final prefix = '${_syncFolder!.path}${Platform.pathSeparator}';
+        final relPath = file.path.startsWith(prefix) ? file.path.substring(prefix.length) : file.path;
         final stat = await file.stat();
         final lastMod = stat.modified.millisecondsSinceEpoch;
 
@@ -159,11 +200,11 @@ class DesktopSyncService extends ChangeNotifier {
         }
 
         // Upload newly added / modified file
-        _statusMessage = 'Uploading ${file.uri.pathSegments.last}...';
+        final fileName = file.path.split(Platform.pathSeparator).last;
+        _statusMessage = 'Uploading $fileName...';
         notifyListeners();
 
         try {
-          final fileName = file.uri.pathSegments.last;
           final formData = FormData.fromMap({
             'file': await MultipartFile.fromFile(file.path, filename: fileName),
           });
@@ -178,6 +219,7 @@ class DesktopSyncService extends ChangeNotifier {
 
           _knownFileModified[file.path] = lastMod;
           _syncedFiles++;
+          await _saveSyncRegistry();
         } catch (uploadError) {
           debugPrint('Sync upload error for $relPath: $uploadError');
         }

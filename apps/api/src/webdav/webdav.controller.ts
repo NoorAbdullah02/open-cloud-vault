@@ -54,7 +54,8 @@ export class WebdavController {
       if (!target || target.type === 'not_found') {
         return res.status(404).send('Resource not found');
       }
-      const xml = await this.webdavService.generatePropfindXml(user.id, req.baseUrl + req.path, target);
+      const depth = (req.headers['depth'] as string) || '1';
+      const xml = await this.webdavService.generatePropfindXml(user.id, req.baseUrl + req.path, target, depth);
       res.setHeader('Content-Type', 'application/xml; charset=utf-8');
       return res.status(207).send(xml);
     }
@@ -128,9 +129,10 @@ export class WebdavController {
           return res.status(201).send('Created');
         }
       } catch (err: any) {
-        await fs.promises.unlink(tempFilePath).catch(() => {});
         this.logger.error(`WebDAV PUT failed: ${err.message}`, err.stack);
         return res.status(500).send('Failed to upload file via WebDAV: ' + err.message);
+      } finally {
+        await fs.promises.unlink(tempFilePath).catch(() => {});
       }
     }
 

@@ -53,16 +53,12 @@ export async function apiFetch<T = any>(
   });
 
   if (res.status === 401 && refreshToken) {
-    const refreshRes = await fetch(`${base}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
-
-    if (refreshRes.ok) {
-      const data = await refreshRes.json();
-      setStoredTokens(data.accessToken, data.refreshToken);
-      headers.set('Authorization', `Bearer ${data.accessToken}`);
+    const refreshed = await tryRefreshTokens();
+    if (refreshed) {
+      const latest = getStoredTokens().accessToken;
+      if (latest) {
+        headers.set('Authorization', `Bearer ${latest}`);
+      }
       res = await fetch(`${base}${endpoint}`, {
         ...options,
         headers,
@@ -116,22 +112,33 @@ export interface UploadProgressInfo {
   phase: 'uploading' | 'telegram';
 }
 
+let inFlightRefresh: Promise<boolean> | null = null;
+
 async function tryRefreshTokens(): Promise<boolean> {
+  if (inFlightRefresh) return inFlightRefresh;
+
   const { refreshToken } = getStoredTokens();
   if (!refreshToken) return false;
-  try {
-    const refreshRes = await fetch(`${getApiUrl()}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
-    if (!refreshRes.ok) return false;
-    const data = await refreshRes.json();
-    setStoredTokens(data.accessToken, data.refreshToken);
-    return true;
-  } catch {
-    return false;
-  }
+
+  inFlightRefresh = (async () => {
+    try {
+      const refreshRes = await fetch(`${getApiUrl()}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!refreshRes.ok) return false;
+      const data = await refreshRes.json();
+      setStoredTokens(data.accessToken, data.refreshToken);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      inFlightRefresh = null;
+    }
+  })();
+
+  return inFlightRefresh;
 }
 
 export async function uploadFileWithProgress(

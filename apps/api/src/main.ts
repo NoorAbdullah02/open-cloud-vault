@@ -17,6 +17,11 @@ dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Render (and most PaaS hosts) terminate TLS at a single proxy hop. Without
+  // this, every request shares the proxy IP and the global rate limit becomes
+  // a single bucket for all users.
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   app.use(
     helmet({
       crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -47,17 +52,32 @@ async function bootstrap() {
   app.enableCors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
-      if (
-        process.env.NODE_ENV !== 'production' ||
-        allowedOrigins.includes(origin) ||
-        origin.endsWith('.is-a.dev') ||
-        origin.endsWith('.onrender.com') ||
-        origin.includes('localhost') ||
-        origin.includes('127.0.0.1')
-      ) {
+
+      if (process.env.NODE_ENV !== 'production' || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-      return callback(null, true);
+
+      let hostname = '';
+      try {
+        hostname = new URL(origin).hostname.toLowerCase();
+      } catch {
+        return callback(null, false);
+      }
+
+      const isLocal =
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname === '::1' ||
+        hostname.endsWith('.localhost');
+
+      // Only the explicit allowlist (default origins + CORS_ORIGIN) is trusted.
+      // Suffixes such as .is-a.dev / .onrender.com are free-for-anyone domains.
+      if (isLocal) {
+        return callback(null, true);
+      }
+
+      // Unknown origins get no CORS headers, so browsers block them.
+      return callback(null, false);
     },
     credentials: true,
   });

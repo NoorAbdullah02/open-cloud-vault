@@ -17,9 +17,32 @@ export class LocalStorageProvider implements IStorageProvider {
 
   constructor() {
     const configured = process.env.LOCAL_STORAGE_PATH || './storage/vault';
-    this.basePath = path.isAbsolute(configured)
-      ? configured
-      : path.resolve(process.cwd(), '../../', configured);
+    this.basePath = this.resolveBasePath(configured);
+  }
+
+  /**
+   * Resolve a relative storage path against the monorepo root instead of the
+   * current working directory. Without this, `npm run dev:api` (cwd=apps/api)
+   * and `npm start` (cwd=repo root) wrote files to two different directories.
+   */
+  private resolveBasePath(configured: string): string {
+    if (path.isAbsolute(configured)) return configured;
+
+    let dir = process.cwd();
+    for (let depth = 0; depth < 6; depth++) {
+      try {
+        if (
+          fs.existsSync(path.join(dir, 'package.json')) &&
+          fs.existsSync(path.join(dir, 'apps'))
+        ) {
+          return path.resolve(dir, configured);
+        }
+      } catch {}
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+    return path.resolve(process.cwd(), configured);
   }
 
   isConfigured(): boolean {

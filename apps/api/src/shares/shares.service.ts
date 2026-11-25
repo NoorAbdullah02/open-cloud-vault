@@ -14,6 +14,7 @@ import * as fs from 'fs';
 import * as archiver from 'archiver';
 import { Response } from 'express';
 import { MailService } from '../mail/mail.service';
+import { safeZipEntryName } from '../common/utils/zip-path.util';
 
 @Injectable()
 export class SharesService {
@@ -508,12 +509,12 @@ export class SharesService {
       for (const f of files) {
         try {
           const stream = await this.storage.readFileStream(f.storageObjectId);
-          archive.append(stream as any, { name: `${prefix}${f.name}` });
+          archive.append(stream as any, { name: `${prefix}${safeZipEntryName(f.name)}` });
         } catch {}
       }
 
       for (const sf of subFolders) {
-        await appendFolder(sf.id, `${prefix}${sf.name}/`);
+        await appendFolder(sf.id, `${prefix}${safeZipEntryName(sf.name)}/`);
       }
     };
 

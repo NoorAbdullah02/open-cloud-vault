@@ -15,6 +15,7 @@ import * as path from 'path';
 import * as archiver from 'archiver';
 import * as argon2 from 'argon2';
 import { MailService } from '../mail/mail.service';
+import { safeZipEntryName } from '../common/utils/zip-path.util';
 
 const vaultFolderIdsCache = new Map<string, { ids: string[]; cachedAt: number }>();
 const lastCameraConsolidateMap = new Map<string, number>();
@@ -622,11 +623,11 @@ export class DriveService {
 
       for (const f of files) {
         const stream = await this.storage.readFileStream(f.storageObjectId);
-        archive.append(stream as any, { name: `${prefix}${f.name}` });
+        archive.append(stream as any, { name: `${prefix}${safeZipEntryName(f.name)}` });
       }
 
       for (const sf of subFolders) {
-        await appendFolder(sf.id, `${prefix}${sf.name}/`);
+        await appendFolder(sf.id, `${prefix}${safeZipEntryName(sf.name)}/`);
       }
     };
 
@@ -1580,12 +1581,12 @@ export class DriveService {
       for (const f of files) {
         try {
           const stream = await this.storage.readFileStream(f.storageObjectId);
-          archive.append(stream as any, { name: `${prefix}${f.name}` });
+          archive.append(stream as any, { name: `${prefix}${safeZipEntryName(f.name)}` });
         } catch {}
       }
 
       for (const sf of subFolders) {
-        await appendFolder(sf.id, `${prefix}${sf.name}/`);
+        await appendFolder(sf.id, `${prefix}${safeZipEntryName(sf.name)}/`);
       }
     };
 
@@ -1594,7 +1595,7 @@ export class DriveService {
         where: { id: { in: folderIds }, ownerId: userId, isTrash: false },
       });
       for (const folder of folders) {
-        await appendFolder(folder.id, `${folder.name}/`);
+        await appendFolder(folder.id, `${safeZipEntryName(folder.name)}/`);
       }
     }
 
@@ -1605,7 +1606,7 @@ export class DriveService {
       for (const f of files) {
         try {
           const stream = await this.storage.readFileStream(f.storageObjectId);
-          archive.append(stream as any, { name: f.name });
+          archive.append(stream as any, { name: safeZipEntryName(f.name) });
         } catch {}
       }
     }

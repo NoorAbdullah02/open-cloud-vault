@@ -21,7 +21,10 @@ export class WebdavService {
     try {
       const b64 = authHeader.replace(/^Basic\s+/, '').trim();
       const credentials = Buffer.from(b64, 'base64').toString('utf-8');
-      const [email, password] = credentials.split(':');
+      const sepIdx = credentials.indexOf(':');
+      if (sepIdx <= 0) return null;
+      const email = credentials.slice(0, sepIdx);
+      const password = credentials.slice(sepIdx + 1);
       if (!email || !password) return null;
 
       const user = await this.prisma.user.findUnique({
@@ -51,6 +54,9 @@ export class WebdavService {
     }
 
     const segments = cleanPath.split('/').filter(Boolean);
+    if (segments[0]?.toLowerCase() === 'secret vault') {
+      return null;
+    }
     let currentFolderId: string | null = null;
 
     for (let i = 0; i < segments.length; i++) {
@@ -59,7 +65,13 @@ export class WebdavService {
 
       if (!isLast) {
         const folder = await this.prisma.folder.findFirst({
-          where: { ownerId: userId, name: seg, parentId: currentFolderId, isTrash: false },
+          where: {
+            ownerId: userId,
+            name: seg,
+            parentId: currentFolderId,
+            isTrash: false,
+            ...(currentFolderId === null ? { name: seg === 'Secret Vault' ? '__blocked__' : seg } : {}),
+          },
         });
         if (!folder) return null;
         currentFolderId = folder.id;
@@ -87,45 +99,51 @@ export class WebdavService {
     return null;
   }
 
-  async generatePropfindXml(userId: string, prefix: string, target: any) {
+  async generatePropfindXml(userId: string, prefix: string, target: any, depth = '1') {
     let xml = `<?xml version="1.0" encoding="utf-8" ?>\n<D:multistatus xmlns:D="DAV:">\n`;
 
     const cleanPrefix = prefix.endsWith('/') ? prefix : prefix + '/';
+    const includeChildren = depth !== '0';
 
     if (target.type === 'root') {
       // Root collection itself
-      xml += `  <D:response>\n    <D:href>${cleanPrefix}</D:href>\n    <D:propstat>\n      <D:prop>\n        <D:displayname>NoorDrive</D:displayname>\n        <D:resourcetype><D:collection/></D:resourcetype>\n      </D:prop>\n      <D:status>HTTP/1.1 200 OK</D:status>\n    </D:propstat>\n  </D:response>\n`;
+      xml += `  <D:response>\n    <D:href>${this.escapeXml(cleanPrefix)}</D:href>\n    <D:propstat>\n      <D:prop>\n        <D:displayname>NoorDrive</D:displayname>\n        <D:resourcetype><D:collection/></D:resourcetype>\n      </D:prop>\n      <D:status>HTTP/1.1 200 OK</D:status>\n    </D:propstat>\n  </D:response>\n`;
 
-      const [folders, files] = await Promise.all([
-        this.prisma.folder.findMany({ where: { ownerId: userId, parentId: null, isTrash: false } }),
-        this.prisma.file.findMany({ where: { ownerId: userId, folderId: null, isTrash: false } }),
-      ]);
+      if (includeChildren) {
+        const [folders, files] = await Promise.all([
+          this.prisma.folder.findMany({
+            where: { ownerId: userId, parentId: null, isTrash: false, name: { not: 'Secret Vault' } },
+          }),
+          this.prisma.file.findMany({ where: { ownerId: userId, folderId: null, isTrash: false } }),
+        ]);
 
-      for (const fol of folders) {
-        xml += this.formatFolderResponse(`${cleanPrefix}${encodeURIComponent(fol.name)}/`, fol);
-      }
-      for (const fil of files) {
-        xml += this.formatFileResponse(`${cleanPrefix}${encodeURIComponent(fil.name)}`, fil);
+        for (const fol of folders) {
+          xml += this.formatFolderResponse(`${cleanPrefix}${encodeURIComponent(fol.name)}/`, fol);
+        }
+        for (const fil of files) {
+          xml += this.formatFileResponse(`${cleanPrefix}${encodeURIComponent(fil.name)}`, fil);
+        }
       }
     } else if (target.type === 'folder') {
       const fol = target.folder;
-      const folderHref = `${cleanPrefix}${encodeURIComponent(fol.name)}/`;
-      xml += this.formatFolderResponse(folderHref, fol);
+      xml += this.formatFolderResponse(cleanPrefix, fol);
 
-      const [folders, files] = await Promise.all([
-        this.prisma.folder.findMany({ where: { ownerId: userId, parentId: fol.id, isTrash: false } }),
-        this.prisma.file.findMany({ where: { ownerId: userId, folderId: fol.id, isTrash: false } }),
-      ]);
+      if (includeChildren) {
+        const [folders, files] = await Promise.all([
+          this.prisma.folder.findMany({ where: { ownerId: userId, parentId: fol.id, isTrash: false } }),
+          this.prisma.file.findMany({ where: { ownerId: userId, folderId: fol.id, isTrash: false } }),
+        ]);
 
-      for (const sub of folders) {
-        xml += this.formatFolderResponse(`${folderHref}${encodeURIComponent(sub.name)}/`, sub);
-      }
-      for (const fil of files) {
-        xml += this.formatFileResponse(`${folderHref}${encodeURIComponent(fil.name)}`, fil);
+        for (const sub of folders) {
+          xml += this.formatFolderResponse(`${cleanPrefix}${encodeURIComponent(sub.name)}/`, sub);
+        }
+        for (const fil of files) {
+          xml += this.formatFileResponse(`${cleanPrefix}${encodeURIComponent(fil.name)}`, fil);
+        }
       }
     } else if (target.type === 'file') {
       const fil = target.file;
-      xml += this.formatFileResponse(`${cleanPrefix}${encodeURIComponent(fil.name)}`, fil);
+      xml += this.formatFileResponse(prefix, fil);
     }
 
     xml += `</D:multistatus>`;
@@ -134,14 +152,14 @@ export class WebdavService {
 
   private formatFolderResponse(href: string, folder: any) {
     const dateStr = (folder.updatedAt || new Date()).toUTCString();
-    return `  <D:response>\n    <D:href>${href}</D:href>\n    <D:propstat>\n      <D:prop>\n        <D:displayname>${this.escapeXml(folder.name)}</D:displayname>\n        <D:getlastmodified>${dateStr}</D:getlastmodified>\n        <D:resourcetype><D:collection/></D:resourcetype>\n      </D:prop>\n      <D:status>HTTP/1.1 200 OK</D:status>\n    </D:propstat>\n  </D:response>\n`;
+    return `  <D:response>\n    <D:href>${this.escapeXml(href)}</D:href>\n    <D:propstat>\n      <D:prop>\n        <D:displayname>${this.escapeXml(folder.name)}</D:displayname>\n        <D:getlastmodified>${dateStr}</D:getlastmodified>\n        <D:resourcetype><D:collection/></D:resourcetype>\n      </D:prop>\n      <D:status>HTTP/1.1 200 OK</D:status>\n    </D:propstat>\n  </D:response>\n`;
   }
 
   private formatFileResponse(href: string, file: any) {
     const dateStr = (file.updatedAt || new Date()).toUTCString();
     const size = file.sizeBytes ? file.sizeBytes.toString() : '0';
     const mime = file.mimeType || 'application/octet-stream';
-    return `  <D:response>\n    <D:href>${href}</D:href>\n    <D:propstat>\n      <D:prop>\n        <D:displayname>${this.escapeXml(file.name)}</D:displayname>\n        <D:getcontentlength>${size}</D:getcontentlength>\n        <D:getcontenttype>${mime}</D:getcontenttype>\n        <D:getlastmodified>${dateStr}</D:getlastmodified>\n        <D:resourcetype/>\n      </D:prop>\n      <D:status>HTTP/1.1 200 OK</D:status>\n    </D:propstat>\n  </D:response>\n`;
+    return `  <D:response>\n    <D:href>${this.escapeXml(href)}</D:href>\n    <D:propstat>\n      <D:prop>\n        <D:displayname>${this.escapeXml(file.name)}</D:displayname>\n        <D:getcontentlength>${size}</D:getcontentlength>\n        <D:getcontenttype>${this.escapeXml(mime)}</D:getcontenttype>\n        <D:getlastmodified>${dateStr}</D:getlastmodified>\n        <D:resourcetype/>\n      </D:prop>\n      <D:status>HTTP/1.1 200 OK</D:status>\n    </D:propstat>\n  </D:response>\n`;
   }
 
   private escapeXml(unsafe: string) {
@@ -173,18 +191,21 @@ export class WebdavService {
 
   async deleteResource(userId: string, target: any) {
     if (target.type === 'folder') {
-      await this.prisma.folder.update({
-        where: { id: target.folder.id },
+      if (target.folder.name === 'Secret Vault' && target.folder.parentId === null) {
+        return false;
+      }
+      const res = await this.prisma.folder.updateMany({
+        where: { id: target.folder.id, ownerId: userId },
         data: { isTrash: true },
       });
-      return true;
+      return res.count > 0;
     }
     if (target.type === 'file') {
-      await this.prisma.file.update({
-        where: { id: target.file.id },
+      const res = await this.prisma.file.updateMany({
+        where: { id: target.file.id, ownerId: userId },
         data: { isTrash: true },
       });
-      return true;
+      return res.count > 0;
     }
     return false;
   }
@@ -203,23 +224,26 @@ export class WebdavService {
       const ext = newName
         ? path.extname(newName).replace('.', '').toLowerCase()
         : sourceTarget.file.extension;
-      await this.prisma.file.update({
-        where: { id: sourceTarget.file.id },
+      const res = await this.prisma.file.updateMany({
+        where: { id: sourceTarget.file.id, ownerId: userId },
         data: {
           ...(newName ? { name: newName, extension: ext } : {}),
           folderId: newParentId,
         },
       });
-      return true;
+      return res.count > 0;
     } else if (sourceTarget.type === 'folder') {
-      await this.prisma.folder.update({
-        where: { id: sourceTarget.folder.id },
+      if (newParentId === sourceTarget.folder.id) {
+        return false;
+      }
+      const res = await this.prisma.folder.updateMany({
+        where: { id: sourceTarget.folder.id, ownerId: userId },
         data: {
           ...(newName ? { name: newName } : {}),
           parentId: newParentId,
         },
       });
-      return true;
+      return res.count > 0;
     }
     return false;
   }

@@ -22,6 +22,8 @@ import {
   ResetPasswordDto,
 } from './dto/auth.dto';
 import { MailService } from '../mail/mail.service';
+import { getJwtSecret } from './jwt-secret';
+import { invalidateSessionCache } from './jwt.strategy';
 
 @Injectable()
 export class AuthService {
@@ -34,6 +36,33 @@ export class AuthService {
 
   private hashToken(token: string): string {
     return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  /** Constant-time comparison for short secrets such as the master passcode. */
+  private safeEqual(a: string, b: string): boolean {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+  }
+
+  /**
+   * Verify the database-backed passcode. New rows store an Argon2id hash;
+   * legacy rows may still contain plaintext and are transparently upgraded.
+   */
+  private async verifyDynamicPasscode(
+    value: string | null | undefined,
+    input: string,
+  ): Promise<{ valid: boolean; needsRehash: boolean }> {
+    if (!value) return { valid: false, needsRehash: false };
+    if (value.startsWith('$argon2')) {
+      return {
+        valid: await argon2.verify(value, input).catch(() => false),
+        needsRehash: false,
+      };
+    }
+    const valid = this.safeEqual(input, value);
+    return { valid, needsRehash: valid };
   }
 
   private async issueTokensForUser(
@@ -83,7 +112,7 @@ export class AuthService {
         sessionId: session.id,
       },
       {
-        secret: process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || 'fallback-dev-secret-change-me',
+        secret: getJwtSecret(),
         expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
       },
     );
@@ -175,8 +204,10 @@ export class AuthService {
     meta: { ipAddress?: string; userAgent?: string },
   ) {
     const ownerEmail = (process.env.SUPER_ADMIN_EMAIL || 'sheikhnoorabdullah02@gmail.com').toLowerCase().trim();
-    // Unified Master Password / Passcode: reads SUPER_ADMIN_PASSWORD first, with DRIVE_PASSCODE fallback
-    const envPasscode = process.env.SUPER_ADMIN_PASSWORD || process.env.DRIVE_PASSCODE || '12345';
+    // Unified Master Password / Passcode: reads SUPER_ADMIN_PASSWORD first, with DRIVE_PASSCODE fallback.
+    // Never invent a default passcode: an unconfigured instance must fall through to the
+    // database/argon2 checks instead of accepting a well-known value.
+    const envPasscode = process.env.SUPER_ADMIN_PASSWORD || process.env.DRIVE_PASSCODE;
 
     // 1. Locate user (super admin or owner)
     let user = await this.prisma.user.findUnique({
@@ -200,16 +231,25 @@ export class AuthService {
 
     // 2. Validate passcode against SUPER_ADMIN_PASSWORD / DRIVE_PASSCODE / passwordHash
     let isPasscodeValid = false;
-    if (envPasscode && dto.passcode === envPasscode) {
-      isPasscodeValid = true;
-    } else if (process.env.DRIVE_PASSCODE && dto.passcode === process.env.DRIVE_PASSCODE) {
+    if (envPasscode && this.safeEqual(dto.passcode, envPasscode)) {
       isPasscodeValid = true;
     } else {
       const dynamicPasscode = await this.prisma.systemSetting.findUnique({
         where: { key: 'drive_passcode' },
       });
-      if (dynamicPasscode && dto.passcode === dynamicPasscode.value) {
+      const dynamicResult = await this.verifyDynamicPasscode(
+        dynamicPasscode?.value,
+        dto.passcode,
+      );
+      if (dynamicResult.valid) {
         isPasscodeValid = true;
+        if (dynamicResult.needsRehash) {
+          // Upgrade legacy plaintext passcodes to Argon2id on first use.
+          await this.prisma.systemSetting.update({
+            where: { key: 'drive_passcode' },
+            data: { value: await argon2.hash(dto.passcode, { type: argon2.argon2id }) },
+          });
+        }
       } else {
         isPasscodeValid = await argon2.verify(user.passwordHash, dto.passcode).catch(() => false);
       }
@@ -297,12 +337,23 @@ export class AuthService {
     });
 
     // Send email via Brevo
-    await this.mail.sendPasswordResetOtp({
+    const sent = await this.mail.sendPasswordResetOtp({
       email: user.email,
       otp,
       ipAddress: meta.ipAddress,
       userAgent: meta.userAgent,
     });
+
+    if (!sent) {
+      // Do not leave a usable reset token behind when the email never left.
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { resetPasswordToken: null, resetPasswordExpires: null },
+      });
+      throw new BadRequestException(
+        'Email delivery is not configured. Please use your master passcode or contact the administrator.',
+      );
+    }
 
     // Mask email for display in UI: e.g. sh***02@gmail.com
     const [localPart, domain] = user.email.split('@');
@@ -316,7 +367,6 @@ export class AuthService {
       success: true,
       message: `A 6-digit verification code has been sent to ${maskedEmail}`,
       maskedEmail,
-      email: user.email,
       expiresInSeconds: 600,
     };
   }
@@ -373,12 +423,9 @@ export class AuthService {
       },
     });
 
-    // Also update dynamic passcode setting so login works with new code
-    await this.prisma.systemSetting.upsert({
-      where: { key: 'drive_passcode' },
-      update: { value: dto.newPassword },
-      create: { key: 'drive_passcode', value: dto.newPassword },
-    });
+    // Do NOT write the new password into the global drive_passcode setting.
+    // A per-user password reset must never become a master passcode for the
+    // owner account. Passcode login verifies user.passwordHash directly.
 
     // Send confirmation email
     this.mail.sendPasswordResetSuccess({
@@ -425,15 +472,16 @@ export class AuthService {
 
     let valid = false;
     const envPass = process.env.SUPER_ADMIN_PASSWORD || process.env.DRIVE_PASSCODE;
-    if (envPass && dto.password === envPass) {
+    const isOwnerAccount =
+      user.role === Role.SUPER_ADMIN ||
+      (!!process.env.SUPER_ADMIN_EMAIL &&
+        user.email.toLowerCase().trim() ===
+          process.env.SUPER_ADMIN_EMAIL.toLowerCase().trim());
+
+    // The environment master password is an owner-only recovery credential.
+    // Accepting it for every account would let it log in as any registered user.
+    if (envPass && isOwnerAccount && this.safeEqual(dto.password, envPass)) {
       valid = true;
-      // Auto-sync hash in DB to match new SUPER_ADMIN_PASSWORD if changed
-      argon2.hash(dto.password, { type: argon2.argon2id }).then((newHash) => {
-        this.prisma.user.update({
-          where: { id: user.id },
-          data: { passwordHash: newHash },
-        }).catch(() => {});
-      }).catch(() => {});
     } else {
       valid = await argon2.verify(user.passwordHash, dto.password).catch(() => false);
     }
@@ -508,6 +556,7 @@ export class AuthService {
       where: { id: sessionId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    invalidateSessionCache(sessionId);
     return { success: true };
   }
 
@@ -516,6 +565,7 @@ export class AuthService {
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    invalidateSessionCache();
     await this.audit.log({
       actorId: userId,
       action: 'LOGOUT_ALL_DEVICES',
@@ -528,7 +578,15 @@ export class AuthService {
   async getSessions(userId: string) {
     return this.prisma.session.findMany({
       where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
-      include: { device: true },
+      select: {
+        id: true,
+        deviceId: true,
+        ipAddress: true,
+        userAgent: true,
+        createdAt: true,
+        expiresAt: true,
+        device: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -536,6 +594,13 @@ export class AuthService {
   async setupTwoFactor(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new BadRequestException('User not found');
+    if (user.twoFactorEnabled) {
+      // Rotating the secret while 2FA is active would lock the user out with a
+      // secret they never scanned.
+      throw new BadRequestException(
+        'Two-factor authentication is already enabled. Disable it before setting up a new device.',
+      );
+    }
 
     const secret = authenticator.generateSecret();
     await this.prisma.user.update({
@@ -573,6 +638,30 @@ export class AuthService {
     });
 
     return { twoFactorEnabled: true };
+  }
+
+  async disableTwoFactor(userId: string, code: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
+      throw new BadRequestException('Two-factor authentication is not enabled');
+    }
+    if (!authenticator.check(code, user.twoFactorSecret)) {
+      throw new UnauthorizedException('Invalid two-factor authentication code');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorEnabled: false, twoFactorSecret: null },
+    });
+
+    await this.audit.log({
+      actorId: userId,
+      action: '2FA_DISABLED',
+      targetType: 'User',
+      targetId: userId,
+    });
+
+    return { twoFactorEnabled: false };
   }
 
   async changePassword(userId: string, dto: ChangePasswordDto) {

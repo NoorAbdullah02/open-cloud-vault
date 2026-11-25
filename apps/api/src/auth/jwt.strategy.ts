@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { getJwtSecret } from './jwt-secret';
 
 export interface JwtPayload {
   sub: string;
@@ -13,6 +14,18 @@ export interface JwtPayload {
 const sessionCache = new Map<string, { user: any; cachedAt: number }>();
 const SESSION_CACHE_TTL_MS = 30_000;
 
+/**
+ * Drop cached session lookups immediately after logout so a revoked token
+ * cannot keep working for the remainder of the cache TTL.
+ */
+export function invalidateSessionCache(sessionId?: string) {
+  if (sessionId) {
+    sessionCache.delete(sessionId);
+    return;
+  }
+  sessionCache.clear();
+}
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private readonly prisma: PrismaService) {
@@ -22,7 +35,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         ExtractJwt.fromUrlQueryParameter('token'),
       ]),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || 'fallback-dev-secret-change-me',
+      secretOrKey: getJwtSecret(),
     });
   }
 

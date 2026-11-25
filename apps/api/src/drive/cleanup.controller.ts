@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Query, Headers, UnauthorizedException } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { CleanupService } from './cleanup.service';
 
 @Controller('cleanup')
@@ -22,8 +23,15 @@ export class CleanupController {
   }
 
   private async handleCleanup(providedSecret?: string) {
-    const validSecret = process.env.CRON_SECRET || '42020277bf18898ec64efea81e64e984';
-    if (!providedSecret || providedSecret !== validSecret) {
+    const validSecret = process.env.CRON_SECRET;
+
+    // Fail closed: no hardcoded fallback that allows anonymous destructive cleanup.
+    if (
+      !validSecret ||
+      !providedSecret ||
+      Buffer.byteLength(providedSecret) !== Buffer.byteLength(validSecret) ||
+      !crypto.timingSafeEqual(Buffer.from(providedSecret), Buffer.from(validSecret))
+    ) {
       throw new UnauthorizedException('Invalid or missing cleanup secret');
     }
     const stats = await this.cleanupService.runCleanup();

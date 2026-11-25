@@ -201,9 +201,9 @@ open-cloud-vault/
 | Variable | Description | Required | Example Value |
 | :--- | :--- | :---: | :--- |
 | `DATABASE_URL` | Neon Serverless PostgreSQL connection string | **Yes** | `postgresql://user:pass@ep-host.neon.tech/neondb?sslmode=require` |
-| `DRIVE_PASSCODE` | Master unlock passcode | **Yes** | `12345` |
+| `DRIVE_PASSCODE` | Master unlock passcode | **Yes** | `use-a-long-random-passphrase` |
 | `SUPER_ADMIN_EMAIL` | Master owner email address | **Yes** | `sheikhnoorabdullah02@gmail.com` |
-| `SUPER_ADMIN_PASSWORD` | Master owner password (used for API auth) | **Yes** | `12345` |
+| `SUPER_ADMIN_PASSWORD` | Master owner password (used for API auth) | **Yes** | `use-a-long-random-passphrase` |
 | `SUPER_ADMIN_NAME` | Owner display name | No | `Noor Owner` |
 | `ADMIN_NOTIFY_EMAIL` | Email to receive drive activity & security alerts | No | `sheikhnoorabdullah02@gmail.com` |
 | `BREVO_API_KEY` | Brevo (Sendinblue) v3 API key for email notifications | No | `xkeysib-...` |
@@ -261,12 +261,16 @@ npm run db:seed
 
 ### 5. Running Web & API Locally
 ```bash
-# Option A: Start single unified server on port 3000 (Same as Render production)
+# Option A: Build once, then start the single unified server on port 3000 (Same as Render production)
+npm run build
 npm start
 
 # Option B: Run separate watch servers for active development
 npm run dev:api   # NestJS API -> http://localhost:4000/api
 npm run dev:web   # Next.js Web -> http://localhost:3000
+
+# Run the automated API unit tests
+npm test
 ```
 
 ### 6. Running Flutter Mobile / Desktop Locally
